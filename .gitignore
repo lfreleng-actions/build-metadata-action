@@ -40,6 +40,7 @@ htmlcov/*
 junit*.xml
 coverage.xml
 .pytest_cache/
+coverage*.out
 
 # Build and docs folder/files
 build/*
@@ -58,3 +59,6 @@ MANIFEST
 
 # Node
 node_modules/*
+
+# Go binaries
+build-metadata

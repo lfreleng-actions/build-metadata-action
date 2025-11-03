@@ -2,36 +2,328 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
-# actions-template
-name: "🛠️ Actions Template"
-description: "Description of action"
-# Any relevant notes/observations can go here
+name: "Build Metadata Action"
+description: >-
+  Universal action to capture, validate, and display comprehensive metadata
+  for project builds across multiple languages and build systems
+author: "The Linux Foundation"
+
+branding:
+  icon: "package"
+  color: "blue"
 
 inputs:
-  input:
-    description: "Description of input"
-    required: true
+  path_prefix:
+    description: "Path to the project root directory"
+    required: false
+    default: "."
+
+  output_format:
+    # Can be provided comma-separated, space-separated or newline-separated
+    # Set to an empty string to disable output
+    description: "Output format: summary, json, markdown, yaml"
+    required: false
+    default: "summary"
+
+  include_environment:
+    description: "Collect and include environment metadata"
+    required: false
+    default: "true"
+
+  use_version_extract:
+    description: "Use version-extract-action for version detection if available"
+    required: false
+    default: "true"
+
+  verbose:
+    description: "Enable verbose logging output"
+    required: false
+    default: "false"
+
+  # Artifact Upload Configuration
+  artifact_upload:
+    description: "Upload gathered metadata as workflow artifacts"
+    required: false
+    default: "true"
+
+  artifact_name_prefix:
+    description: "Custom prefix for artifact names"
+    required: false
+    default: "build-metadata"
+
+  artifact_formats:
+    description: "Comma-separated list of formats to upload (json, yaml)"
+    required: false
+    default: "json"
+
+  validate_output:
+    description: "Validate JSON/YAML output before uploading"
+    required: false
+    default: "true"
+
+  strict_validation:
+    description: "Use strict validation mode (round-trip testing)"
+    required: false
+    default: "true"
+
+  export_env_vars:
+    description: "Export action outputs as variables for subsequent steps"
+    required: false
+    default: "false"
 
 outputs:
-  output:
-    description: "Description of output"
-    value: ${{ steps.code.outputs.output }}
+  # Complete Metadata Outputs
+  metadata_json:
+    description: "Complete metadata as JSON string"
+    value: ${{ steps.extract.outputs.metadata_json }}
+
+  metadata_yaml:
+    description: "Complete metadata as YAML string"
+    value: ${{ steps.extract.outputs.metadata_yaml }}
+
+  markdown_output:
+    description: "Markdown formatted metadata"
+    value: ${{ steps.extract.outputs.markdown_output }}
+
+  # Artifact Outputs
+  artifact_name:
+    description: "Name of the uploaded artifact"
+    value: ${{ steps.extract.outputs.artifact_name }}
+
+  artifact_path:
+    description: "Path to artifact directory"
+    value: ${{ steps.extract.outputs.artifact_path }}
+
+  artifact_files:
+    description: "Comma-separated list of artifact files"
+    value: ${{ steps.extract.outputs.artifact_files }}
+
+  # Common Project Metadata
+  project_type:
+    description: "Detected project type (e.g., python-modern, javascript-npm)"
+    value: ${{ steps.extract.outputs.project_type }}
+
+  project_name:
+    description: "Project name"
+    value: ${{ steps.extract.outputs.project_name }}
+
+  project_version:
+    description: "Project version"
+    value: ${{ steps.extract.outputs.project_version }}
+
+  project_path:
+    description: "Absolute path to project"
+    value: ${{ steps.extract.outputs.project_path }}
+
+  version_source:
+    description: "Source file where version was found"
+    value: ${{ steps.extract.outputs.version_source }}
+
+  versioning_type:
+    description: "Versioning type: 'static' or 'dynamic'"
+    value: ${{ steps.extract.outputs.versioning_type }}
+
+  build_timestamp:
+    description: "Build timestamp (ISO 8601)"
+    value: ${{ steps.extract.outputs.build_timestamp }}
+
+  # Git Information
+  git_sha:
+    description: "Git commit SHA"
+    value: ${{ steps.extract.outputs.git_sha }}
+
+  git_branch:
+    description: "Git branch name"
+    value: ${{ steps.extract.outputs.git_branch }}
+
+  git_tag:
+    description: "Git tag (if on a tag)"
+    value: ${{ steps.extract.outputs.git_tag }}
+
+  # CI/Build Information
+  ci_platform:
+    description: "CI platform (github, gitlab, circleci, etc.)"
+    value: ${{ steps.extract.outputs.ci_platform }}
+
+  ci_run_id:
+    description: "CI run ID"
+    value: ${{ steps.extract.outputs.ci_run_id }}
+
+  ci_run_url:
+    description: "CI run URL"
+    value: ${{ steps.extract.outputs.ci_run_url }}
+
+  runner_os:
+    description: "Runner operating system"
+    value: ${{ steps.extract.outputs.runner_os }}
+
+  runner_arch:
+    description: "Runner architecture"
+    value: ${{ steps.extract.outputs.runner_arch }}
+
+  # Language-Specific Outputs (Python)
+  python_package_name:
+    description: "Python package name"
+    value: ${{ steps.extract.outputs.python_package_name }}
+
+  python_requires_python:
+    description: "Required Python version"
+    value: ${{ steps.extract.outputs.python_requires_python }}
+
+  python_build_backend:
+    description: "Python build backend"
+    value: ${{ steps.extract.outputs.python_build_backend }}
+
+  python_metadata_source:
+    description: "Source of Python metadata (pyproject.toml, setup.py, etc.)"
+    value: ${{ steps.extract.outputs.python_metadata_source }}
+
+  python_versioning_type:
+    description: "Python versioning type: 'static' or 'dynamic'"
+    value: ${{ steps.extract.outputs.python_versioning_type }}
+
+  python_matrix_json:
+    description: "Python version matrix as JSON"
+    value: ${{ steps.extract.outputs.python_matrix_json }}
+
+  python_build_version:
+    description: "Recommended Python version for building (latest from matrix)"
+    value: ${{ steps.extract.outputs.python_build_version }}
+
+  python_project_match_package:
+    description: "Whether Python project name matches package name"
+    value: ${{ steps.extract.outputs.python_project_match_package }}
+
+  # Common Comparison Outputs
+  project_match_repo:
+    description: "Whether project name matches repository name"
+    value: ${{ steps.extract.outputs.project_match_repo }}
+
+  # Language-Specific Outputs (JavaScript)
+  javascript_package_name:
+    description: "JavaScript package name"
+    value: ${{ steps.extract.outputs.javascript_package_name }}
+
+  javascript_package_manager:
+    description: "Detected package manager (npm, yarn, pnpm, bun)"
+    value: ${{ steps.extract.outputs.javascript_package_manager }}
+
+  javascript_lock_file:
+    description: "Lock file name"
+    value: ${{ steps.extract.outputs.javascript_lock_file }}
+
+  javascript_has_lock_file:
+    description: "Whether lock file exists"
+    value: ${{ steps.extract.outputs.javascript_has_lock_file }}
+
+  javascript_module_type:
+    description: "Module type (module, commonjs)"
+    value: ${{ steps.extract.outputs.javascript_module_type }}
+
+  javascript_requires_node:
+    description: "Required Node.js version"
+    value: ${{ steps.extract.outputs.javascript_requires_node }}
+
+  javascript_is_workspace:
+    description: "Whether project is a workspace/monorepo"
+    value: ${{ steps.extract.outputs.javascript_is_workspace }}
+
+  javascript_has_typescript:
+    description: "Whether project uses TypeScript"
+    value: ${{ steps.extract.outputs.javascript_has_typescript }}
+
+  # Language-Specific Outputs (Java/Maven)
+  java_group_id:
+    description: "Java/Maven group ID"
+    value: ${{ steps.extract.outputs.java_group_id }}
+
+  java_artifact_id:
+    description: "Java/Maven artifact ID"
+    value: ${{ steps.extract.outputs.java_artifact_id }}
+
+  java_packaging:
+    description: "Java/Maven packaging type (jar, war, pom, etc.)"
+    value: ${{ steps.extract.outputs.java_packaging }}
+
+  java_metadata_source:
+    description: "Source of Java metadata (pom.xml, build.gradle, etc.)"
+    value: ${{ steps.extract.outputs.java_metadata_source }}
+
+  java_has_parent:
+    description: "Whether Maven project has a parent POM"
+    value: ${{ steps.extract.outputs.java_has_parent }}
+
+  java_is_multi_module:
+    description: "Whether Maven project is multi-module"
+    value: ${{ steps.extract.outputs.java_is_multi_module }}
+
+  java_module_count:
+    description: "Number of Maven modules"
+    value: ${{ steps.extract.outputs.java_module_count }}
+
+  java_build_dsl:
+    description: "Gradle build DSL (groovy or kotlin)"
+    value: ${{ steps.extract.outputs.java_build_dsl }}
+
+  java_is_multi_project:
+    description: "Whether Gradle project is multi-project"
+    value: ${{ steps.extract.outputs.java_is_multi_project }}
+
+  java_java_version:
+    description: "Required Java version"
+    value: ${{ steps.extract.outputs.java_java_version }}
+
+  java_frameworks:
+    description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"
+    value: ${{ steps.extract.outputs.java_frameworks }}
+
+  # Success Indicator
+  success:
+    description: "Whether extraction succeeded"
+    value: ${{ steps.extract.outputs.success }}
 
 runs:
   using: "composite"
   steps:
-    - name: "Friendly Name"
-      id: code
-      shell: bash
-      run: |
-        # Friendly Name
-        input="${{ inputs.input }}"
-        if [ -z "$input" ]; then
-          echo "Error: mandatory input was not set/configured ❌"
-          exit 1
-        fi
+    - name: "Setup Go"
+      uses: actions/setup-go@41dfa10bad2bb2ae585af6ee5bb4d7d973ad74ed # v5.1.0
+      with:
+        go-version: '1.25.x'
+        cache: false
 
-        echo "output=$input" >> "$GITHUB_ENV"
-        echo "output=$input" >> "$GITHUB_OUTPUT"
-        echo "Action received: $input ✅"
-        echo "Action received: $input ✅" >> "$GITHUB_STEP_SUMMARY"
+    - name: "Build and Extract Metadata"
+      id: extract
+      shell: bash
+      env:
+        INPUT_PATH_PREFIX: ${{ inputs.path_prefix }}
+        INPUT_OUTPUT_FORMAT: ${{ inputs.output_format }}
+        INPUT_INCLUDE_ENVIRONMENT: ${{ inputs.include_environment }}
+        INPUT_USE_VERSION_EXTRACT: ${{ inputs.use_version_extract }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+        INPUT_ARTIFACT_UPLOAD: ${{ inputs.artifact_upload }}
+        INPUT_ARTIFACT_NAME_PREFIX: ${{ inputs.artifact_name_prefix }}
+        INPUT_ARTIFACT_FORMATS: ${{ inputs.artifact_formats }}
+        INPUT_VALIDATE_OUTPUT: ${{ inputs.validate_output }}
+        INPUT_STRICT_VALIDATION: ${{ inputs.strict_validation }}
+        INPUT_EXPORT_ENV_VARS: ${{ inputs.export_env_vars }}
+      run: |
+        # This action requires the Go binary to be built
+        # In production, this would be pre-built or use Docker
+        echo "::group::Building build-metadata-action"
+        # Save the original working directory (where the workflow is running)
+        ORIGINAL_DIR="$(pwd)"
+        # Create temporary directory for the binary
+        TEMP_BIN_DIR="$(mktemp -d)"
+        # Build the binary to temporary location
+        cd "${{ github.action_path }}"
+        go build -o "${TEMP_BIN_DIR}/build-metadata" ./cmd/build-metadata
+        # Return to the original working directory
+        cd "${ORIGINAL_DIR}"
+        echo "::endgroup::"
+
+        echo "::group::Extracting Build Metadata"
+        # Run the binary from the original working directory
+        "${TEMP_BIN_DIR}/build-metadata"
+        # Clean up temporary directory
+        rm -rf "${TEMP_BIN_DIR}"
+        echo "::endgroup::"

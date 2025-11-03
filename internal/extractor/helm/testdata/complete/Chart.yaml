@@ -1,0 +1,43 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2025 The Linux Foundation
+
+apiVersion: v2
+name: example-chart
+description: A complete example Helm chart for testing
+version: 1.2.3
+appVersion: "2.0.1"
+type: application
+kubeVersion: ">=1.27.0"
+keywords:
+  - example
+  - testing
+  - demo
+home: https://example.com
+icon: https://example.com/icon.png
+sources:
+  - https://github.com/example/chart
+maintainers:
+  - name: John Doe
+    email: john@example.com
+    url: https://johndoe.com
+  - name: Jane Smith
+    email: jane@example.com
+dependencies:
+  - name: redis
+    version: "17.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+  - name: postgresql
+    version: "12.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: common
+    version: "~2.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    alias: lib
+annotations:
+  category: Infrastructure
+  licenses: Apache-2.0
+  images: |
+    - name: app
+      image: docker.io/example/app:2.0.1
