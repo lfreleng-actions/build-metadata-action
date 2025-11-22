@@ -100,7 +100,7 @@ The cache exists during the GitHub Action execution:
 ## Comparison with Other Approaches
 
 | Approach | Duration | Pros | Cons |
-|----------|----------|------|------|
+| -------- | -------- | ---- | ---- |
 | No cache | N/A | Always fresh | Slow, network dependent |
 | 1-hour cache | 1 hour | Fresh | Less performance benefit |
 | **72-hour cache** | **3 days** | **Fresh & fast** | **Recommended** |

@@ -114,7 +114,7 @@ func TestParseConstraints(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ParseConstraints(tt.input)
-			
+
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
@@ -311,11 +311,11 @@ func TestResolveVersions(t *testing.T) {
 	supportedVersions := []string{"3.9", "3.10", "3.11", "3.12", "3.13"}
 
 	tests := []struct {
-		name            string
-		requiresPython  string
-		supported       []string
-		expected        []string
-		shouldError     bool
+		name           string
+		requiresPython string
+		supported      []string
+		expected       []string
+		shouldError    bool
 	}{
 		{
 			name:           "basic >=3.10",
@@ -394,7 +394,7 @@ func TestResolveVersions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ResolveVersions(tt.requiresPython, tt.supported)
-			
+
 			if tt.shouldError {
 				assert.Error(t, err)
 			} else {
@@ -556,9 +556,9 @@ func TestIntegrationScenarios(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := ResolveVersions(tt.requiresPython, supportedVersions)
 			require.NoError(t, err)
-			
+
 			assert.Len(t, result, tt.expectedCount, "version count mismatch")
-			
+
 			if len(result) > 0 {
 				assert.Equal(t, tt.expectedMin, result[0], "minimum version mismatch")
 				assert.Equal(t, tt.expectedMax, result[len(result)-1], "maximum version mismatch")

@@ -306,7 +306,7 @@ git clone https://github.com/hashicorp/terraform-provider-aws.git
 
 <!-- markdownlint-disable MD013 -->
 | Extractor | Target Coverage | Critical Functions |
-|-----------|----------------|-------------------|
+| --------- | ---------------- | ----------------- |
 | Helm | ≥85% | `extractFromChartYAML`, `generateKubernetesVersionMatrix` |
 | Terraform | ≥85% | `parseFile`, `parseTerraformBlock`, `parseWithRegex` |
 | Docker | ≥85% | `parseDockerfile`, `parseInstruction`, `parseLabel` |

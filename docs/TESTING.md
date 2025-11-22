@@ -49,7 +49,7 @@ each project type.
 <!-- markdownlint-disable MD013 -->
 
 | Language/Type | Repository | Expected Type | Notes |
-|---------------|------------|---------------|-------|
+| --------------- | ---------- | --------------- | ------- |
 | Python (pyproject.toml) | `lfreleng-actions/test-python-project` | Python | Modern Python packaging |
 | Node.js (package.json) | `lfreleng-actions/test-node-project` | JavaScript | npm package |
 | Docker (Dockerfile) | `lfreleng-actions/test-docker-project` | Docker | Container project |
@@ -92,7 +92,7 @@ for a specific language/ecosystem.
 <!-- markdownlint-disable MD013 -->
 
 | Language | Files Generated | Expected Version | Expected Type |
-|----------|-----------------|------------------|---------------|
+| -------- | ---------------- | ---------------- | --------------- |
 | Python (modern) | `pyproject.toml`, `__init__.py` | 1.2.3 | Python |
 | Python (legacy) | `setup.py` | 2.0.1 | Python |
 | JavaScript | `package.json` | 3.4.5 | JavaScript |
@@ -316,7 +316,7 @@ These languages have extractors but aren't explicitly tested (yet):
 <!-- markdownlint-disable MD013 -->
 
 | Job Type | Duration | Concurrency |
-|----------|----------|-------------|
+| -------- | -------- | ----------- |
 | Self Test | ~30s | 1 job |
 | Matrix Tests (12 projects) | ~2-3 min | 12 parallel jobs |
 | Synthetic Tests (15 projects) | ~1-2 min | 15 parallel jobs |

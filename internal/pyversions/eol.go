@@ -22,13 +22,13 @@ const (
 
 // EOLData represents the end-of-life information for a Python version
 type EOLData struct {
-	Cycle           string      `json:"cycle"`           // Version number (e.g., "3.11")
-	ReleaseDate     string      `json:"releaseDate"`     // Release date
-	EOL             interface{} `json:"eol"`             // End of life date or boolean
-	Latest          string      `json:"latest"`          // Latest patch version
-	LatestReleaseDate string    `json:"latestReleaseDate"` // Latest patch release date
-	LTS             bool        `json:"lts"`             // Long term support flag
-	Support         interface{} `json:"support"`         // Support end date or boolean
+	Cycle             string      `json:"cycle"`             // Version number (e.g., "3.11")
+	ReleaseDate       string      `json:"releaseDate"`       // Release date
+	EOL               interface{} `json:"eol"`               // End of life date or boolean
+	Latest            string      `json:"latest"`            // Latest patch version
+	LatestReleaseDate string      `json:"latestReleaseDate"` // Latest patch release date
+	LTS               bool        `json:"lts"`               // Long term support flag
+	Support           interface{} `json:"support"`           // Support end date or boolean
 }
 
 // EOLClient handles fetching and caching Python EOL data
@@ -201,7 +201,7 @@ func GetFallbackVersions() []string {
 func isVersion39OrLater(version string) bool {
 	// Match pattern: 3.9, 3.10, 3.11, ... or 4.x, 5.x, etc.
 	// We want 3.9+ or 4.0+
-	
+
 	var major, minor int
 	n, err := fmt.Sscanf(version, "%d.%d", &major, &minor)
 	if err != nil || n != 2 {

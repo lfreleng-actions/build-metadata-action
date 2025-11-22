@@ -56,15 +56,15 @@ func TestGenerateSummary_CompleteMetadata(t *testing.T) {
 
 	metadata := map[string]interface{}{
 		"common": map[string]interface{}{
-			"project_type":       "python-modern",
-			"project_name":       "complete-project",
-			"project_version":    "2.0.0",
-			"version_source":     "pyproject.toml",
-			"versioning_type":    "static",
-			"build_timestamp":    buildTime,
-			"git_sha":            "abc123def456789012345678901234567890abcd",
-			"git_branch":         "main",
-			"git_tag":            "v2.0.0",
+			"project_type":    "python-modern",
+			"project_name":    "complete-project",
+			"project_version": "2.0.0",
+			"version_source":  "pyproject.toml",
+			"versioning_type": "static",
+			"build_timestamp": buildTime,
+			"git_sha":         "abc123def456789012345678901234567890abcd",
+			"git_branch":      "main",
+			"git_tag":         "v2.0.0",
 		},
 		"environment": map[string]interface{}{
 			"ci": map[string]interface{}{

@@ -368,7 +368,7 @@ If you need a language that shows warnings:
 Our test suite includes:
 
 | Category | Count | Status |
-|----------|-------|--------|
+| -------- | ----- | ------ |
 | Total Projects | 54 | Testing |
 | Languages Tested | 18 | Expanding |
 | Fully Implemented | 5 | ✅ Working |

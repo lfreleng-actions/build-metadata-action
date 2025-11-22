@@ -53,7 +53,7 @@ Real-world testing against actual open source projects provides:
 ### Current Coverage: 54 Projects Across 18 Languages
 
 | Language/Type | # Projects | Example Repositories |
-|---------------|------------|----------------------|
+| --------------- | ---------- | -------------------- |
 | Python | 3 | `psf/requests`, `pallets/flask`, `pytest-dev/pytest` |
 | JavaScript | 3 | `expressjs/express`, `lodash/lodash`, `facebook/react` |
 | TypeScript | 3 | `microsoft/TypeScript`, `vuejs/core`, `angular/angular` |

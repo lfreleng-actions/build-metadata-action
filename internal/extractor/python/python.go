@@ -225,13 +225,63 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 func (e *Extractor) extractFromPyProject(path string, metadata *extractor.ProjectMetadata) error {
 	var pyproject PyProjectTOML
 
+	// Read file content for debugging and validation
+	fileContent, readErr := os.ReadFile(path)
+	if readErr != nil {
+		return fmt.Errorf("failed to read pyproject.toml: %w", readErr)
+	}
+
+	// Check for common corruption patterns BEFORE parsing
+	fileContentStr := string(fileContent)
+
+	// Detect unquoted version value (invalid TOML syntax)
+	// Valid:   version = "1.0.0"
+	// Invalid: version = 1.0.0  or  version = v1.0.0
+	unquotedVersionPattern := regexp.MustCompile(`(?m)^\s*version\s*=\s*([^"\s][^\s]*)\s*$`)
+	if matches := unquotedVersionPattern.FindStringSubmatch(fileContentStr); len(matches) > 1 {
+		fmt.Fprintf(os.Stderr, "[ERROR] Corrupted pyproject.toml detected!\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Version field has invalid TOML syntax (missing quotes): version = %s\n", matches[1])
+		fmt.Fprintf(os.Stderr, "[ERROR] Should be: version = \"%s\"\n", matches[1])
+		fmt.Fprintf(os.Stderr, "[ERROR] This is likely caused by a buggy version patching tool.\n")
+		return fmt.Errorf("pyproject.toml contains invalid TOML syntax: unquoted version value")
+	}
+
 	if _, err := toml.DecodeFile(path, &pyproject); err != nil {
 		// Check if the error message indicates common issues
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expected") || strings.Contains(errMsg, "invalid") {
+			// Log problematic content around the error
+			fmt.Fprintf(os.Stderr, "[ERROR] TOML parsing failed for %s\n", path)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
+			// Show first 500 chars of file for debugging
+			preview := string(fileContent)
+			if len(preview) > 500 {
+				preview = preview[:500] + "..."
+			}
+			fmt.Fprintf(os.Stderr, "[ERROR] File preview:\n%s\n", preview)
 			return fmt.Errorf("TOML parsing failed - file contains invalid TOML syntax: %w\n\nCommon causes:\n- Git merge conflict markers (<<<<<<<, =======, >>>>>>>)\n- Unclosed strings or brackets\n- Invalid escape sequences\n- Incorrect indentation or structure", err)
 		}
 		return fmt.Errorf("TOML parsing failed: %w", err)
+	}
+
+	// Validate parsed data
+	if pyproject.Project.Name == "" {
+		fmt.Fprintf(os.Stderr, "[WARNING] pyproject.toml parsed successfully but [project].name is empty\n")
+	}
+	if pyproject.Project.Version == "" {
+		fmt.Fprintf(os.Stderr, "[WARNING] pyproject.toml parsed successfully but [project].version is empty\n")
+	}
+	if pyproject.Project.RequiresPython == "" {
+		fmt.Fprintf(os.Stderr, "[WARNING] pyproject.toml parsed successfully but [project].requires-python is empty or missing\n")
+		// Check if it exists in the raw file
+		if strings.Contains(string(fileContent), "requires-python") {
+			fmt.Fprintf(os.Stderr, "[WARNING] requires-python field EXISTS in file but was not parsed into struct\n")
+			// Try to extract it manually
+			re := regexp.MustCompile(`requires-python\s*=\s*"([^"]+)"`)
+			if matches := re.FindStringSubmatch(string(fileContent)); len(matches) > 1 {
+				fmt.Fprintf(os.Stderr, "[INFO] Manual extraction found: requires-python = %q\n", matches[1])
+			}
+		}
 	}
 
 	// Extract common metadata
@@ -283,9 +333,18 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 
 	// Python-specific metadata
 	metadata.LanguageSpecific["package_name"] = pyproject.Project.Name
+	// Store requires_python even if empty (for diagnostics)
 	metadata.LanguageSpecific["requires_python"] = pyproject.Project.RequiresPython
 	metadata.LanguageSpecific["build_backend"] = pyproject.BuildSystem.BuildBackend
 	metadata.LanguageSpecific["build_requires"] = pyproject.BuildSystem.Requires
+
+	// Debug: Log requires_python value and provide detailed diagnostic
+	requiresPythonValue := pyproject.Project.RequiresPython
+	fmt.Fprintf(os.Stderr, "[DEBUG] pyproject.Project.RequiresPython = %q (len=%d, empty=%v)\n",
+		requiresPythonValue, len(requiresPythonValue), requiresPythonValue == "")
+	if requiresPythonValue == "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] RequiresPython is EMPTY - matrix generation will be skipped\n")
+	}
 	metadata.LanguageSpecific["metadata_source"] = "pyproject.toml"
 	metadata.LanguageSpecific["keywords"] = pyproject.Project.Keywords
 	metadata.LanguageSpecific["classifiers"] = pyproject.Project.Classifiers
@@ -344,7 +403,9 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 
 	// Generate Python version matrix
 	if pyproject.Project.RequiresPython != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Generating matrix for requires_python: %q\n", pyproject.Project.RequiresPython)
 		matrix := generatePythonVersionMatrix(pyproject.Project.RequiresPython)
+		fmt.Fprintf(os.Stderr, "[DEBUG] Generated matrix: %v (len=%d)\n", matrix, len(matrix))
 		if len(matrix) > 0 {
 			metadata.LanguageSpecific["version_matrix"] = matrix
 
@@ -356,8 +417,13 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 			// Set recommended build version (latest from matrix)
 			if len(matrix) > 0 {
 				metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
+				fmt.Fprintf(os.Stderr, "[DEBUG] Set build_version to: %s\n", matrix[len(matrix)-1])
 			}
+		} else {
+			fmt.Fprintf(os.Stderr, "[DEBUG] Matrix generation returned empty slice\n")
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "[DEBUG] RequiresPython is empty, skipping matrix generation\n")
 	}
 
 	// Compare project name and package name

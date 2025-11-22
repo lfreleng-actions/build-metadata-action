@@ -69,7 +69,7 @@ func TestFetchEOLData(t *testing.T) {
 
 	t.Run("caching behavior", func(t *testing.T) {
 		client := NewEOLClient(5*time.Second, 1)
-		
+
 		// Set cached data
 		testData := []EOLData{
 			{Cycle: "3.11", EOL: "2027-10-01"},
@@ -86,12 +86,12 @@ func TestFetchEOLData(t *testing.T) {
 
 func TestGetSupportedVersions(t *testing.T) {
 	client := NewEOLClient(5*time.Second, 1)
-	
+
 	t.Run("filters EOL versions", func(t *testing.T) {
 		// Set mock data with some EOL versions
 		pastDate := time.Now().AddDate(0, 0, -30).Format("2006-01-02")
 		futureDate := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
-		
+
 		client.cachedData = []EOLData{
 			{Cycle: "3.13", EOL: futureDate},
 			{Cycle: "3.12", EOL: futureDate},
@@ -105,7 +105,7 @@ func TestGetSupportedVersions(t *testing.T) {
 
 		supported, err := client.GetSupportedVersions()
 		require.NoError(t, err)
-		
+
 		// Should include 3.9+ and exclude 3.8 and earlier
 		assert.Contains(t, supported, "3.13")
 		assert.Contains(t, supported, "3.12")
@@ -118,18 +118,18 @@ func TestGetSupportedVersions(t *testing.T) {
 
 	t.Run("filters out pre-3.9 versions", func(t *testing.T) {
 		futureDate := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
-		
+
 		client.cachedData = []EOLData{
 			{Cycle: "3.10", EOL: futureDate},
-			{Cycle: "3.8", EOL: futureDate},  // Should be filtered
-			{Cycle: "3.7", EOL: futureDate},  // Should be filtered
-			{Cycle: "2.7", EOL: futureDate},  // Should be filtered
+			{Cycle: "3.8", EOL: futureDate}, // Should be filtered
+			{Cycle: "3.7", EOL: futureDate}, // Should be filtered
+			{Cycle: "2.7", EOL: futureDate}, // Should be filtered
 		}
 		client.cacheTime = time.Now()
 
 		supported, err := client.GetSupportedVersions()
 		require.NoError(t, err)
-		
+
 		assert.Contains(t, supported, "3.10")
 		assert.NotContains(t, supported, "3.8")
 		assert.NotContains(t, supported, "3.7")
@@ -182,14 +182,14 @@ func TestIsVersionEOL(t *testing.T) {
 
 func TestGetFallbackVersions(t *testing.T) {
 	versions := GetFallbackVersions()
-	
+
 	assert.NotEmpty(t, versions)
 	assert.Contains(t, versions, "3.9")
 	assert.Contains(t, versions, "3.10")
 	assert.Contains(t, versions, "3.11")
 	assert.Contains(t, versions, "3.12")
 	assert.Contains(t, versions, "3.13")
-	
+
 	// Should not contain old versions
 	assert.NotContains(t, versions, "3.8")
 	assert.NotContains(t, versions, "3.7")
@@ -242,7 +242,7 @@ func TestEOLDataUnmarshal(t *testing.T) {
 		var data EOLData
 		err := json.Unmarshal([]byte(jsonData), &data)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "3.11", data.Cycle)
 		assert.Equal(t, "3.11.5", data.Latest)
 		assert.Equal(t, "2027-10-01", data.EOL)
@@ -262,7 +262,7 @@ func TestEOLDataUnmarshal(t *testing.T) {
 		var data EOLData
 		err := json.Unmarshal([]byte(jsonData), &data)
 		require.NoError(t, err)
-		
+
 		assert.Equal(t, "3.9", data.Cycle)
 		assert.Equal(t, true, data.EOL)
 	})
@@ -277,7 +277,7 @@ func TestEOLDataUnmarshal(t *testing.T) {
 		var data []EOLData
 		err := json.Unmarshal([]byte(jsonData), &data)
 		require.NoError(t, err)
-		
+
 		assert.Len(t, data, 3)
 		assert.Equal(t, "3.11", data[0].Cycle)
 		assert.Equal(t, "3.10", data[1].Cycle)

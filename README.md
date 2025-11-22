@@ -39,7 +39,7 @@ outputs and rich CI/CD integration.
 <!-- markdownlint-disable MD013 -->
 
 | Language | Build Systems | Version Files |
-|----------|---------------|---------------|
+| -------- | ------------- | ------------- |
 | Python | setuptools, poetry, flit, hatch | `pyproject.toml`, `setup.py`, `setup.cfg` |
 | JavaScript/TypeScript | npm, yarn, pnpm | `package.json`, `tsconfig.json` |
 | Java | Maven, Gradle (Groovy/Kotlin) | `pom.xml`, `build.gradle`, `build.gradle.kts` |
@@ -183,7 +183,7 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 
 <!-- markdownlint-disable MD013 -->
 | Name | Required | Default | Description |
-|------|----------|---------|-------------|
+| ---- | -------- | ------- | ----------- |
 | `path_prefix` | No | `.` | Path to the project root |
 | `output_format` | No | `summary` | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
 | `include_environment` | No | `true` | Include environment metadata |
@@ -205,7 +205,7 @@ All project types provide these standardized outputs:
 
 <!-- markdownlint-disable MD013 -->
 | Output | Description | Example |
-|--------|-------------|---------|
+| -------- | ------------ | ---------- |
 | `project_type` | Detected project type | `python-modern` |
 | `project_name` | Project/package name | `myproject` |
 | `project_version` | Current version | `1.2.3` |
@@ -230,7 +230,7 @@ All project types provide these standardized outputs:
 #### Python
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `python_version` | Python interpreter version |
 | `python_package_name` | Distribution package name |
 | `python_requires_python` | Required Python version range |
@@ -242,7 +242,7 @@ All project types provide these standardized outputs:
 #### Java (Maven)
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `java_version` | JDK version |
 | `maven_version` | Maven version |
 | `maven_group_id` | Maven groupId |
@@ -253,7 +253,7 @@ All project types provide these standardized outputs:
 #### Java (Gradle)
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `java_version` | JDK version |
 | `gradle_version` | Gradle version |
 | `gradle_group` | Project group |
@@ -263,7 +263,7 @@ All project types provide these standardized outputs:
 #### Node.js/JavaScript
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `node_version` | Node.js version |
 | `npm_version` | npm version |
 | `node_package_manager` | Detected package manager (npm, yarn, pnpm) |
@@ -273,7 +273,7 @@ All project types provide these standardized outputs:
 #### .NET/C\#
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `dotnet_version` | .NET SDK version |
 | `dotnet_framework` | Target framework(s) |
 | `dotnet_assembly_name` | Assembly name |
@@ -282,7 +282,7 @@ All project types provide these standardized outputs:
 #### Go
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `go_version` | Go version |
 | `go_module` | Module path |
 | `go_module_version` | Module version |
@@ -290,7 +290,7 @@ All project types provide these standardized outputs:
 #### Rust
 
 | Output | Description |
-|--------|-------------|
+| -------- | ------------ |
 | `rust_version` | Rust compiler version |
 | `cargo_version` | Cargo version |
 | `rust_edition` | Rust edition |
