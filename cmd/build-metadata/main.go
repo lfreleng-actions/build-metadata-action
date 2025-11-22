@@ -61,15 +61,6 @@ func parseMultiSeparatorInput(input string) []string {
 	return parts
 }
 
-// getMapKeys returns the keys of a map as a slice
-func getMapKeys(m map[string]interface{}) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 // Metadata represents the complete metadata collected
 type Metadata struct {
 	// Common metadata
@@ -124,17 +115,6 @@ func main() {
 		projectPath = "."
 	}
 
-	// Debug: Show current working directory and project path
-	if cwd, err := os.Getwd(); err == nil {
-		if isCI {
-			action.Infof("Current working directory: %s", cwd)
-			action.Infof("Project path input: %s", projectPath)
-		} else if verboseOutput {
-			fmt.Printf("Current working directory: %s\n", cwd)
-			fmt.Printf("Project path input: %s\n", projectPath)
-		}
-	}
-
 	// Convert to absolute path
 	absPath, err := filepath.Abs(projectPath)
 	if err != nil {
@@ -143,24 +123,6 @@ func main() {
 		} else {
 			fmt.Fprintf(os.Stderr, "Error: Failed to resolve project path: %v\n", err)
 			os.Exit(1)
-		}
-	}
-
-	// Debug: Show resolved absolute path and check if it exists
-	if isCI {
-		action.Infof("Resolved absolute path: %s", absPath)
-		if info, err := os.Stat(absPath); err == nil {
-			action.Infof("Path exists: %v, IsDir: %v", true, info.IsDir())
-			// List files in the directory
-			if entries, err := os.ReadDir(absPath); err == nil {
-				var files []string
-				for _, entry := range entries {
-					files = append(files, entry.Name())
-				}
-				action.Infof("Files in directory: %v", strings.Join(files, ", "))
-			}
-		} else {
-			action.Warningf("Path does not exist or cannot be accessed: %v", err)
 		}
 	}
 
@@ -404,12 +366,6 @@ func main() {
 	// This ensures consistent output names across project type variants
 	outputPrefix := normalizeProjectTypeToLanguage(projectType)
 
-	// Debug: Log language-specific outputs being set
-	if isCI && verboseOutput {
-		action.Infof("Setting language-specific outputs with prefix: %s", outputPrefix)
-		action.Infof("Language-specific metadata keys: %v", getMapKeys(metadata.LanguageSpecific))
-	}
-
 	// Set language-specific outputs
 	for key, value := range metadata.LanguageSpecific {
 		// Prefix language-specific outputs with the normalized language name
@@ -419,9 +375,6 @@ func main() {
 		switch v := value.(type) {
 		case string:
 			setOutput(outputKey, v)
-			if isCI && verboseOutput && key == "build_version" {
-				action.Infof("Setting critical output: %s = %s", outputKey, v)
-			}
 		case []string:
 			setOutput(outputKey, strings.Join(v, ","))
 		case map[string]interface{}:
