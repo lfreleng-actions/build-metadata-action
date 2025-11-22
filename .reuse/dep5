@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: build-metadata-action
+Upstream-Contact: The Linux Foundation <releng@linuxfoundation.org>
+Source: https://github.com/lfreleng-actions/build-metadata-action
+
+Files: go.sum coverage*.out build-metadata
+Copyright: 2025 The Linux Foundation
+License: Apache-2.0
+
+Files: internal/extractor/*/testdata/* internal/extractor/php/testdata/complete/composer.json
+Copyright: 2025 The Linux Foundation
+License: Apache-2.0
