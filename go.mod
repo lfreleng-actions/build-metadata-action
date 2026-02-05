@@ -6,7 +6,7 @@ module github.com/lfreleng-actions/build-metadata-action
 go 1.24
 
 require (
-	github.com/BurntSushi/toml v1.3.2
+	github.com/BurntSushi/toml v1.6.0
 	github.com/hashicorp/hcl/v2 v2.19.1
 	github.com/sethvargo/go-githubactions v1.1.0
 	github.com/stretchr/testify v1.8.4
