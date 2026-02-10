@@ -8,7 +8,7 @@ go 1.24
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/sethvargo/go-githubactions v1.1.0
+	github.com/sethvargo/go-githubactions v1.3.2
 	github.com/stretchr/testify v1.8.4
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -21,7 +21,6 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
-	github.com/sethvargo/go-envconfig v0.8.0 // indirect
 	github.com/zclconf/go-cty v1.16.3 // indirect
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect
