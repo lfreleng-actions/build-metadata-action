@@ -56,7 +56,7 @@ repos:
         types: [yaml]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: b969e2851312ca2b24bbec879ba4954341d1bd12  # frozen: v0.15.5
+    rev: 4924b0e01e032fea073ad04a1c5cfa7e4add0afb  # frozen: v0.15.6
     hooks:
       - id: ruff
         files: ^(scripts|tests|custom_components)/.+\.py$
@@ -106,7 +106,7 @@ repos:
 
   # Go-specific linting and formatting
   - repo: https://github.com/golangci/golangci-lint
-    rev: e8f621973e2dfce68b7839ff16affa09cb103239  # frozen: v2.11.2
+    rev: 6008b81b81c690c046ffc3fd5bce896da715d5fd  # frozen: v2.11.3
     hooks:
       - id: golangci-lint
         args: [--fix, --timeout=5m]
