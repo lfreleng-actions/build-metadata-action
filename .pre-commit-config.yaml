@@ -106,7 +106,7 @@ repos:
 
   # Go-specific linting and formatting
   - repo: https://github.com/golangci/golangci-lint
-    rev: 8f3b0c7ed018e57905fbd873c697e0b1ede605a5  # frozen: v2.11.4
+    rev: 9aa24e94ceb7d1a8ccbde81e7424629467299a7e  # frozen: v2.12.1
     hooks:
       - id: golangci-lint
         args: [--fix, --timeout=5m]
@@ -144,13 +144,13 @@ repos:
         always_run: true
 
   - repo: https://github.com/modeseven-lfit/gha-workflow-linter
-    rev: a7caf8f3a1a05688d1cee46615ff94def617e5a3  # frozen: v1.0.2
+    rev: d515db25d3e433aadbed9db9093e05eab0730f87  # frozen: v1.0.3
     hooks:
       - id: gha-workflow-linter
         args: [lint, ., --verbose]
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: ed81924a8b1cecdaa570b072528fa80c9c4d6ccd  # frozen: 0.37.1
+    rev: 943377262562a12b57292fc98fabd7dbf81451fe  # frozen: 0.37.2
     hooks:
       - id: check-github-actions
       - id: check-github-workflows
