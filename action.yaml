@@ -190,6 +190,39 @@ outputs:
     description: "Recommended Python version for building (latest from matrix)"
     value: ${{ steps.extract.outputs.python_build_version }}
 
+  python_dynamic_provider:
+    description: >-
+      When versioning_type is dynamic, identifies the provider responsible
+      for resolving the version at build time (pbr, setuptools-scm,
+      versioneer, setuptools-dynamic, runtime-attr).
+    value: ${{ steps.extract.outputs.python_dynamic_provider }}
+
+  python_requires_python_fallback:
+    description: >-
+      true when the action could not determine a Python version from the
+      project metadata and resorted to the canonical default matrix.
+      Consumers should surface this as a warning to the user.
+    value: ${{ steps.extract.outputs.python_requires_python_fallback }}
+
+  python_requires_python_source:
+    description: >-
+      Source from which the supported-Python-version list was derived
+      (e.g. "classifiers" when python_requires was absent). Empty when
+      requires_python was used directly.
+    value: ${{ steps.extract.outputs.python_requires_python_source }}
+
+  python_version_unresolved:
+    description: >-
+      true when the project version is dynamic but cannot be resolved
+      without a build-time signal (e.g. PBR without a tag or PBR_VERSION).
+    value: ${{ steps.extract.outputs.python_version_unresolved }}
+
+  python_dependencies_source:
+    description: >-
+      Source from which the dependency list was loaded (typically
+      "requirements.txt" for projects that delegate install_requires).
+    value: ${{ steps.extract.outputs.python_dependencies_source }}
+
   python_project_match_package:
     description: "Whether Python project name matches package name"
     value: ${{ steps.extract.outputs.python_project_match_package }}
