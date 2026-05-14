@@ -159,18 +159,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 						LanguageSpecific: make(map[string]interface{}),
 					}
 					if err := e.extractFromSetupPy(setupPyPath, fallbackMetadata); err == nil {
-						if requiresPython, ok := fallbackMetadata.LanguageSpecific["requires_python"].(string); ok && requiresPython != "" {
-							metadata.LanguageSpecific["requires_python"] = requiresPython
-							if matrix, ok := fallbackMetadata.LanguageSpecific["version_matrix"].([]string); ok {
-								metadata.LanguageSpecific["version_matrix"] = matrix
-							}
-							if matrixJSON, ok := fallbackMetadata.LanguageSpecific["matrix_json"].(string); ok {
-								metadata.LanguageSpecific["matrix_json"] = matrixJSON
-							}
-							if buildVersion, ok := fallbackMetadata.LanguageSpecific["build_version"].(string); ok {
-								metadata.LanguageSpecific["build_version"] = buildVersion
-							}
-						}
+						propagateFallbackPythonMatrix(metadata, fallbackMetadata)
 					}
 				}
 				// Try setup.cfg if we still don't have it
@@ -179,18 +168,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 						LanguageSpecific: make(map[string]interface{}),
 					}
 					if err := e.extractFromSetupCfg(setupCfgPath, fallbackMetadata); err == nil {
-						if requiresPython, ok := fallbackMetadata.LanguageSpecific["requires_python"].(string); ok && requiresPython != "" {
-							metadata.LanguageSpecific["requires_python"] = requiresPython
-							if matrix, ok := fallbackMetadata.LanguageSpecific["version_matrix"].([]string); ok {
-								metadata.LanguageSpecific["version_matrix"] = matrix
-							}
-							if matrixJSON, ok := fallbackMetadata.LanguageSpecific["matrix_json"].(string); ok {
-								metadata.LanguageSpecific["matrix_json"] = matrixJSON
-							}
-							if buildVersion, ok := fallbackMetadata.LanguageSpecific["build_version"].(string); ok {
-								metadata.LanguageSpecific["build_version"] = buildVersion
-							}
-						}
+						propagateFallbackPythonMatrix(metadata, fallbackMetadata)
 					}
 				}
 			}
@@ -388,6 +366,7 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 	if len(pyproject.Project.Dependencies) > 0 {
 		metadata.LanguageSpecific["dependencies"] = pyproject.Project.Dependencies
 		metadata.LanguageSpecific["dependency_count"] = len(pyproject.Project.Dependencies)
+		metadata.LanguageSpecific["dependencies_source"] = "pyproject.toml"
 	}
 
 	// Extract tool-specific configurations
@@ -560,6 +539,7 @@ func (e *Extractor) extractFromSetupCfg(path string, metadata *extractor.Project
 	if deps := getLines("options", "install_requires"); len(deps) > 0 {
 		metadata.LanguageSpecific["dependencies"] = deps
 		metadata.LanguageSpecific["dependency_count"] = len(deps)
+		metadata.LanguageSpecific["dependencies_source"] = "setup.cfg"
 	}
 
 	// Determine versioning type and (if dynamic) the provider responsible.
@@ -567,10 +547,24 @@ func (e *Extractor) extractFromSetupCfg(path string, metadata *extractor.Project
 	if provider != "" {
 		metadata.LanguageSpecific["versioning_type"] = "dynamic"
 		metadata.LanguageSpecific["dynamic_provider"] = provider
-		// PBR derives version from git tags; surface this so consumers
-		// know they may need to inject PBR_VERSION when not on a tag.
-		if provider == "pbr" && metadata.Version == "" {
+		// Any dynamic provider that hasn't already produced a concrete
+		// version string is, by definition, unresolved at extraction time
+		// (PBR/setuptools-scm/versioneer/runtime-attr all defer to build).
+		if strings.TrimSpace(metadata.Version) == "" {
 			metadata.LanguageSpecific["version_unresolved"] = true
+		}
+		// `version = attr:` / `file:` are indirections that only resolve
+		// at build-time. Stash the raw expression for diagnostics and
+		// clear the surface Version so it doesn't pollute outputs like
+		// project_version with a non-resolvable literal.
+		if provider == "setuptools-dynamic" {
+			if rawVer := strings.TrimSpace(metadata.Version); rawVer != "" {
+				if strings.HasPrefix(rawVer, "attr:") || strings.HasPrefix(rawVer, "file:") {
+					metadata.LanguageSpecific["version_expression"] = rawVer
+					metadata.Version = ""
+					metadata.LanguageSpecific["version_unresolved"] = true
+				}
+			}
 		}
 	} else {
 		metadata.LanguageSpecific["versioning_type"] = "static"
@@ -616,6 +610,15 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 	metadata.LanguageSpecific["package_name"] = metadata.Name
 	metadata.LanguageSpecific["metadata_source"] = "setup.py"
 
+	// Surface install_requires when declared inline, so the Extract()
+	// loop knows not to fall back to requirements.txt for projects that
+	// already provide an explicit dependency list in setup.py.
+	if deps := extractSetupPyInstallRequires(text); len(deps) > 0 {
+		metadata.LanguageSpecific["dependencies"] = deps
+		metadata.LanguageSpecific["dependency_count"] = len(deps)
+		metadata.LanguageSpecific["dependencies_source"] = "setup.py"
+	}
+
 	if pythonRequires := extractSetupPyField(text, "python_requires"); pythonRequires != "" {
 		metadata.LanguageSpecific["requires_python"] = pythonRequires
 
@@ -646,7 +649,10 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 	if provider != "" {
 		metadata.LanguageSpecific["versioning_type"] = "dynamic"
 		metadata.LanguageSpecific["dynamic_provider"] = provider
-		if provider == "pbr" && metadata.Version == "" {
+		// All dynamic providers resolve the real version at build time;
+		// surface that as `version_unresolved` whenever extraction did
+		// not turn up a concrete value (matches setup.cfg behaviour).
+		if strings.TrimSpace(metadata.Version) == "" {
 			metadata.LanguageSpecific["version_unresolved"] = true
 		}
 	} else {
@@ -705,7 +711,7 @@ func crossCheckDynamicFromSetupPy(setupPyPath string, metadata *extractor.Projec
 	}
 	metadata.LanguageSpecific["versioning_type"] = "dynamic"
 	metadata.LanguageSpecific["dynamic_provider"] = provider
-	if provider == "pbr" && metadata.Version == "" {
+	if strings.TrimSpace(metadata.Version) == "" {
 		metadata.LanguageSpecific["version_unresolved"] = true
 	}
 }
@@ -727,6 +733,15 @@ func loadRequirementsTxt(projectPath string, metadata *extractor.ProjectMetadata
 			// Skip blanks, comments, and pip directives (-r, -c, -e ...).
 			continue
 		}
+		// Strip inline comments. pip's parser only recognises `#` as a
+		// comment when preceded by whitespace, so e.g. URL fragments like
+		// `pkg @ https://example.com/x#egg=pkg` are preserved intact.
+		if idx := indexInlineComment(line); idx >= 0 {
+			line = strings.TrimSpace(line[:idx])
+			if line == "" {
+				continue
+			}
+		}
 		deps = append(deps, line)
 	}
 	if len(deps) > 0 {
@@ -734,6 +749,19 @@ func loadRequirementsTxt(projectPath string, metadata *extractor.ProjectMetadata
 		metadata.LanguageSpecific["dependency_count"] = len(deps)
 		metadata.LanguageSpecific["dependencies_source"] = "requirements.txt"
 	}
+}
+
+// indexInlineComment returns the index of an inline `#` comment marker
+// in a requirements.txt line, or -1 if none is present. pip treats `#`
+// as the start of a comment only when preceded by ASCII whitespace, so
+// URL fragments such as `pkg @ https://x.example/y#egg=pkg` survive.
+func indexInlineComment(line string) int {
+	for i := 1; i < len(line); i++ {
+		if line[i] == '#' && (line[i-1] == ' ' || line[i-1] == '\t') {
+			return i
+		}
+	}
+	return -1
 }
 
 // Helper functions
@@ -780,8 +808,17 @@ func parseSetupCfg(content string) map[string]map[string]setupCfgValue {
 	for _, rawLine := range strings.Split(content, "\n") {
 		line := strings.TrimRight(rawLine, "\r")
 		trimmed := strings.TrimSpace(line)
+		isIndented := len(line) > 0 && (line[0] == ' ' || line[0] == '\t')
 
-		// Blank line terminates the current value
+		// Indented (continuation) whitespace-only lines are preserved as
+		// empty entries rather than terminating the value, matching
+		// Python's RawConfigParser semantics.
+		if trimmed == "" && isIndented && currentKey != "" {
+			currentValue = append(currentValue, "")
+			continue
+		}
+
+		// A fully blank (unindented) line terminates the current value.
 		if trimmed == "" {
 			flush()
 			currentKey = ""
@@ -798,7 +835,10 @@ func parseSetupCfg(content string) map[string]map[string]setupCfgValue {
 		// Section header
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
 			flush()
-			currentSection = strings.ToLower(strings.Trim(trimmed, "[]"))
+			// Trim brackets first, then strip any internal whitespace so
+			// inputs like `[ metadata ]` normalise to `metadata` (matching
+			// Python's configparser behaviour).
+			currentSection = strings.ToLower(strings.TrimSpace(strings.Trim(trimmed, "[]")))
 			if _, ok := result[currentSection]; !ok {
 				result[currentSection] = make(map[string]setupCfgValue)
 			}
@@ -808,7 +848,7 @@ func parseSetupCfg(content string) map[string]map[string]setupCfgValue {
 		}
 
 		// Continuation line: starts with whitespace and we already have a key
-		isContinuation := len(line) > 0 && (line[0] == ' ' || line[0] == '\t')
+		isContinuation := isIndented
 		if isContinuation && currentKey != "" {
 			currentValue = append(currentValue, trimmed)
 			continue
@@ -842,8 +882,25 @@ func parseSetupCfg(content string) map[string]map[string]setupCfgValue {
 	return result
 }
 
+// isSupportedPythonVersion returns true when v (in `X.Y` form) is part of
+// the set of Python versions this action's matrix generator actively
+// emits. It defers to `supportedPythonVersions` so the classifier-derived
+// matrix path and the requires-python-derived matrix path always agree
+// on which versions are buildable.
+func isSupportedPythonVersion(v string) bool {
+	for _, s := range supportedPythonVersions {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
 // derivePythonVersionsFromClassifiers extracts Python `X.Y` versions from
-// PEP-301 trove classifiers. Returns a deduplicated, version-sorted list.
+// PEP-301 trove classifiers. Returns a deduplicated, version-sorted list
+// filtered to the set of actively supported Python versions (3.9+); EOL
+// versions (2.x, 3.6-3.8) are dropped so callers do not attempt to run
+// against interpreters that GitHub-hosted runners no longer install.
 func derivePythonVersionsFromClassifiers(classifiers []string) []string {
 	re := regexp.MustCompile(`Programming Language\s*::\s*Python\s*::\s*(\d+\.\d+)`)
 	seen := make(map[string]struct{})
@@ -851,6 +908,9 @@ func derivePythonVersionsFromClassifiers(classifiers []string) []string {
 	for _, c := range classifiers {
 		if matches := re.FindStringSubmatch(c); len(matches) > 1 {
 			v := matches[1]
+			if !isSupportedPythonVersion(v) {
+				continue
+			}
 			if _, ok := seen[v]; !ok {
 				seen[v] = struct{}{}
 				versions = append(versions, v)
@@ -882,21 +942,53 @@ func detectDynamicProviderFromSetupCfg(cfg map[string]map[string]setupCfgValue) 
 	if opts, ok := cfg["options"]; ok {
 		if v, ok := opts["setup_requires"]; ok {
 			for _, line := range v.Lines {
-				lower := strings.ToLower(line)
-				if strings.Contains(lower, "pbr") {
+				name := extractRequirementName(line)
+				switch name {
+				case "pbr":
 					return "pbr"
-				}
-				if strings.Contains(lower, "setuptools_scm") ||
-					strings.Contains(lower, "setuptools-scm") {
+				case "setuptools_scm", "setuptools-scm":
 					return "setuptools-scm"
-				}
-				if strings.Contains(lower, "versioneer") {
+				case "versioneer":
 					return "versioneer"
 				}
 			}
 		}
 	}
 	return ""
+}
+
+// extractRequirementName returns the lowercased distribution name token
+// at the start of a PEP 508 requirement line (e.g. `pbr>=2.0 ; ...` ->
+// `pbr`). Returns an empty string when no valid name is found. This is
+// deliberately stricter than substring matching so that requirements
+// such as `sphinx-pbr-theme` do not get mistaken for `pbr`.
+func extractRequirementName(line string) string {
+	s := strings.TrimSpace(line)
+	// Drop common surrounding punctuation left over from list/quoted forms.
+	s = strings.Trim(s, "'\",[]() \t")
+	nameRe := regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*`)
+	match := nameRe.FindString(s)
+	return strings.ToLower(match)
+}
+
+// extractSetupRequiresNames returns the lowercased distribution names of
+// every requirement listed in a `setup_requires=[...]` keyword argument
+// inside a setup.py source. Each requirement is parsed via
+// `extractRequirementName` so that PEP 508 version specifiers, environment
+// markers, and extras are stripped before name matching. Returns an empty
+// slice when no `setup_requires=[...]` is found.
+func extractSetupRequiresNames(text string) []string {
+	listRe := regexp.MustCompile(`(?s)setup_requires\s*=\s*\[([^\]]*)\]`)
+	itemRe := regexp.MustCompile(`['"]([^'"]+)['"]`)
+	var names []string
+	for _, list := range listRe.FindAllStringSubmatch(text, -1) {
+		for _, item := range itemRe.FindAllStringSubmatch(list[1], -1) {
+			if name := extractRequirementName(item[1]); name != "" {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
 }
 
 // detectDynamicProviderFromSetupPy returns the name of the dynamic
@@ -907,18 +999,38 @@ func detectDynamicProviderFromSetupCfg(cfg map[string]map[string]setupCfgValue) 
 func detectDynamicProviderFromSetupPy(text string) string {
 	lower := strings.ToLower(text)
 
-	pbrInSetupRequires := regexp.MustCompile(`setup_requires\s*=\s*\[[^\]]*['"]pbr`)
-	scmInSetupRequires := regexp.MustCompile(`setup_requires\s*=\s*\[[^\]]*['"]setuptools[_-]scm`)
+	// Parse the setup_requires=[...] list (if any) and extract the
+	// distribution name for each entry. Matching on the parsed name
+	// (rather than on a regex prefix inside the list) avoids treating
+	// unrelated packages such as `sphinx-pbr-theme` or
+	// `setuptools_scm_git_archive` as PBR / setuptools-scm providers.
+	setupRequiresNames := extractSetupRequiresNames(text)
+	hasPbrRequirement := false
+	hasScmRequirement := false
+	hasVersioneerRequirement := false
+	for _, name := range setupRequiresNames {
+		switch name {
+		case "pbr":
+			hasPbrRequirement = true
+		case "setuptools-scm", "setuptools_scm":
+			hasScmRequirement = true
+		case "versioneer":
+			hasVersioneerRequirement = true
+		}
+	}
 
-	if strings.Contains(lower, "pbr=true") ||
-		regexp.MustCompile(`pbr\s*=\s*true`).MatchString(lower) ||
-		pbrInSetupRequires.MatchString(lower) {
+	// `pbr=True` keyword argument to setup(...). Use word boundaries to
+	// avoid matching unrelated identifiers ending in `pbr`.
+	pbrKwarg := regexp.MustCompile(`\bpbr\s*=\s*true\b`).MatchString(lower)
+
+	if pbrKwarg || hasPbrRequirement {
 		return "pbr"
 	}
-	if strings.Contains(lower, "use_scm_version") || scmInSetupRequires.MatchString(lower) {
+	if strings.Contains(lower, "use_scm_version") || hasScmRequirement {
 		return "setuptools-scm"
 	}
-	if strings.Contains(lower, "versioneer.get_version") ||
+	if hasVersioneerRequirement ||
+		strings.Contains(lower, "versioneer.get_version") ||
 		strings.Contains(lower, "versioneer.get_cmdclass") {
 		return "versioneer"
 	}
@@ -929,6 +1041,35 @@ func detectDynamicProviderFromSetupPy(text string) string {
 		return "runtime-attr"
 	}
 	return ""
+}
+
+// propagateFallbackPythonMatrix copies python-version-related metadata
+// from a setup.py/setup.cfg fallback extraction back into the primary
+// (pyproject.toml-derived) metadata map. `requires_python`,
+// `version_matrix`, `matrix_json`, `build_version`, and
+// `requires_python_source` are each propagated independently so that a
+// classifier-derived matrix (which produces `requires_python_source =
+// "classifiers"` without populating `requires_python`) is honoured even
+// when `requires_python` itself is empty in the fallback.
+func propagateFallbackPythonMatrix(metadata, fallbackMetadata *extractor.ProjectMetadata) {
+	if metadata == nil || metadata.LanguageSpecific == nil || fallbackMetadata == nil || fallbackMetadata.LanguageSpecific == nil {
+		return
+	}
+	if requiresPython, ok := fallbackMetadata.LanguageSpecific["requires_python"].(string); ok && requiresPython != "" {
+		metadata.LanguageSpecific["requires_python"] = requiresPython
+	}
+	if matrix, ok := fallbackMetadata.LanguageSpecific["version_matrix"].([]string); ok && len(matrix) > 0 {
+		metadata.LanguageSpecific["version_matrix"] = matrix
+	}
+	if matrixJSON, ok := fallbackMetadata.LanguageSpecific["matrix_json"].(string); ok && matrixJSON != "" {
+		metadata.LanguageSpecific["matrix_json"] = matrixJSON
+	}
+	if buildVersion, ok := fallbackMetadata.LanguageSpecific["build_version"].(string); ok && buildVersion != "" {
+		metadata.LanguageSpecific["build_version"] = buildVersion
+	}
+	if source, ok := fallbackMetadata.LanguageSpecific["requires_python_source"].(string); ok && source != "" {
+		metadata.LanguageSpecific["requires_python_source"] = source
+	}
 }
 
 // applyFallbackPythonMatrix populates Python version matrix metadata with
@@ -961,6 +1102,13 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 		strings.Join(quoteStrings(fallback), ", "))
 	metadata.LanguageSpecific["build_version"] = fallback[len(fallback)-1]
 	metadata.LanguageSpecific["requires_python_fallback"] = true
+	// Mark the source of the resulting matrix so downstream consumers can
+	// tell a fallback guess apart from a matrix derived from
+	// `requires-python` or trove classifiers. Only set when no upstream
+	// path has already declared a source (e.g. "classifiers").
+	if src, ok := metadata.LanguageSpecific["requires_python_source"].(string); !ok || src == "" {
+		metadata.LanguageSpecific["requires_python_source"] = "fallback"
+	}
 
 	fmt.Fprintf(os.Stderr,
 		"[WARNING] %s does not declare requires-python or Python classifiers; using fallback Python matrix %v (build_version=%s)\n",
@@ -1002,9 +1150,32 @@ func parseINI(content string) map[string]map[string]string {
 	return result
 }
 
+// extractSetupPyInstallRequires returns the list of install_requires entries
+// declared in a setup.py file. It handles single- and double-quoted entries
+// inside the `install_requires=[...]` keyword argument. Empty/whitespace
+// items are skipped. Returns nil when the keyword is absent.
+func extractSetupPyInstallRequires(content string) []string {
+	listRe := regexp.MustCompile(`(?s)install_requires\s*=\s*\[(.*?)\]`)
+	listMatch := listRe.FindStringSubmatch(content)
+	if len(listMatch) < 2 {
+		return nil
+	}
+	itemRe := regexp.MustCompile(`['"]([^'"]+)['"]`)
+	items := itemRe.FindAllStringSubmatch(listMatch[1], -1)
+	var result []string
+	for _, m := range items {
+		if len(m) > 1 {
+			if v := strings.TrimSpace(m[1]); v != "" {
+				result = append(result, v)
+			}
+		}
+	}
+	return result
+}
+
 // extractSetupPyClassifiers returns the list of trove classifier strings
-// declared in a setup.py file. It handles single-quoted, double-quoted
-// and triple-quoted entries inside the `classifiers=[...]` keyword.
+// declared in a setup.py file. It handles single- and double-quoted
+// entries inside the `classifiers=[...]` keyword argument.
 func extractSetupPyClassifiers(content string) []string {
 	listRe := regexp.MustCompile(`(?s)classifiers\s*=\s*\[(.*?)\]`)
 	listMatch := listRe.FindStringSubmatch(content)
@@ -1041,6 +1212,17 @@ func extractSetupPyField(content, field string) string {
 	return ""
 }
 
+// supportedPythonVersions is the single source of truth for the set of
+// Python versions this action actively supports. Both
+// `generatePythonVersionMatrix` and `isSupportedPythonVersion` derive
+// their behaviour from this slice, so the matrix produced from a
+// `requires-python` specifier and the matrix derived from PEP-301 trove
+// classifiers always agree on which versions are buildable.
+//
+// Update this slice (and only this slice) when Python's release cadence
+// changes; the rest of the extractor follows.
+var supportedPythonVersions = []string{"3.9", "3.10", "3.11", "3.12", "3.13", "3.14"}
+
 // generatePythonVersionMatrix generates a list of Python versions from a requires-python specifier
 func generatePythonVersionMatrix(requiresPython string) []string {
 	// Common patterns: ">=3.8", ">=3.8,<4.0", "~=3.8", "<3.13,>=3.11", etc.
@@ -1069,16 +1251,12 @@ func generatePythonVersionMatrix(requiresPython string) []string {
 		}
 	}
 
-	// Map minimum version to supported versions
-	// Only includes actively supported Python versions (3.9+)
-	// Python 3.6, 3.7, and 3.8 have reached end-of-life
-	supportedVersions := map[string][]string{
-		"3.9":  {"3.9", "3.10", "3.11", "3.12", "3.13", "3.14"},
-		"3.10": {"3.10", "3.11", "3.12", "3.13", "3.14"},
-		"3.11": {"3.11", "3.12", "3.13", "3.14"},
-		"3.12": {"3.12", "3.13", "3.14"},
-		"3.13": {"3.13", "3.14"},
-		"3.14": {"3.14"},
+	// Map minimum version to supported versions. The slices are derived
+	// on the fly from `supportedPythonVersions` so adding (or retiring)
+	// a Python version only needs to be done in one place.
+	supportedVersions := map[string][]string{}
+	for i, v := range supportedPythonVersions {
+		supportedVersions[v] = append([]string(nil), supportedPythonVersions[i:]...)
 	}
 
 	if minVersion != "" {
@@ -1098,19 +1276,16 @@ func generatePythonVersionMatrix(requiresPython string) []string {
 				versions = versionList
 			}
 		} else {
-			// Map legacy/unsupported versions to minimum supported version
-			// This handles projects still requiring Python 3.6, 3.7, or 3.8
-			if minVersion < "3.9" {
-				versions = []string{"3.9", "3.10", "3.11", "3.12", "3.13", "3.14"}
-			} else {
-				versions = []string{"3.9", "3.10", "3.11", "3.12", "3.13", "3.14"}
-			}
+			// Legacy / unsupported minimum version: route through to
+			// the full supported set regardless of whether the request
+			// was below 3.9 or above the known maximum.
+			versions = append([]string(nil), supportedPythonVersions...)
 		}
 	}
 
 	// If we couldn't determine, use a reasonable default
 	if len(versions) == 0 {
-		versions = []string{"3.9", "3.10", "3.11", "3.12", "3.13", "3.14"}
+		versions = append([]string(nil), supportedPythonVersions...)
 	}
 
 	return versions

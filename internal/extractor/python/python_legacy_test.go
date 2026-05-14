@@ -288,6 +288,8 @@ func TestLegacy_BareSetupPyFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, true, metadata.LanguageSpecific["requires_python_fallback"])
+	assert.Equal(t, "fallback", metadata.LanguageSpecific["requires_python_source"],
+		"fallback-derived matrices must surface a 'fallback' source so consumers can distinguish them from classifier-derived or requires-python-derived matrices")
 	buildVersion, _ := metadata.LanguageSpecific["build_version"].(string)
 	assert.NotEmpty(t, buildVersion)
 	matrixJSON, _ := metadata.LanguageSpecific["matrix_json"].(string)
@@ -409,4 +411,385 @@ func TestLegacy_DetectDynamicProviderFromSetupPy(t *testing.T) {
 			assert.Equal(t, want, detectDynamicProviderFromSetupPy(input))
 		})
 	}
+}
+
+// TestLegacy_SetupCfgSectionWhitespace ensures that section headers with
+// internal or surrounding whitespace (e.g. `[metadata ]`, `[ metadata ]`)
+// normalise to the same lowercase key, matching Python's configparser.
+func TestLegacy_SetupCfgSectionWhitespace(t *testing.T) {
+	setupCfg := "[metadata ]\n" +
+		"name = whitespace-pkg\n" +
+		"version = 4.2.0\n" +
+		"\n" +
+		"[ options ]\n" +
+		"python_requires = >=3.10\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "whitespace-pkg", metadata.Name)
+	assert.Equal(t, "4.2.0", metadata.Version)
+	assert.Equal(t, ">=3.10", metadata.LanguageSpecific["requires_python"])
+}
+
+// TestLegacy_SetupPyInstallRequiresWins ensures that an inline
+// install_requires list in setup.py takes precedence over a sibling
+// requirements.txt file.
+func TestLegacy_SetupPyInstallRequiresWins(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='deps-pkg',\n" +
+		"      version='1.0',\n" +
+		"      install_requires=['foo>=1', \"bar\"],\n" +
+		"      python_requires='>=3.10')\n"
+	requirements := "unused-dep>=9.9\nanother-unused\n"
+
+	tmpDir := createTempProject(t, map[string]string{
+		"setup.py":         setupPy,
+		"requirements.txt": requirements,
+	})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "setup.py", metadata.LanguageSpecific["dependencies_source"])
+	deps, ok := metadata.LanguageSpecific["dependencies"].([]string)
+	require.True(t, ok, "dependencies should be []string")
+	assert.Equal(t, []string{"foo>=1", "bar"}, deps)
+	assert.Equal(t, 2, metadata.LanguageSpecific["dependency_count"])
+}
+
+// TestLegacy_SetupPyRequirementsTxtFallback ensures that setup.py projects
+// without install_requires still fall back to requirements.txt for deps.
+func TestLegacy_SetupPyRequirementsTxtFallback(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='fallback-pkg',\n" +
+		"      version='1.0',\n" +
+		"      python_requires='>=3.10')\n"
+	requirements := "requests>=2.31\nclick>=8.0\n"
+
+	tmpDir := createTempProject(t, map[string]string{
+		"setup.py":         setupPy,
+		"requirements.txt": requirements,
+	})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "requirements.txt", metadata.LanguageSpecific["dependencies_source"])
+	deps, ok := metadata.LanguageSpecific["dependencies"].([]string)
+	require.True(t, ok, "dependencies should be []string")
+	assert.Equal(t, []string{"requests>=2.31", "click>=8.0"}, deps)
+}
+
+// TestLegacy_SetupCfgInstallRequiresSource verifies that
+// `dependencies_source` is set to "setup.cfg" when `install_requires`
+// is declared inline in the `[options]` section.
+func TestLegacy_SetupCfgInstallRequiresSource(t *testing.T) {
+	setupCfg := "[metadata]\n" +
+		"name = cfg-deps-pkg\n" +
+		"version = 1.0\n" +
+		"\n" +
+		"[options]\n" +
+		"install_requires =\n" +
+		"    requests>=2.31\n" +
+		"    click>=8.0\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "setup.cfg", metadata.LanguageSpecific["dependencies_source"])
+	deps, ok := metadata.LanguageSpecific["dependencies"].([]string)
+	require.True(t, ok, "dependencies should be []string")
+	assert.Equal(t, []string{"requests>=2.31", "click>=8.0"}, deps)
+}
+
+// TestLegacy_PyProjectDependenciesSource verifies that
+// `dependencies_source` is set to "pyproject.toml" when `[project]
+// dependencies` is declared inline.
+func TestLegacy_PyProjectDependenciesSource(t *testing.T) {
+	pyproject := "[project]\n" +
+		"name = \"pyproj-deps-pkg\"\n" +
+		"version = \"1.0\"\n" +
+		"dependencies = [\"requests>=2.31\", \"click>=8.0\"]\n"
+
+	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "pyproject.toml", metadata.LanguageSpecific["dependencies_source"])
+	deps, ok := metadata.LanguageSpecific["dependencies"].([]string)
+	require.True(t, ok, "dependencies should be []string")
+	assert.Equal(t, []string{"requests>=2.31", "click>=8.0"}, deps)
+}
+
+// TestLegacy_SetupCfgPbrFalsePositive ensures that a setup_requires line
+// containing a package whose name merely embeds the substring `pbr`
+// (e.g. `sphinx-pbr-theme`) does NOT get misclassified as a PBR project.
+func TestLegacy_SetupCfgPbrFalsePositive(t *testing.T) {
+	setupCfg := "[metadata]\n" +
+		"name = innocent-pkg\n" +
+		"version = 1.0\n" +
+		"\n" +
+		"[options]\n" +
+		"setup_requires =\n" +
+		"    sphinx-pbr-theme>=1.0\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "static", metadata.LanguageSpecific["versioning_type"],
+		"sphinx-pbr-theme must not trigger PBR detection")
+	assert.Nil(t, metadata.LanguageSpecific["dynamic_provider"])
+}
+
+// TestLegacy_ExtractRequirementName covers the PEP 508 name extractor.
+func TestLegacy_ExtractRequirementName(t *testing.T) {
+	cases := map[string]string{
+		"pbr":                   "pbr",
+		"pbr>=2.0":              "pbr",
+		"  pbr ; python>='3.7'": "pbr",
+		"'pbr',":                "pbr",
+		"sphinx-pbr-theme>=1.0": "sphinx-pbr-theme",
+		"setuptools_scm[toml]":  "setuptools_scm",
+		"":                      "",
+		"# comment":             "",
+	}
+	for input, want := range cases {
+		t.Run(input, func(t *testing.T) {
+			assert.Equal(t, want, extractRequirementName(input))
+		})
+	}
+}
+
+// TestLegacy_SetupCfgAttrVersionClearsVersion confirms that the literal
+// `attr:` expression no longer leaks into metadata.Version and that the
+// project is flagged as version_unresolved.
+func TestLegacy_SetupCfgAttrVersionClearsVersion(t *testing.T) {
+	setupCfg := "[metadata]\n" +
+		"name = attr-pkg\n" +
+		"version = attr: attr_pkg.__version__\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "", metadata.Version, "literal attr: expression must not leak into Version")
+	assert.Equal(t, "attr: attr_pkg.__version__", metadata.LanguageSpecific["version_expression"])
+	assert.Equal(t, true, metadata.LanguageSpecific["version_unresolved"])
+}
+
+// TestLegacy_RequirementsTxtInlineComments verifies that inline comments
+// are stripped from requirements while URL fragments survive.
+func TestLegacy_RequirementsTxtInlineComments(t *testing.T) {
+	setupCfg := "[metadata]\nname = req-comments-pkg\nversion = 1.0\n"
+	requirements := "requests>=2.31  # pinned for CVE-XXX\n" +
+		"click>=8.0\t# CLI deps\n" +
+		"pkg @ https://example.com/x.tar.gz#egg=pkg\n"
+
+	tmpDir := createTempProject(t, map[string]string{
+		"setup.cfg":        setupCfg,
+		"requirements.txt": requirements,
+	})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	deps, ok := metadata.LanguageSpecific["dependencies"].([]string)
+	require.True(t, ok)
+	assert.Equal(t, []string{
+		"requests>=2.31",
+		"click>=8.0",
+		"pkg @ https://example.com/x.tar.gz#egg=pkg",
+	}, deps)
+}
+
+// TestLegacy_ParseSetupCfgIndentedBlankContinuation ensures that an
+// indented whitespace-only line inside a multi-line value is preserved
+// as an empty continuation entry, matching Python's configparser.
+func TestLegacy_ParseSetupCfgIndentedBlankContinuation(t *testing.T) {
+	// Note: the blank-but-indented line should NOT terminate the value.
+	input := "[metadata]\n" +
+		"name = indent-pkg\n" +
+		"description =\n" +
+		"    first line\n" +
+		"    \n" +
+		"    third line\n" +
+		"version = 1.0\n"
+
+	cfg := parseSetupCfg(input)
+	desc, ok := cfg["metadata"]["description"]
+	require.True(t, ok, "description value missing")
+	// The trailing `version = 1.0` must have been parsed as its own key,
+	// proving that the indented blank did not terminate the value early
+	// in a way that would leave `version` orphaned.
+	_, hasVersion := cfg["metadata"]["version"]
+	assert.True(t, hasVersion, "subsequent keys must still parse")
+	assert.Contains(t, desc.Raw, "first line")
+	assert.Contains(t, desc.Raw, "third line")
+}
+
+// TestLegacy_SetupPyScmNoVersionIsUnresolved confirms that any dynamic
+// provider (not just PBR) without a concrete version is flagged as
+// version_unresolved so downstream consumers can warn or skip publishing.
+func TestLegacy_SetupPyScmNoVersionIsUnresolved(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='scm-pkg',\n" +
+		"      use_scm_version=True,\n" +
+		"      python_requires='>=3.10')\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "setuptools-scm", metadata.LanguageSpecific["dynamic_provider"])
+	assert.Equal(t, true, metadata.LanguageSpecific["version_unresolved"])
+}
+
+// TestLegacy_ClassifierFiltersEolVersions confirms that EOL Python
+// versions (2.7, 3.6, 3.7, 3.8) declared in trove classifiers are
+// dropped, leaving only the actively supported set (3.9+).
+func TestLegacy_ClassifierFiltersEolVersions(t *testing.T) {
+	input := []string{
+		"Programming Language :: Python :: 2",
+		"Programming Language :: Python :: 2.7",
+		"Programming Language :: Python :: 3.6",
+		"Programming Language :: Python :: 3.7",
+		"Programming Language :: Python :: 3.8",
+		"Programming Language :: Python :: 3.9",
+		"Programming Language :: Python :: 3.11",
+	}
+	result := derivePythonVersionsFromClassifiers(input)
+	assert.Equal(t, []string{"3.9", "3.11"}, result,
+		"EOL Python versions must be filtered out of classifier-derived matrices")
+}
+
+// TestLegacy_SetupPyPbrFalsePositive guards against the regex-prefix
+// false-positive in detectDynamicProviderFromSetupPy that would treat a
+// project with `setup_requires=['sphinx-pbr-theme>=1.0']` (or similar
+// pbr-prefixed unrelated package) as a PBR project.
+func TestLegacy_SetupPyPbrFalsePositive(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='innocent-pkg',\n" +
+		"      version='1.0',\n" +
+		"      setup_requires=['sphinx-pbr-theme>=1.0'])\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, "pbr", metadata.LanguageSpecific["dynamic_provider"],
+		"sphinx-pbr-theme must not be misclassified as the pbr provider")
+	assert.NotEqual(t, "dynamic", metadata.LanguageSpecific["versioning_type"],
+		"static version='1.0' must remain static when setup_requires has a pbr-prefixed unrelated package")
+}
+
+// TestLegacy_SetupPyScmFalsePositive guards against the regex-prefix
+// false-positive in detectDynamicProviderFromSetupPy that would treat a
+// project with `setup_requires=['setuptools_scm_git_archive']` (an
+// unrelated helper) as a setuptools-scm project.
+func TestLegacy_SetupPyScmFalsePositive(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='innocent-scm',\n" +
+		"      version='1.0',\n" +
+		"      setup_requires=['setuptools_scm_git_archive'])\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.NotEqual(t, "setuptools-scm", metadata.LanguageSpecific["dynamic_provider"],
+		"setuptools_scm_git_archive must not be misclassified as setuptools-scm")
+}
+
+// TestLegacy_SetupPyPbrRegression confirms the positive case still works
+// after tightening detectDynamicProviderFromSetupPy.
+func TestLegacy_SetupPyPbrRegression(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='real-pbr',\n" +
+		"      setup_requires=['pbr'])\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "pbr", metadata.LanguageSpecific["dynamic_provider"],
+		"setup_requires=['pbr'] must still be recognised as the pbr provider")
+	assert.Equal(t, "dynamic", metadata.LanguageSpecific["versioning_type"])
+}
+
+// TestLegacy_PyProjectClassifierMatrixPropagates verifies that when
+// pyproject.toml has a [project] section but lacks both `version` and
+// `requires-python`, and is paired with a setup.cfg that declares Python
+// versions only via classifiers, the classifier-derived matrix in the
+// fallback is propagated into the primary metadata. Without the
+// propagation fix this scenario would let applyFallbackPythonMatrix guess
+// a default range instead of honouring the declared classifiers.
+func TestLegacy_PyProjectClassifierMatrixPropagates(t *testing.T) {
+	pyproject := "[project]\n" +
+		"name = \"classifier-fallback-pkg\"\n"
+
+	setupCfg := "[metadata]\n" +
+		"name = classifier-fallback-pkg\n" +
+		"version = 1.0\n" +
+		"classifiers =\n" +
+		"    Programming Language :: Python :: 3.10\n" +
+		"    Programming Language :: Python :: 3.11\n" +
+		"    Programming Language :: Python :: 3.12\n"
+
+	tmpDir := createTempProject(t, map[string]string{
+		"pyproject.toml": pyproject,
+		"setup.cfg":      setupCfg,
+	})
+	defer os.RemoveAll(tmpDir)
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	matrix, ok := metadata.LanguageSpecific["version_matrix"].([]string)
+	require.True(t, ok, "classifier-derived version_matrix must be propagated from setup.cfg fallback")
+	assert.Equal(t, []string{"3.10", "3.11", "3.12"}, matrix)
+
+	assert.Equal(t, "3.12", metadata.LanguageSpecific["build_version"],
+		"build_version must be the highest classifier-declared Python version")
+	assert.Equal(t, "classifiers", metadata.LanguageSpecific["requires_python_source"],
+		"requires_python_source must reflect that the matrix came from classifiers")
+	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
+		"the classifier-derived matrix must win over the guessed fallback matrix")
 }

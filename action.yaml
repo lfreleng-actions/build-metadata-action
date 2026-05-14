@@ -206,9 +206,11 @@ outputs:
 
   python_requires_python_source:
     description: >-
-      Source from which the supported-Python-version list was derived
-      (e.g. "classifiers" when python_requires was absent). Empty when
-      requires_python was used directly.
+      Source from which the supported-Python-version list was derived:
+      "classifiers" when python_requires was absent but trove classifiers
+      supplied the matrix, "fallback" when the action could not derive a
+      matrix from project metadata at all and resorted to its default
+      list, or empty when requires-python was used directly.
     value: ${{ steps.extract.outputs.python_requires_python_source }}
 
   python_version_unresolved:
