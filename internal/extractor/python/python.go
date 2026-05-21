@@ -1084,6 +1084,21 @@ func propagateFallbackPythonMatrix(metadata, fallbackMetadata *extractor.Project
 // declared requires-python or version classifiers keep their derived
 // matrix unchanged. The fallback emits requires_python_fallback=true so
 // downstream consumers can surface a warning to the user.
+//
+// build_version selection: when the matrix is the result of a genuine
+// fallback (i.e. neither requires-python nor classifiers were declared)
+// we deliberately pick the OLDEST supported Python version rather than
+// the newest. Projects that omit Python metadata are overwhelmingly
+// legacy code bases (notably PBR/setup.cfg packages) that have not been
+// validated against the latest interpreter; building them on the newest
+// Python maximises exposure to setuptools and stdlib deprecations they
+// were never written to handle. Selecting the oldest supported version
+// keeps these builds on the most permissive interpreter in the matrix
+// while still excluding versions that have reached upstream end-of-life
+// (the matrix itself is curated via `supportedPythonVersions`). Callers
+// that want the newest version can either declare requires-python /
+// classifiers in the project (recommended) or override the selection at
+// the consuming action level.
 func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source string) {
 	if metadata == nil || metadata.LanguageSpecific == nil {
 		return
@@ -1100,7 +1115,7 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 	metadata.LanguageSpecific["version_matrix"] = fallback
 	metadata.LanguageSpecific["matrix_json"] = fmt.Sprintf(`{"python-version": [%s]}`,
 		strings.Join(quoteStrings(fallback), ", "))
-	metadata.LanguageSpecific["build_version"] = fallback[len(fallback)-1]
+	metadata.LanguageSpecific["build_version"] = fallback[0]
 	metadata.LanguageSpecific["requires_python_fallback"] = true
 	// Mark the source of the resulting matrix so downstream consumers can
 	// tell a fallback guess apart from a matrix derived from
@@ -1111,8 +1126,8 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 	}
 
 	fmt.Fprintf(os.Stderr,
-		"[WARNING] %s does not declare requires-python or Python classifiers; using fallback Python matrix %v (build_version=%s)\n",
-		source, fallback, fallback[len(fallback)-1])
+		"[WARNING] %s does not declare requires-python or Python classifiers; using fallback Python matrix %v (build_version=%s, oldest supported)\n",
+		source, fallback, fallback[0])
 }
 
 // parseINI parses a simple INI file into a map of sections

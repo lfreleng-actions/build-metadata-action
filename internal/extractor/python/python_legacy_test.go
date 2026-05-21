@@ -68,9 +68,16 @@ func TestLegacy_PbrSetupCfg(t *testing.T) {
 	assert.Equal(t, true, metadata.LanguageSpecific["version_unresolved"])
 
 	// No python_requires, no version classifiers => fallback matrix.
+	// The fallback deliberately selects the OLDEST supported Python so
+	// legacy projects (such as this PBR/setup.cfg shape) are not built
+	// against the newest interpreter they were never validated against.
 	assert.Equal(t, true, metadata.LanguageSpecific["requires_python_fallback"])
 	buildVersion, _ := metadata.LanguageSpecific["build_version"].(string)
 	assert.NotEmpty(t, buildVersion)
+	fallbackMatrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
+	require.NotEmpty(t, fallbackMatrix, "fallback matrix must be populated")
+	assert.Equal(t, fallbackMatrix[0], buildVersion,
+		"fallback build_version must be the OLDEST entry in the matrix")
 
 	// requirements.txt should have been picked up as the dependency list
 	// because install_requires is absent from setup.cfg.
@@ -292,6 +299,10 @@ func TestLegacy_BareSetupPyFallback(t *testing.T) {
 		"fallback-derived matrices must surface a 'fallback' source so consumers can distinguish them from classifier-derived or requires-python-derived matrices")
 	buildVersion, _ := metadata.LanguageSpecific["build_version"].(string)
 	assert.NotEmpty(t, buildVersion)
+	fallbackMatrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
+	require.NotEmpty(t, fallbackMatrix, "fallback matrix must be populated")
+	assert.Equal(t, fallbackMatrix[0], buildVersion,
+		"fallback build_version must be the OLDEST supported Python version")
 	matrixJSON, _ := metadata.LanguageSpecific["matrix_json"].(string)
 	assert.Contains(t, matrixJSON, "python-version")
 }
@@ -344,6 +355,10 @@ func TestLegacy_PyProjectWithoutRequiresPythonFallback(t *testing.T) {
 
 	assert.Equal(t, true, metadata.LanguageSpecific["requires_python_fallback"])
 	assert.NotEmpty(t, metadata.LanguageSpecific["build_version"])
+	fallbackMatrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
+	require.NotEmpty(t, fallbackMatrix, "fallback matrix must be populated")
+	assert.Equal(t, fallbackMatrix[0], metadata.LanguageSpecific["build_version"],
+		"fallback build_version must be the OLDEST supported Python version")
 }
 
 // TestLegacy_ParseSetupCfgContinuationLines verifies the new INI parser
