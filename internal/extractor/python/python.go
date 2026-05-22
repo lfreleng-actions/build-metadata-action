@@ -1257,13 +1257,45 @@ func generatePythonVersionMatrix(requiresPython string) []string {
 		}
 	}
 
-	// Extract maximum version (exclusive upper bound)
+	// Extract maximum version(s). PEP 440 allows specifiers to combine
+	// multiple upper bounds (e.g. `>=3.10,<=3.12,<3.11`); collect every
+	// `<` and `<=` clause and pick the tightest. Ties (same version with
+	// both an exclusive and an inclusive form) resolve in favour of the
+	// exclusive bound since it is the stricter of the two.
+	boundsRe := regexp.MustCompile(`(<=?)\s*(\d+\.\d+)`)
 	maxVersion := ""
-	if strings.Contains(requiresPython, "<") && !strings.Contains(requiresPython, "<=") {
-		re := regexp.MustCompile(`<\s*(\d+\.\d+)`)
-		if matches := re.FindStringSubmatch(requiresPython); len(matches) > 1 {
-			maxVersion = matches[1]
+	maxInclusive := false
+	maxSet := false
+	for _, m := range boundsRe.FindAllStringSubmatch(requiresPython, -1) {
+		if len(m) < 3 {
+			continue
 		}
+		inclusive := m[1] == "<="
+		v := m[2]
+		if !maxSet {
+			maxVersion = v
+			maxInclusive = inclusive
+			maxSet = true
+			continue
+		}
+		c := compareVersions(v, maxVersion)
+		switch {
+		case c < 0:
+			maxVersion = v
+			maxInclusive = inclusive
+		case c == 0 && !inclusive && maxInclusive:
+			// Same numeric version, exclusive wins over inclusive.
+			maxInclusive = false
+		}
+	}
+
+	// maxAllows reports whether v satisfies the upper bound, accounting
+	// for whether the bound is exclusive (`<`) or inclusive (`<=`).
+	maxAllows := func(v string) bool {
+		if maxInclusive {
+			return compareVersions(v, maxVersion) <= 0
+		}
+		return compareVersions(v, maxVersion) < 0
 	}
 
 	// Map minimum version to supported versions. The slices are derived
@@ -1280,9 +1312,7 @@ func generatePythonVersionMatrix(requiresPython string) []string {
 			if maxVersion != "" {
 				filteredVersions := []string{}
 				for _, v := range versionList {
-					// Compare versions numerically (e.g., "3.9" < "3.11")
-					// Simple string comparison works for single-digit minor versions
-					if compareVersions(v, maxVersion) < 0 {
+					if maxAllows(v) {
 						filteredVersions = append(filteredVersions, v)
 					}
 				}
@@ -1293,13 +1323,13 @@ func generatePythonVersionMatrix(requiresPython string) []string {
 		} else {
 			// Legacy / unsupported minimum version: route through to
 			// the full supported set, but continue to apply the maximum
-			// constraint (if any) so an upper bound like `<3.11` still
-			// trims the resulting matrix.
+			// constraint (if any) so an upper bound like `<3.11` or
+			// `<=3.11` still trims the resulting matrix.
 			versions = append([]string(nil), supportedPythonVersions...)
 			if maxVersion != "" {
 				filtered := []string{}
 				for _, v := range versions {
-					if compareVersions(v, maxVersion) < 0 {
+					if maxAllows(v) {
 						filtered = append(filtered, v)
 					}
 				}

@@ -358,6 +358,26 @@ func TestGeneratePythonVersionMatrix(t *testing.T) {
 			expected:       []string{"3.10"},
 		},
 		{
+			name:           ">=3.10,<=3.12",
+			requiresPython: ">=3.10,<=3.12",
+			expected:       []string{"3.10", "3.11", "3.12"},
+		},
+		{
+			name:           ">=3.9,<=3.11 (legacy min branch, inclusive max)",
+			requiresPython: ">=3.9,<=3.11",
+			expected:       []string{"3.10", "3.11"},
+		},
+		{
+			name:           ">=3.10,<=3.12,<3.11 (tightest bound wins)",
+			requiresPython: ">=3.10,<=3.12,<3.11",
+			expected:       []string{"3.10"},
+		},
+		{
+			name:           ">=3.10,<=3.12,<3.12 (tie -> exclusive wins)",
+			requiresPython: ">=3.10,<=3.12,<3.12",
+			expected:       []string{"3.10", "3.11"},
+		},
+		{
 			name:           "empty",
 			requiresPython: "",
 			expected:       []string{"3.10", "3.11", "3.12", "3.13", "3.14"},
