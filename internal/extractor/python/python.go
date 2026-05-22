@@ -371,6 +371,7 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 	}
 
 	// Extract tool-specific configurations
+	poetryPythonConstraint := ""
 	if pyproject.Tool != nil {
 		// Poetry
 		if poetry, ok := pyproject.Tool["poetry"].(map[string]interface{}); ok {
@@ -378,6 +379,15 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 			if version, ok := poetry["version"].(string); ok && metadata.Version == "" {
 				metadata.Version = version
 				metadata.VersionSource = "pyproject.toml (poetry)"
+			}
+			// Poetry projects without a PEP 621 `[project]` table express
+			// the Python constraint in `[tool.poetry.dependencies].python`.
+			// Surface it so the matrix generator behaves the same as for
+			// standard `requires-python` projects.
+			if deps, ok := poetry["dependencies"].(map[string]interface{}); ok {
+				if py, ok := deps["python"].(string); ok {
+					poetryPythonConstraint = strings.TrimSpace(py)
+				}
 			}
 		}
 
@@ -404,9 +414,21 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 	}
 
 	// Generate Python version matrix
-	if pyproject.Project.RequiresPython != "" {
-		fmt.Fprintf(os.Stderr, "[DEBUG] Generating matrix for requires_python: %q\n", pyproject.Project.RequiresPython)
-		matrix := generatePythonVersionMatrix(pyproject.Project.RequiresPython)
+	effectiveRequires := pyproject.Project.RequiresPython
+	effectiveSource := ""
+	if effectiveRequires != "" {
+		effectiveSource = "requires-python"
+	} else if poetryPythonConstraint != "" {
+		effectiveRequires = poetryPythonConstraint
+		effectiveSource = "poetry-dependencies"
+		metadata.LanguageSpecific["requires_python"] = poetryPythonConstraint
+		fmt.Fprintf(os.Stderr,
+			"[DEBUG] Using tool.poetry.dependencies.python = %q (no [project].requires-python declared)\n",
+			poetryPythonConstraint)
+	}
+	if effectiveRequires != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Generating matrix for requires_python: %q\n", effectiveRequires)
+		matrix := generatePythonVersionMatrix(effectiveRequires)
 		fmt.Fprintf(os.Stderr, "[DEBUG] Generated matrix: %v (len=%d)\n", matrix, len(matrix))
 		if len(matrix) > 0 {
 			metadata.LanguageSpecific["version_matrix"] = matrix
@@ -417,9 +439,10 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 			metadata.LanguageSpecific["matrix_json"] = matrixJSON
 
 			// Set recommended build version (latest from matrix)
-			if len(matrix) > 0 {
-				metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
-				fmt.Fprintf(os.Stderr, "[DEBUG] Set build_version to: %s\n", matrix[len(matrix)-1])
+			metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
+			fmt.Fprintf(os.Stderr, "[DEBUG] Set build_version to: %s\n", matrix[len(matrix)-1])
+			if effectiveSource == "poetry-dependencies" {
+				metadata.LanguageSpecific["requires_python_source"] = effectiveSource
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "[DEBUG] Matrix generation returned empty slice\n")

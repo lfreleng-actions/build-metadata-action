@@ -809,3 +809,37 @@ func TestLegacy_PyProjectClassifierMatrixPropagates(t *testing.T) {
 	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
 		"the classifier-derived matrix must win over the guessed fallback matrix")
 }
+
+// TestLegacy_PoetryDependenciesPython covers Poetry projects that omit a
+// PEP 621 `[project]` table entirely and express the Python constraint
+// in `[tool.poetry.dependencies].python`. The matrix generator must use
+// this string just as it would `[project].requires-python`, and surface
+// `poetry-dependencies` as the requires_python_source.
+func TestLegacy_PoetryDependenciesPython(t *testing.T) {
+	pyproject := "[tool.poetry]\n" +
+		"name = \"poetry-only\"\n" +
+		"version = \"0.1.0\"\n" +
+		"description = \"Poetry project with no [project] table\"\n" +
+		"\n" +
+		"[tool.poetry.dependencies]\n" +
+		"python = \"^3.11\"\n"
+
+	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	extractor := NewExtractor()
+	metadata, err := extractor.Extract(tmpDir)
+	require.NoError(t, err)
+
+	assert.Equal(t, "^3.11", metadata.LanguageSpecific["requires_python"],
+		"requires_python must mirror tool.poetry.dependencies.python")
+	assert.Equal(t, "poetry-dependencies", metadata.LanguageSpecific["requires_python_source"],
+		"requires_python_source must signal that the matrix was derived from poetry deps")
+	matrix, ok := metadata.LanguageSpecific["version_matrix"].([]string)
+	require.True(t, ok, "version_matrix must be generated from poetry dependencies")
+	assert.Equal(t, []string{"3.11", "3.12", "3.13", "3.14"}, matrix)
+	assert.Equal(t, "3.14", metadata.LanguageSpecific["build_version"],
+		"build_version must be the newest entry in the resolved matrix")
+	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
+		"poetry-derived matrices must not be flagged as fallback guesses")
+}
