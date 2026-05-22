@@ -441,7 +441,7 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 			// Set recommended build version (latest from matrix)
 			metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
 			fmt.Fprintf(os.Stderr, "[DEBUG] Set build_version to: %s\n", matrix[len(matrix)-1])
-			if effectiveSource == "poetry-dependencies" {
+			if effectiveSource != "" {
 				metadata.LanguageSpecific["requires_python_source"] = effectiveSource
 			}
 		} else {
@@ -548,6 +548,7 @@ func (e *Extractor) extractFromSetupCfg(path string, metadata *extractor.Project
 			metadata.LanguageSpecific["matrix_json"] = fmt.Sprintf(`{"python-version": [%s]}`,
 				strings.Join(quoteStrings(matrix), ", "))
 			metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
+			metadata.LanguageSpecific["requires_python_source"] = "requires-python"
 		}
 	} else if classifierVersions := derivePythonVersionsFromClassifiers(classifiers); len(classifierVersions) > 0 {
 		// No python_requires declared but classifiers contain explicit
@@ -656,6 +657,7 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 
 			// Set recommended build version (latest from matrix)
 			metadata.LanguageSpecific["build_version"] = matrix[len(matrix)-1]
+			metadata.LanguageSpecific["requires_python_source"] = "requires-python"
 		}
 	} else if classifiers := extractSetupPyClassifiers(text); len(classifiers) > 0 {
 		metadata.LanguageSpecific["classifiers"] = classifiers
@@ -1146,7 +1148,7 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 	// `requires-python` or trove classifiers. Only set when no upstream
 	// path has already declared a source (e.g. "classifiers").
 	if src, ok := metadata.LanguageSpecific["requires_python_source"].(string); !ok || src == "" {
-		metadata.LanguageSpecific["requires_python_source"] = "fallback"
+		metadata.LanguageSpecific["requires_python_source"] = "static-fallback"
 	}
 
 	fmt.Fprintf(os.Stderr,

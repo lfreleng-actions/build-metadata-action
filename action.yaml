@@ -206,11 +206,19 @@ outputs:
 
   python_requires_python_source:
     description: >-
-      Source from which the supported-Python-version list was derived:
-      "classifiers" when python_requires was absent but trove classifiers
-      supplied the matrix, "fallback" when the action could not derive a
-      matrix from project metadata at all and resorted to its default
-      list, or empty when requires-python was used directly.
+      Source from which the supported-Python-version list was derived.
+      One of:
+        "requires-python" - derived from [project].requires-python
+          (pyproject) or python_requires (setup.cfg / setup.py);
+        "classifiers" - derived from PEP 301 trove classifiers;
+        "poetry-dependencies" - derived from
+          [tool.poetry.dependencies].python in pyproject.toml;
+        "static-fallback" - no version signal was found and the action
+          fell back to its hard-coded supported set;
+        "eol-fallback" - the live EOL API trimmed the constraint-derived
+          matrix to empty and the action fell back to the live-supported
+          set;
+        empty - the extractor was not invoked (non-Python project).
     value: ${{ steps.extract.outputs.python_requires_python_source }}
 
   python_version_unresolved:

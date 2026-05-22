@@ -295,8 +295,8 @@ func TestLegacy_BareSetupPyFallback(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, true, metadata.LanguageSpecific["requires_python_fallback"])
-	assert.Equal(t, "fallback", metadata.LanguageSpecific["requires_python_source"],
-		"fallback-derived matrices must surface a 'fallback' source so consumers can distinguish them from classifier-derived or requires-python-derived matrices")
+	assert.Equal(t, "static-fallback", metadata.LanguageSpecific["requires_python_source"],
+		"fallback-derived matrices must surface 'static-fallback' so consumers can distinguish them from classifier-derived or requires-python-derived matrices")
 	buildVersion, _ := metadata.LanguageSpecific["build_version"].(string)
 	assert.NotEmpty(t, buildVersion)
 	fallbackMatrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
@@ -842,4 +842,52 @@ func TestLegacy_PoetryDependenciesPython(t *testing.T) {
 		"build_version must be the newest entry in the resolved matrix")
 	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
 		"poetry-derived matrices must not be flagged as fallback guesses")
+}
+
+// TestSource_RequiresPython_FromPyProject asserts that a PEP 621
+// `[project].requires-python` declaration sets requires_python_source to
+// "requires-python" so consumers can tell it apart from classifier or
+// fallback derivation.
+func TestSource_RequiresPython_FromPyProject(t *testing.T) {
+	pyproject := "[project]\n" +
+		"name = \"src-pyproject\"\n" +
+		"version = \"1.0.0\"\n" +
+		"requires-python = \">=3.11\"\n"
+
+	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	metadata, err := NewExtractor().Extract(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "requires-python", metadata.LanguageSpecific["requires_python_source"])
+}
+
+// TestSource_RequiresPython_FromSetupCfg asserts that the setup.cfg
+// `python_requires` path likewise sets requires_python_source.
+func TestSource_RequiresPython_FromSetupCfg(t *testing.T) {
+	setupCfg := "[metadata]\n" +
+		"name = src-cfg\n" +
+		"version = 1.0.0\n" +
+		"python_requires = >=3.11\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	metadata, err := NewExtractor().Extract(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "requires-python", metadata.LanguageSpecific["requires_python_source"])
+}
+
+// TestSource_RequiresPython_FromSetupPy asserts that the setup.py
+// `python_requires=` keyword likewise sets requires_python_source.
+func TestSource_RequiresPython_FromSetupPy(t *testing.T) {
+	setupPy := "from setuptools import setup\n" +
+		"setup(name='src-py', version='1.0.0', python_requires='>=3.11')\n"
+
+	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	metadata, err := NewExtractor().Extract(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "requires-python", metadata.LanguageSpecific["requires_python_source"])
 }
