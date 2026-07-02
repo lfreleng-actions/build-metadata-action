@@ -511,6 +511,8 @@ runs:
         INPUT_PYTHON_OFFLINE_MODE: ${{ inputs.python_offline_mode }}
         INPUT_PYTHON_EOL_TIMEOUT: ${{ inputs.python_eol_timeout }}
         INPUT_PYTHON_EOL_MAX_RETRIES: ${{ inputs.python_eol_max_retries }}
+        # Env-mediated to avoid template expansion inside the run block
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         # This action requires the Go binary to be built
         # In production, this would be pre-built or use Docker
@@ -520,7 +522,7 @@ runs:
         # Create temporary directory for the binary
         TEMP_BIN_DIR="$(mktemp -d)"
         # Build the binary to temporary location
-        cd "${{ github.action_path }}"
+        cd "${ACTION_PATH}"
         go build -buildvcs=false \
           -o "${TEMP_BIN_DIR}/build-metadata" ./cmd/build-metadata
         # Return to the original working directory

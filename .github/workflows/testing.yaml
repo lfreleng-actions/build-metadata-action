@@ -41,6 +41,8 @@ jobs:
 
       - name: "Checkout repository"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: "Test build-metadata-action on itself (Go project)"
         id: test
@@ -507,11 +509,13 @@ jobs:
         with:
           repository: ${{ matrix.repo }}
           path: test-project
+          persist-credentials: false
 
       - name: "Checkout build-metadata-action"
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           path: build-metadata-action
+          persist-credentials: false
 
       - name: "Test build-metadata-action on ${{ matrix.project-type }}"
         id: test
@@ -562,10 +566,12 @@ jobs:
     steps:
       - name: "Generate Test Summary"
         shell: bash
+        env:
+          # Env-mediated to avoid template expansion in the run block
+          SELF_TEST: ${{ needs.test-self.result }}
+          MATRIX_TEST: ${{ needs.test-matrix.result }}
         run: |
           # Count tests by checking job results
-          SELF_TEST="${{ needs.test-self.result }}"
-          MATRIX_TEST="${{ needs.test-matrix.result }}"
 
           {
             echo "# 🧪 Build Metadata Action Test Results"
