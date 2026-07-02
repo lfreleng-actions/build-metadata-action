@@ -20,7 +20,7 @@ import (
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/docker"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/dotnet"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/elixir"
-	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/golang"
+	golang "github.com/lfreleng-actions/build-metadata-action/internal/extractor/golang"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/haskell"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/helm"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/java"
@@ -250,6 +250,17 @@ func main() {
 		python.SetActivePolicy(python.ResolvePolicy(pythonOffline, pythonTimeout, pythonRetries))
 	}
 
+	// Configure the Go extractor's supported-version set. Like the
+	// Python policy above, this is deferred until after project type
+	// detection so non-Go projects never pay the endoflife.date
+	// network round-trip. ResolveSupportedVersions falls back to the
+	// static goversions list when the live API is unreachable, so
+	// offline runners degrade gracefully.
+	isGoProject := normalizeProjectTypeToLanguage(projectType) == "go"
+	if isGoProject {
+		golang.SetSupportedVersions(golang.ResolveSupportedVersions())
+	}
+
 	// Extract version information
 	if useVersionExtract {
 		if isCI {
@@ -425,6 +436,14 @@ func main() {
 			setOutput(outputKey, strings.Join(v, ","))
 		case map[string]interface{}:
 			// Convert complex types to JSON
+			jsonBytes, _ := json.Marshal(v)
+			setOutput(outputKey, string(jsonBytes))
+		case map[string]string:
+			// Convert complex types to JSON (e.g. go_dependency_map)
+			jsonBytes, _ := json.Marshal(v)
+			setOutput(outputKey, string(jsonBytes))
+		case []map[string]string:
+			// Convert complex types to JSON (e.g. go_replace_directives)
 			jsonBytes, _ := json.Marshal(v)
 			setOutput(outputKey, string(jsonBytes))
 		default:

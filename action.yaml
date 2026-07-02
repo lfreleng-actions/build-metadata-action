@@ -380,6 +380,100 @@ outputs:
     description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"
     value: ${{ steps.extract.outputs.java_frameworks }}
 
+  # Language-Specific Outputs (Go)
+  go_base_name:
+    description: >-
+      Friendly project name derived from the Go module path (the final
+      path element, with any semantic import versioning /vN suffix
+      stripped, e.g. github.com/user/repo/v2 -> repo)
+    value: ${{ steps.extract.outputs.go_base_name }}
+
+  go_module_path:
+    description: "Go module path declared in go.mod"
+    value: ${{ steps.extract.outputs.go_module_path }}
+
+  go_go_version:
+    description: "Minimum Go version declared in go.mod (go directive)"
+    value: ${{ steps.extract.outputs.go_go_version }}
+
+  go_metadata_source:
+    description: "Source of Go metadata (go.mod)"
+    value: ${{ steps.extract.outputs.go_metadata_source }}
+
+  go_toolchain:
+    description: "Toolchain directive from go.mod (empty when absent)"
+    value: ${{ steps.extract.outputs.go_toolchain }}
+
+  go_dependencies:
+    description: >-
+      Comma-separated list of direct dependencies in module@version
+      form
+    value: ${{ steps.extract.outputs.go_dependencies }}
+
+  go_indirect_dependencies:
+    description: >-
+      Comma-separated list of indirect dependencies in module@version
+      form
+    value: ${{ steps.extract.outputs.go_indirect_dependencies }}
+
+  go_dependency_count:
+    description: "Number of direct dependencies"
+    value: ${{ steps.extract.outputs.go_dependency_count }}
+
+  go_total_dependency_count:
+    description: "Total number of dependencies (direct plus indirect)"
+    value: ${{ steps.extract.outputs.go_total_dependency_count }}
+
+  go_dependency_map:
+    description: "JSON object mapping each dependency module to its version"
+    value: ${{ steps.extract.outputs.go_dependency_map }}
+
+  go_replace_directives:
+    description: >-
+      JSON array of replace directives from go.mod, each an object with
+      'old' and 'new' keys
+    value: ${{ steps.extract.outputs.go_replace_directives }}
+
+  go_replace_count:
+    description: "Number of replace directives in go.mod"
+    value: ${{ steps.extract.outputs.go_replace_count }}
+
+  go_exclude_directives:
+    description: "Comma-separated list of exclude directives from go.mod"
+    value: ${{ steps.extract.outputs.go_exclude_directives }}
+
+  go_exclude_count:
+    description: "Number of exclude directives in go.mod"
+    value: ${{ steps.extract.outputs.go_exclude_count }}
+
+  go_retract_directives:
+    description: "Comma-separated list of retract directives from go.mod"
+    value: ${{ steps.extract.outputs.go_retract_directives }}
+
+  go_retract_count:
+    description: "Number of retract directives in go.mod"
+    value: ${{ steps.extract.outputs.go_retract_count }}
+
+  go_frameworks:
+    description: >-
+      Comma-separated list of detected Go frameworks and tools (Gin,
+      Cobra, gRPC, Testify, etc.)
+    value: ${{ steps.extract.outputs.go_frameworks }}
+
+  go_go_version_matrix:
+    description: >-
+      Comma-separated list of Go versions to test against: the
+      supported (non-EOL) Go releases at or above the go.mod minimum.
+      Sourced live from endoflife.date with a static fallback when the
+      API is unreachable.
+    value: ${{ steps.extract.outputs.go_go_version_matrix }}
+
+  go_matrix_json:
+    description: >-
+      Go version test matrix as JSON, ready for workflow matrix
+      strategies (e.g. {"go-version": ["1.25", "1.26"]})
+    value: ${{ steps.extract.outputs.go_matrix_json }}
+
   # Success Indicator
   success:
     description: "Whether extraction succeeded"
