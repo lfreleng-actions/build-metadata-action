@@ -25,13 +25,15 @@ var activeSupportedVersions = goversions.GetFallbackVersions()
 
 // SetSupportedVersions replaces the supported Go version set used for
 // matrix generation. Passing nil or an empty slice resets to the static
-// goversions fallback list.
+// goversions fallback list. The slice is copied before storing so
+// later caller-side mutation cannot affect matrix generation (the same
+// defensive copy the Python extractor makes in policy.go).
 func SetSupportedVersions(versions []string) {
 	if len(versions) == 0 {
 		activeSupportedVersions = goversions.GetFallbackVersions()
 		return
 	}
-	activeSupportedVersions = versions
+	activeSupportedVersions = append([]string(nil), versions...)
 }
 
 // ResolveSupportedVersions consults the live endoflife.date Go feed and
