@@ -449,25 +449,8 @@ func detectGoFrameworks(deps []Dependency) []string {
 	return frameworks
 }
 
-// generateGoVersionMatrix generates a list of Go versions from a go version requirement
-func generateGoVersionMatrix(goVersion string) []string {
-	// Map Go version to supported versions for testing
-	supportedVersions := map[string][]string{
-		"1.22": {"1.22", "1.23"},
-		"1.21": {"1.21", "1.22", "1.23"},
-		"1.20": {"1.20", "1.21", "1.22", "1.23"},
-		"1.19": {"1.19", "1.20", "1.21", "1.22"},
-		"1.18": {"1.18", "1.19", "1.20", "1.21"},
-		"1.17": {"1.17", "1.18", "1.19", "1.20"},
-	}
-
-	if versionList, ok := supportedVersions[goVersion]; ok {
-		return versionList
-	}
-
-	// Default to recent versions if not found
-	return []string{"1.21", "1.22", "1.23"}
-}
+// generateGoVersionMatrix lives in versions.go; it derives the matrix
+// from the EOL-aware supported Go version set.
 
 // extractVersionFromProject tries to extract version from common patterns
 func extractVersionFromProject(projectPath string) string {

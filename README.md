@@ -283,9 +283,31 @@ All project types provide these standardized outputs:
 
 | Output | Description |
 | -------- | ------------ |
-| `go_version` | Go version |
-| `go_module` | Module path |
-| `go_module_version` | Module version |
+| `go_base_name` | Friendly name from the module path (`/vN` suffix stripped) |
+| `go_module_path` | Go module path declared in `go.mod` |
+| `go_go_version` | Go version from the `go` directive in `go.mod` |
+| `go_metadata_source` | Source of Go metadata (`go.mod`) |
+| `go_toolchain` | Toolchain directive from `go.mod` (when present) |
+| `go_dependencies` | Direct dependencies as `module@version` |
+| `go_indirect_dependencies` | Indirect dependencies as `module@version` |
+| `go_dependency_count` | Number of direct dependencies |
+| `go_total_dependency_count` | Total dependencies (direct plus indirect) |
+| `go_dependency_map` | JSON object mapping modules to versions |
+| `go_replace_directives` | Replace directives as JSON array of `{old, new}` |
+| `go_replace_count` | Number of replace directives |
+| `go_exclude_directives` | Exclude directives (comma-separated) |
+| `go_exclude_count` | Number of exclude directives |
+| `go_retract_directives` | Retract directives (comma-separated) |
+| `go_retract_count` | Number of retract directives |
+| `go_frameworks` | Detected Go frameworks/tools (comma-separated) |
+| `go_go_version_matrix` | Supported (non-EOL) Go versions for testing |
+| `go_matrix_json` | Go version test matrix as JSON |
+
+The action derives the Go version matrix from live
+[endoflife.date](https://endoflife.date/go) data: it selects the
+supported (non-EOL) Go releases at or above the version declared in
+`go.mod`. When the API is unreachable, a static fallback list of the
+supported releases applies instead.
 
 #### Rust
 
