@@ -322,12 +322,17 @@ func main() {
 			// Store language-specific metadata
 			metadata.LanguageSpecific = projectMetadata.LanguageSpecific
 
-			// Extract versioning_type from language-specific metadata
-			if versioningType, ok := projectMetadata.LanguageSpecific["versioning_type"].(string); ok {
-				metadata.Common.VersioningType = versioningType
-			} else {
-				// Default to "static" if not specified
-				metadata.Common.VersioningType = "static"
+			// Extract versioning_type from language-specific metadata,
+			// but never clobber a value already derived from the actual
+			// version source chosen above (e.g. git fallback marking the
+			// version as dynamic when the manifest holds a placeholder).
+			if metadata.Common.VersioningType == "" {
+				if versioningType, ok := projectMetadata.LanguageSpecific["versioning_type"].(string); ok {
+					metadata.Common.VersioningType = versioningType
+				} else {
+					// Default to "static" if not specified
+					metadata.Common.VersioningType = "static"
+				}
 			}
 		}
 	}

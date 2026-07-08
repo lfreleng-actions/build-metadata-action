@@ -4,6 +4,7 @@
 package version
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,7 +62,7 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 	switch {
 	case strings.HasPrefix(projectType, "python"):
 		return extractPythonVersion(projectPath)
-	case strings.HasPrefix(projectType, "javascript"):
+	case strings.HasPrefix(projectType, "javascript"), strings.HasPrefix(projectType, "typescript"):
 		return extractJavaScriptVersion(projectPath)
 	case strings.HasPrefix(projectType, "java"):
 		return extractJavaVersion(projectPath, projectType)
@@ -70,8 +71,78 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 	case strings.HasPrefix(projectType, "rust"):
 		return extractRustVersion(projectPath)
 	default:
-		return extractFromGit(projectPath)
+		return extractFallback(projectPath)
 	}
+}
+
+// extractFallback is the shared fallback chain used when a language
+// manifest does not provide a usable version: version.properties
+// (the Linux Foundation / ONAP release convention) first, then git.
+func extractFallback(projectPath string) (*VersionInfo, error) {
+	if info, ok := extractVersionProperties(projectPath); ok {
+		return info, nil
+	}
+	return extractFromGit(projectPath)
+}
+
+// extractVersionProperties extracts a version from a version.properties
+// file, the convention used by Linux Foundation / ONAP projects (via
+// global-jjb) to hold the authoritative release version as separate
+// major/minor/patch keys. A literal version=X.Y.Z key is also accepted.
+// Values containing ${...} interpolation are ignored.
+func extractVersionProperties(projectPath string) (*VersionInfo, bool) {
+	propsPath := filepath.Join(projectPath, "version.properties")
+	content, err := os.ReadFile(propsPath)
+	if err != nil {
+		return nil, false
+	}
+
+	props := make(map[string]string)
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if value == "" || strings.Contains(value, "${") {
+			continue
+		}
+		props[key] = value
+	}
+
+	major, hasMajor := props["major"]
+	minor, hasMinor := props["minor"]
+	patch, hasPatch := props["patch"]
+	if hasMajor && hasMinor && hasPatch {
+		return &VersionInfo{
+			Version:   major + "." + minor + "." + patch,
+			Source:    "version.properties",
+			IsDynamic: false,
+		}, true
+	}
+
+	if version, ok := props["version"]; ok {
+		return &VersionInfo{
+			Version:   version,
+			Source:    "version.properties",
+			IsDynamic: false,
+		}, true
+	}
+
+	return nil, false
+}
+
+// isPlaceholderVersion reports whether a manifest version is an
+// unmaintained placeholder (e.g. package.json "version": "0.0.0")
+// that should not be reported as the project version. Placeholders
+// continue down the fallback chain (version.properties, then git).
+func isPlaceholderVersion(version string) bool {
+	return version == "" || version == "0.0.0"
 }
 
 // extractPythonVersion extracts version from Python projects
@@ -100,8 +171,8 @@ func extractPythonVersion(projectPath string) (*VersionInfo, error) {
 		}
 	}
 
-	// Fallback to setup.py or git
-	return extractFromGit(projectPath)
+	// Fall back to version.properties then git
+	return extractFallback(projectPath)
 }
 
 // extractJavaScriptVersion extracts version from JavaScript/Node.js projects
@@ -109,28 +180,29 @@ func extractJavaScriptVersion(projectPath string) (*VersionInfo, error) {
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	content, err := os.ReadFile(packageJSONPath)
 	if err != nil {
-		return extractFromGit(projectPath)
+		return extractFallback(projectPath)
 	}
 
-	// Simple search for "version": "X.Y.Z"
-	lines := strings.Split(string(content), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, `"version"`) && strings.Contains(line, ":") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 2 {
-				version := strings.Trim(strings.TrimSpace(parts[1]), `",`)
-				isDynamic := version == "0.0.0-development" || version == "0.0.0-semantic-release"
-				return &VersionInfo{
-					Version:   version,
-					Source:    "package.json",
-					IsDynamic: isDynamic,
-				}, nil
-			}
-		}
+	var pkg struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(content, &pkg); err != nil {
+		return extractFallback(projectPath)
 	}
 
-	return extractFromGit(projectPath)
+	if isPlaceholderVersion(pkg.Version) {
+		// Unmaintained placeholder (common in projects that keep
+		// the real version elsewhere, e.g. ONAP version.properties):
+		// use the fallback chain instead.
+		return extractFallback(projectPath)
+	}
+
+	isDynamic := pkg.Version == "0.0.0-development" || pkg.Version == "0.0.0-semantic-release"
+	return &VersionInfo{
+		Version:   pkg.Version,
+		Source:    "package.json",
+		IsDynamic: isDynamic,
+	}, nil
 }
 
 // extractJavaVersion extracts version from Java projects
@@ -140,7 +212,7 @@ func extractJavaVersion(projectPath, projectType string) (*VersionInfo, error) {
 	} else if strings.Contains(projectType, "gradle") {
 		return extractGradleVersion(projectPath)
 	}
-	return extractFromGit(projectPath)
+	return extractFallback(projectPath)
 }
 
 // extractMavenVersion extracts version from Maven pom.xml
@@ -148,7 +220,7 @@ func extractMavenVersion(projectPath string) (*VersionInfo, error) {
 	pomPath := filepath.Join(projectPath, "pom.xml")
 	content, err := os.ReadFile(pomPath)
 	if err != nil {
-		return extractFromGit(projectPath)
+		return extractFallback(projectPath)
 	}
 
 	// Simple XML parsing for <version>X.Y.Z</version>
@@ -174,7 +246,7 @@ func extractMavenVersion(projectPath string) (*VersionInfo, error) {
 		}
 	}
 
-	return extractFromGit(projectPath)
+	return extractFallback(projectPath)
 }
 
 // extractGradleVersion extracts version from Gradle build files
@@ -207,7 +279,7 @@ func extractGradleVersion(projectPath string) (*VersionInfo, error) {
 		}
 	}
 
-	return extractFromGit(projectPath)
+	return extractFallback(projectPath)
 }
 
 // extractGoVersion extracts version from Go modules
@@ -215,8 +287,8 @@ func extractGoVersion(projectPath string) (*VersionInfo, error) {
 	// Go modules don't typically contain version information in go.mod
 	// The /vX suffix in module paths (e.g., github.com/moby/moby/v2) is not a version
 	// It's a major version indicator for Go module resolution
-	// Always fall back to git tags for Go projects
-	return extractFromGit(projectPath)
+	// Always fall back to version.properties / git tags for Go projects
+	return extractFallback(projectPath)
 }
 
 // extractRustVersion extracts version from Rust Cargo.toml
@@ -224,7 +296,7 @@ func extractRustVersion(projectPath string) (*VersionInfo, error) {
 	cargoPath := filepath.Join(projectPath, "Cargo.toml")
 	content, err := os.ReadFile(cargoPath)
 	if err != nil {
-		return extractFromGit(projectPath)
+		return extractFallback(projectPath)
 	}
 
 	// Simple TOML parsing for version = "X.Y.Z"
@@ -298,7 +370,7 @@ func extractRustVersion(projectPath string) (*VersionInfo, error) {
 		}
 	}
 
-	return extractFromGit(projectPath)
+	return extractFallback(projectPath)
 }
 
 // ensureTagsAreFetched attempts to fetch git tags from remote
