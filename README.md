@@ -212,6 +212,9 @@ All project types provide these standardized outputs:
 | `project_path` | Absolute project path | `/workspace/myproject` |
 | `version_source` | Source of version info | `pyproject.toml` |
 | `versioning_type` | Versioning type: `static` or `dynamic` | `static` |
+| `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent | `1.1.0` |
+| `version_properties_match` | Whether version.properties matches `project_version` (empty when not comparable) | `true` |
+| `snapshot_version` | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention) | `1.1.0-SNAPSHOT` |
 | `build_timestamp` | ISO 8601 build timestamp | `2025-11-03T12:00:00Z` |
 | `git_sha` | Current git commit SHA | `abc123...` |
 | `git_branch` | Current git branch | `main` |

@@ -79,18 +79,22 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 // manifest does not provide a usable version: version.properties
 // (the Linux Foundation / ONAP release convention) first, then git.
 func extractFallback(projectPath string) (*VersionInfo, error) {
-	if info, ok := extractVersionProperties(projectPath); ok {
+	if info, ok := ExtractVersionProperties(projectPath); ok {
 		return info, nil
 	}
 	return extractFromGit(projectPath)
 }
 
-// extractVersionProperties extracts a version from a version.properties
+// ExtractVersionProperties extracts a version from a version.properties
 // file, the convention used by Linux Foundation / ONAP projects (via
 // global-jjb) to hold the authoritative release version as separate
-// major/minor/patch keys. A literal version=X.Y.Z key is also accepted.
-// Values containing ${...} interpolation are ignored.
-func extractVersionProperties(projectPath string) (*VersionInfo, bool) {
+// major/minor/patch keys. Literal release_version=X.Y.Z and
+// version=X.Y.Z keys are also accepted. Values containing ${...}
+// interpolation are ignored: Jenkins-era files interpolate derived
+// keys (base_version, release_version) from the major/minor/patch
+// trio when the file is sourced in shell, and this parser never
+// executes the file.
+func ExtractVersionProperties(projectPath string) (*VersionInfo, bool) {
 	propsPath := filepath.Join(projectPath, "version.properties")
 	content, err := os.ReadFile(propsPath)
 	if err != nil {
@@ -121,6 +125,14 @@ func extractVersionProperties(projectPath string) (*VersionInfo, bool) {
 	if hasMajor && hasMinor && hasPatch {
 		return &VersionInfo{
 			Version:   major + "." + minor + "." + patch,
+			Source:    "version.properties",
+			IsDynamic: false,
+		}, true
+	}
+
+	if version, ok := props["release_version"]; ok {
+		return &VersionInfo{
+			Version:   version,
 			Source:    "version.properties",
 			IsDynamic: false,
 		}, true

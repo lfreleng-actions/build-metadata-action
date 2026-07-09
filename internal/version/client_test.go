@@ -51,6 +51,19 @@ func TestExtractVersionProperties(t *testing.T) {
 			wantOK:      true,
 		},
 		{
+			name:        "literal release_version key",
+			content:     "release_version=2.7.1\n",
+			wantVersion: "2.7.1",
+			wantOK:      true,
+		},
+		{
+			name: "major/minor/patch trio wins over release_version",
+			content: "major=1\nminor=1\npatch=0\n" +
+				"release_version=9.9.9\n",
+			wantVersion: "1.1.0",
+			wantOK:      true,
+		},
+		{
 			name:    "interpolated values are ignored",
 			content: "version=${base_version}\n",
 			wantOK:  false,
@@ -72,9 +85,9 @@ func TestExtractVersionProperties(t *testing.T) {
 			dir := t.TempDir()
 			writeFile(t, dir, "version.properties", tt.content)
 
-			info, ok := extractVersionProperties(dir)
+			info, ok := ExtractVersionProperties(dir)
 			if ok != tt.wantOK {
-				t.Fatalf("extractVersionProperties() ok = %v, want %v", ok, tt.wantOK)
+				t.Fatalf("ExtractVersionProperties() ok = %v, want %v", ok, tt.wantOK)
 			}
 			if !tt.wantOK {
 				return
@@ -94,8 +107,8 @@ func TestExtractVersionProperties(t *testing.T) {
 
 func TestExtractVersionPropertiesMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	if _, ok := extractVersionProperties(dir); ok {
-		t.Fatal("extractVersionProperties() ok = true for missing file, want false")
+	if _, ok := ExtractVersionProperties(dir); ok {
+		t.Fatal("ExtractVersionProperties() ok = true for missing file, want false")
 	}
 }
 

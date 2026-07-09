@@ -86,6 +86,25 @@ func GenerateSummary(metadata interface{}) string {
 			sb.WriteString("| Versioning Type | static |\n")
 		}
 
+		// version.properties (LF/ONAP release convention) details:
+		// rendered whenever the file yielded a version, so release
+		// pipelines can see the authoritative value even when a
+		// language manifest won the version_source selection
+		if propsVersion, ok := common["version_properties_version"].(string); ok && propsVersion != "" {
+			fmt.Fprintf(&sb, "| version.properties | %s |\n", propsVersion)
+			if propsMatch, ok := common["version_properties_match"].(string); ok && propsMatch != "" {
+				matchStatus := "true ✅"
+				if propsMatch != "true" {
+					matchStatus = "false ❌"
+				}
+				fmt.Fprintf(&sb, "| Version Match | %s |\n", matchStatus)
+			}
+		}
+
+		if snapshotVersion, ok := common["snapshot_version"].(string); ok && snapshotVersion != "" {
+			fmt.Fprintf(&sb, "| Snapshot Version | %s |\n", snapshotVersion)
+		}
+
 		// Handle timestamp - could be time.Time or string after JSON conversion
 		if buildTimestamp, ok := common["build_timestamp"].(time.Time); ok {
 			// Format as: 2025-11-03 11:37:48 UTC

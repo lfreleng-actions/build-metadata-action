@@ -48,6 +48,78 @@ func TestGenerateSummary_BasicMetadata(t *testing.T) {
 	// The presence of the table with project information indicates success
 }
 
+// TestGenerateSummary_VersionProperties tests rendering of the
+// version.properties, version match and snapshot version rows
+func TestGenerateSummary_VersionProperties(t *testing.T) {
+	metadata := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":               "javascript-npm",
+			"project_name":               "onap-ui-common",
+			"project_version":            "1.1.0",
+			"version_source":             "package.json",
+			"version_properties_version": "1.1.0",
+			"version_properties_match":   "true",
+			"snapshot_version":           "1.1.0-SNAPSHOT",
+		},
+	}
+
+	summary := GenerateSummary(metadata)
+
+	if !strings.Contains(summary, "| version.properties | 1.1.0 |") {
+		t.Error("Summary should contain the version.properties row")
+	}
+	if !strings.Contains(summary, "| Version Match | true ✅ |") {
+		t.Error("Summary should contain the version match row")
+	}
+	if !strings.Contains(summary, "| Snapshot Version | 1.1.0-SNAPSHOT |") {
+		t.Error("Summary should contain the snapshot version row")
+	}
+}
+
+// TestGenerateSummary_VersionPropertiesMismatch tests the mismatch
+// rendering and that rows are omitted when version.properties is absent
+func TestGenerateSummary_VersionPropertiesMismatch(t *testing.T) {
+	metadata := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":               "javascript-npm",
+			"project_name":               "frontend",
+			"project_version":            "2.0.0",
+			"version_source":             "package.json",
+			"version_properties_version": "1.9.0",
+			"version_properties_match":   "false",
+			"snapshot_version":           "1.9.0-SNAPSHOT",
+		},
+	}
+
+	summary := GenerateSummary(metadata)
+
+	if !strings.Contains(summary, "| Version Match | false ❌ |") {
+		t.Error("Summary should render a mismatch with false ❌")
+	}
+
+	absent := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":    "javascript-npm",
+			"project_name":    "frontend",
+			"project_version": "2.0.0",
+			// No version.properties file: the action still synthesizes
+			// snapshot_version from project_version, so the summary
+			// omits the version.properties/match rows but keeps the
+			// snapshot row
+			"snapshot_version": "2.0.0-SNAPSHOT",
+		},
+	}
+	summary = GenerateSummary(absent)
+	if strings.Contains(summary, "version.properties") ||
+		strings.Contains(summary, "Version Match") {
+		t.Error("Summary should omit version.properties rows when absent")
+	}
+	if !strings.Contains(summary, "| Snapshot Version | 2.0.0-SNAPSHOT |") {
+		t.Error("Summary should render the snapshot version synthesized" +
+			" from project_version when version.properties is absent")
+	}
+}
+
 // TestGenerateSummary_CompleteMetadata tests summary with all fields
 func TestGenerateSummary_CompleteMetadata(t *testing.T) {
 	buildTime := time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC)
