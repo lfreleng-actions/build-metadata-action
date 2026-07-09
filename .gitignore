@@ -61,4 +61,7 @@ MANIFEST
 node_modules/*
 
 # Go binaries
-build-metadata
+# Anchored to the repository root: a bare 'build-metadata' pattern
+# also matches the cmd/build-metadata/ directory and silently
+# ignores new source files under it
+/build-metadata

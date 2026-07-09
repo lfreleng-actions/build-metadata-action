@@ -79,17 +79,33 @@ type Metadata struct {
 
 // CommonMetadata contains metadata common to all project types
 type CommonMetadata struct {
-	ProjectType      string    `json:"project_type"`
-	ProjectName      string    `json:"project_name"`
-	ProjectVersion   string    `json:"project_version"`
-	ProjectPath      string    `json:"project_path"`
-	VersionSource    string    `json:"version_source"`
-	VersioningType   string    `json:"versioning_type"`
-	BuildTimestamp   time.Time `json:"build_timestamp"`
-	GitSHA           string    `json:"git_sha,omitempty"`
-	GitBranch        string    `json:"git_branch,omitempty"`
-	GitTag           string    `json:"git_tag,omitempty"`
-	ProjectMatchRepo bool      `json:"project_match_repo,omitempty"`
+	ProjectType    string    `json:"project_type"`
+	ProjectName    string    `json:"project_name"`
+	ProjectVersion string    `json:"project_version"`
+	ProjectPath    string    `json:"project_path"`
+	VersionSource  string    `json:"version_source"`
+	VersioningType string    `json:"versioning_type"`
+	BuildTimestamp time.Time `json:"build_timestamp"`
+	GitSHA         string    `json:"git_sha,omitempty"`
+	GitBranch      string    `json:"git_branch,omitempty"`
+	GitTag         string    `json:"git_tag,omitempty"`
+	// VersionPropertiesVersion is the version parsed from a
+	// version.properties file (the Linux Foundation / ONAP release
+	// convention), extracted independently of whichever source won
+	// ProjectVersion, so release tooling can treat the file as
+	// authoritative even when a language manifest also declares a
+	// version.
+	VersionPropertiesVersion string `json:"version_properties_version,omitempty"`
+	// VersionPropertiesMatch reports ("true"/"false") whether
+	// VersionPropertiesVersion equals ProjectVersion; empty when the
+	// project has no usable version.properties file or no project
+	// version.
+	VersionPropertiesMatch string `json:"version_properties_match,omitempty"`
+	// SnapshotVersion is the synthesized interim/development version
+	// (the Jenkins-heritage X.Y.Z-SNAPSHOT convention), derived from
+	// VersionPropertiesVersion when available, else ProjectVersion.
+	SnapshotVersion  string `json:"snapshot_version,omitempty"`
+	ProjectMatchRepo bool   `json:"project_match_repo,omitempty"`
 }
 
 // BuildMetadata contains build-specific metadata
@@ -99,6 +115,37 @@ type BuildMetadata struct {
 	CIRunURL   string `json:"ci_run_url"`
 	RunnerOS   string `json:"runner_os"`
 	RunnerArch string `json:"runner_arch"`
+}
+
+// versionPropertiesMatch returns "true"/"false" comparing the
+// version.properties version against the resolved project version,
+// or "" when either side is empty (not comparable).
+func versionPropertiesMatch(propsVersion, projectVersion string) string {
+	if propsVersion == "" || projectVersion == "" {
+		return ""
+	}
+	return fmt.Sprintf("%t", propsVersion == projectVersion)
+}
+
+// synthesizeSnapshotVersion derives the interim/development version
+// using the Jenkins-heritage X.Y.Z-SNAPSHOT convention. The
+// version.properties value is authoritative when present, otherwise
+// the resolved project version is used. A base already carrying the
+// suffix (case-insensitive, common in Maven/Gradle metadata) passes
+// through unchanged rather than double-appending. Returns "" when no
+// base version exists.
+func synthesizeSnapshotVersion(propsVersion, projectVersion string) string {
+	base := propsVersion
+	if base == "" {
+		base = projectVersion
+	}
+	if base == "" {
+		return ""
+	}
+	if !strings.HasSuffix(strings.ToUpper(base), "-SNAPSHOT") {
+		base += "-SNAPSHOT"
+	}
+	return base
 }
 
 func main() {
@@ -337,6 +384,24 @@ func main() {
 		}
 	}
 
+	// version.properties (the Linux Foundation / ONAP release
+	// convention) is authoritative for LF merge/release pipelines, so
+	// surface it explicitly even when a language manifest
+	// (package.json, pyproject.toml, ...) won the version_source
+	// selection above. Downstream release tooling consumes these
+	// outputs rather than re-parsing the file in workflow shell code.
+	// Runs after all version sources settle so the comparison uses
+	// the final resolved project version.
+	if propsInfo, ok := version.ExtractVersionProperties(absPath); ok {
+		metadata.Common.VersionPropertiesVersion = propsInfo.Version
+		metadata.Common.VersionPropertiesMatch = versionPropertiesMatch(
+			propsInfo.Version, metadata.Common.ProjectVersion)
+	}
+
+	metadata.Common.SnapshotVersion = synthesizeSnapshotVersion(
+		metadata.Common.VersionPropertiesVersion,
+		metadata.Common.ProjectVersion)
+
 	// Collect environment metadata if requested
 	if includeEnvironment {
 		if isCI {
@@ -382,6 +447,9 @@ func main() {
 	setOutput("project_path", metadata.Common.ProjectPath)
 	setOutput("version_source", metadata.Common.VersionSource)
 	setOutput("versioning_type", metadata.Common.VersioningType)
+	setOutput("version_properties_version", metadata.Common.VersionPropertiesVersion)
+	setOutput("version_properties_match", metadata.Common.VersionPropertiesMatch)
+	setOutput("snapshot_version", metadata.Common.SnapshotVersion)
 	setOutput("build_timestamp", metadata.Common.BuildTimestamp.Format(time.RFC3339))
 	setOutput("git_sha", metadata.Common.GitSHA)
 	setOutput("git_branch", metadata.Common.GitBranch)

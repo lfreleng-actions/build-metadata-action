@@ -146,6 +146,20 @@ outputs:
     description: "Source file where version was found"
     value: ${{ steps.extract.outputs.version_source }}
 
+  version_properties_version:
+    description: "Version parsed from version.properties; empty when absent"
+    value: ${{ steps.extract.outputs.version_properties_version }}
+
+  version_properties_match:
+    description: >-
+      Whether version.properties matches project_version
+      (true/false; empty when not comparable)
+    value: ${{ steps.extract.outputs.version_properties_match }}
+
+  snapshot_version:
+    description: "Synthesized interim version (X.Y.Z-SNAPSHOT convention)"
+    value: ${{ steps.extract.outputs.snapshot_version }}
+
   versioning_type:
     description: "Versioning type: 'static' or 'dynamic'"
     value: ${{ steps.extract.outputs.versioning_type }}
