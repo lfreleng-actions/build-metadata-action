@@ -32,12 +32,10 @@ func init() {
 
 // Detect checks if this is an Elixir project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for mix.exs
 	if _, err := os.Stat(filepath.Join(projectPath, "mix.exs")); err == nil {
 		return true
 	}
 
-	// Check for lib/ directory with .ex files
 	libDir := filepath.Join(projectPath, "lib")
 	if info, err := os.Stat(libDir); err == nil && info.IsDir() {
 		matches, err := filepath.Glob(filepath.Join(libDir, "*.ex"))
@@ -46,7 +44,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for .ex or .exs files in root
 	patterns := []string{"*.ex", "*.exs"}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(projectPath, pattern))
@@ -111,23 +108,19 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 			continue
 		}
 
-		// Extract app name
 		if matches := appRegex.FindStringSubmatch(line); matches != nil {
 			metadata.Name = matches[1]
 		}
 
-		// Extract version
 		if matches := versionRegex.FindStringSubmatch(line); matches != nil {
 			metadata.Version = matches[1]
 			metadata.VersionSource = "mix.exs"
 		}
 
-		// Extract Elixir version requirement
 		if matches := elixirRegex.FindStringSubmatch(line); matches != nil {
 			elixirVersion = matches[1]
 		}
 
-		// Extract description
 		if matches := descriptionRegex.FindStringSubmatch(line); matches != nil {
 			metadata.Description = matches[1]
 		}
@@ -137,7 +130,6 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 			inPackageBlock = true
 		}
 
-		// Extract licenses in package block
 		if inPackageBlock {
 			if matches := licenseRegex.FindStringSubmatch(line); matches != nil {
 				metadata.License = matches[1]
@@ -149,7 +141,6 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 			inLinksBlock = true
 		}
 
-		// Extract homepage from links
 		if inLinksBlock {
 			if matches := homepageRegex.FindStringSubmatch(line); matches != nil {
 				if matches[1] == "GitHub" || matches[1] == "Homepage" {
@@ -170,7 +161,6 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 			}
 		}
 
-		// Extract dependencies
 		if matches := depRegex.FindStringSubmatch(line); matches != nil {
 			dep := fmt.Sprintf("%s:%s", matches[1], matches[2])
 			dependencies = append(dependencies, dep)
@@ -209,7 +199,6 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 
 // generateElixirVersionMatrix generates a matrix of Elixir versions
 func generateElixirVersionMatrix(requirement string) []string {
-	// Remove constraint operators
 	version := strings.TrimPrefix(requirement, "~> ")
 	version = strings.TrimPrefix(version, ">= ")
 	version = strings.TrimPrefix(version, "== ")

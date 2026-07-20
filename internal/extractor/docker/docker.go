@@ -97,7 +97,6 @@ func (e *Extractor) parseDockerfile(path string) (*DockerfileMetadata, error) {
 			continue
 		}
 
-		// Handle line continuation
 		if strings.HasSuffix(line, "\\") {
 			currentLine += strings.TrimSuffix(line, "\\") + " "
 			continue
@@ -109,7 +108,6 @@ func (e *Extractor) parseDockerfile(path string) (*DockerfileMetadata, error) {
 			currentLine = ""
 		}
 
-		// Parse the instruction
 		e.parseInstruction(line, dockerMeta)
 	}
 
@@ -191,7 +189,6 @@ func (e *Extractor) parseFrom(args string, meta *DockerfileMetadata) {
 		baseImage := parts[0]
 		meta.BaseImages = append(meta.BaseImages, baseImage)
 
-		// Check for stage name
 		for i, part := range parts {
 			if strings.ToUpper(part) == "AS" && i+1 < len(parts) {
 				meta.Stages = append(meta.Stages, parts[i+1])
@@ -275,7 +272,6 @@ func (e *Extractor) parseArg(args string, meta *DockerfileMetadata) {
 
 // parseCopy extracts COPY --from references
 func (e *Extractor) parseCopy(args string, meta *DockerfileMetadata) {
-	// Check for --from flag
 	re := regexp.MustCompile(`--from=(\S+)`)
 	if matches := re.FindStringSubmatch(args); len(matches) > 1 {
 		meta.CopyFrom = append(meta.CopyFrom, matches[1])
@@ -305,10 +301,8 @@ func parseCommand(args string) []string {
 
 // populateMetadata converts DockerfileMetadata to ProjectMetadata
 func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata, projectPath string) {
-	// Extract name from directory
 	metadata.Name = filepath.Base(projectPath)
 
-	// Extract version from labels
 	if version, ok := dockerMeta.Labels["version"]; ok {
 		metadata.Version = version
 		metadata.VersionSource = "Dockerfile LABEL version"
@@ -317,35 +311,30 @@ func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *e
 		metadata.VersionSource = "Dockerfile LABEL org.opencontainers.image.version"
 	}
 
-	// Extract description
 	if desc, ok := dockerMeta.Labels["description"]; ok {
 		metadata.Description = desc
 	} else if desc, ok := dockerMeta.Labels["org.opencontainers.image.description"]; ok {
 		metadata.Description = desc
 	}
 
-	// Extract license
 	if license, ok := dockerMeta.Labels["license"]; ok {
 		metadata.License = license
 	} else if license, ok := dockerMeta.Labels["org.opencontainers.image.licenses"]; ok {
 		metadata.License = license
 	}
 
-	// Extract authors
 	if authors, ok := dockerMeta.Labels["maintainer"]; ok {
 		metadata.Authors = []string{authors}
 	} else if authors, ok := dockerMeta.Labels["org.opencontainers.image.authors"]; ok {
 		metadata.Authors = []string{authors}
 	}
 
-	// Extract repository
 	if url, ok := dockerMeta.Labels["org.opencontainers.image.source"]; ok {
 		metadata.Repository = url
 	} else if url, ok := dockerMeta.Labels["source"]; ok {
 		metadata.Repository = url
 	}
 
-	// Extract homepage
 	if url, ok := dockerMeta.Labels["org.opencontainers.image.url"]; ok {
 		metadata.Homepage = url
 	} else if url, ok := dockerMeta.Labels["url"]; ok {
@@ -414,7 +403,6 @@ func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *e
 		metadata.LanguageSpecific["copy_from_stages"] = dockerMeta.CopyFrom
 	}
 
-	// Check for OCI image spec compliance
 	ociLabels := []string{
 		"org.opencontainers.image.created",
 		"org.opencontainers.image.version",
@@ -434,7 +422,6 @@ func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *e
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Dockerfile
 	dockerfilePath := filepath.Join(projectPath, "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err == nil {
 		return true

@@ -154,7 +154,6 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 		return fmt.Errorf("failed to parse Cargo.toml: %w", err)
 	}
 
-	// Extract common metadata with workspace inheritance support
 	metadata.Name = cargo.Package.Name
 
 	// Debug logging
@@ -236,13 +235,11 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 		metadata.LanguageSpecific["readme"] = readme
 	}
 
-	// Parse dependencies
 	if len(cargo.Dependencies) > 0 {
 		deps := parseDependencies(cargo.Dependencies, "normal")
 		metadata.LanguageSpecific["dependencies"] = formatDependencies(deps)
 		metadata.LanguageSpecific["dependency_count"] = len(deps)
 
-		// Extract optional dependencies
 		optionalDeps := []string{}
 		for _, dep := range deps {
 			if dep.Optional {
@@ -254,14 +251,12 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 		}
 	}
 
-	// Parse dev dependencies
 	if len(cargo.DevDependencies) > 0 {
 		devDeps := parseDependencies(cargo.DevDependencies, "dev")
 		metadata.LanguageSpecific["dev_dependencies"] = formatDependencies(devDeps)
 		metadata.LanguageSpecific["dev_dependency_count"] = len(devDeps)
 	}
 
-	// Parse build dependencies
 	if len(cargo.BuildDependencies) > 0 {
 		buildDeps := parseDependencies(cargo.BuildDependencies, "build")
 		metadata.LanguageSpecific["build_dependencies"] = formatDependencies(buildDeps)
@@ -279,7 +274,6 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 		metadata.LanguageSpecific["features"] = cargo.Features
 		metadata.LanguageSpecific["feature_count"] = len(cargo.Features)
 
-		// Extract feature names
 		featureNames := make([]string, 0, len(cargo.Features))
 		for name := range cargo.Features {
 			featureNames = append(featureNames, name)
@@ -316,7 +310,6 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 		}
 	}
 
-	// Build script
 	if cargo.Package.Build != "" {
 		metadata.LanguageSpecific["has_build_script"] = true
 		metadata.LanguageSpecific["build_script"] = cargo.Package.Build
@@ -530,7 +523,6 @@ func detectRustFrameworks(deps map[string]interface{}) []string {
 // 5-second timeout and error handling prevent workflow failures if the API is
 // unreachable. The caller should always have a fallback strategy.
 func fetchRustVersions() ([]string, error) {
-	// Check cache first
 	rustVersionCache.RLock()
 	if len(rustVersionCache.versions) > 0 && time.Since(rustVersionCache.fetchedAt) < rustVersionCache.cacheTTL {
 		versions := rustVersionCache.versions
@@ -561,7 +553,6 @@ func fetchRustVersions() ([]string, error) {
 		return nil, err
 	}
 
-	// Extract version from pkg.rust.version
 	if pkg, ok := data["pkg"].(map[string]interface{}); ok {
 		if rust, ok := pkg["rust"].(map[string]interface{}); ok {
 			if version, ok := rust["version"].(string); ok {
@@ -593,7 +584,6 @@ func fetchRustVersions() ([]string, error) {
 // 6 minor versions plus "stable". This provides ~9 months of version coverage,
 // which is a reasonable testing range that balances thoroughness with CI time.
 func generateVersionRange(stableVersion string) []string {
-	// Parse major.minor
 	parts := strings.Split(stableVersion, ".")
 	if len(parts) < 2 {
 		return []string{stableVersion, "stable"}
@@ -686,7 +676,6 @@ func generateRustVersionMatrix(msrv string) []string {
 func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	filtered := []string{}
 
-	// Parse MSRV
 	msvParts := strings.Split(msrv, ".")
 	if len(msvParts) < 2 {
 		// If we can't parse, return all versions
@@ -703,7 +692,6 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 			continue
 		}
 
-		// Parse version
 		parts := strings.Split(version, ".")
 		if len(parts) < 2 {
 			continue
@@ -780,7 +768,6 @@ func generateRustVersionMatrixFromEdition(edition string) []string {
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Cargo.toml
 	if _, err := os.Stat(filepath.Join(projectPath, "Cargo.toml")); err == nil {
 		return true
 	}

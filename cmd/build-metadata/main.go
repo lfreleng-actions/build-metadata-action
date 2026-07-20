@@ -73,7 +73,6 @@ type Metadata struct {
 	// Language-specific metadata
 	LanguageSpecific map[string]interface{} `json:"language_specific,omitempty"`
 
-	// Build metadata
 	Build BuildMetadata `json:"build"`
 }
 
@@ -154,10 +153,8 @@ func main() {
 	// Detect if running in CI environment
 	isCI := os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("CI") == "true"
 
-	// Get inputs early so we can use verboseOutput for debugging
 	verboseOutput := action.GetInput("verbose") == "true"
 
-	// Get inputs
 	projectPath := action.GetInput("path_prefix")
 	if projectPath == "" {
 		projectPath = "."
@@ -229,7 +226,6 @@ func main() {
 		}
 	}
 
-	// Initialize metadata
 	metadata := &Metadata{
 		Common: CommonMetadata{
 			ProjectPath:    absPath,
@@ -308,7 +304,6 @@ func main() {
 		golang.SetSupportedVersions(golang.ResolveSupportedVersions())
 	}
 
-	// Extract version information
 	if useVersionExtract {
 		if isCI {
 			action.Infof("Extracting version information...")
@@ -333,7 +328,6 @@ func main() {
 		}
 	}
 
-	// Get appropriate extractor for the project type
 	extractorImpl, err := extractor.GetExtractor(projectType)
 	if err != nil {
 		if isCI {
@@ -348,7 +342,6 @@ func main() {
 			fmt.Printf("Extracting %s project metadata...\n", projectType)
 		}
 
-		// Extract project-specific metadata
 		projectMetadata, err := extractorImpl.Extract(absPath)
 		if err != nil {
 			if isCI {
@@ -357,7 +350,6 @@ func main() {
 				fmt.Printf("Warning: Failed to extract project metadata: %v\n", err)
 			}
 		} else {
-			// Update common metadata
 			if projectMetadata.Name != "" {
 				metadata.Common.ProjectName = projectMetadata.Name
 			}
@@ -466,7 +458,6 @@ func main() {
 	if metadata.Common.ProjectName != "" {
 		repoFullName := os.Getenv("GITHUB_REPOSITORY")
 		if repoFullName != "" {
-			// Extract repo name from owner/repo format
 			parts := strings.Split(repoFullName, "/")
 			if len(parts) == 2 {
 				repoName := parts[1]
@@ -629,7 +620,6 @@ func main() {
 	if isCI {
 		action.Infof("✅ Build metadata extraction completed successfully")
 	} else {
-		// Print summary for local execution
 		fmt.Println("\n" + strings.Repeat("=", 60))
 		fmt.Println("✅ Build Metadata Extraction Complete")
 		fmt.Println(strings.Repeat("=", 60))

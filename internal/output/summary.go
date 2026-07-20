@@ -247,7 +247,6 @@ func addLanguageSpecificToTable(sb *strings.Builder, projectType string, metadat
 			sb.WriteString(fmt.Sprintf("| Package Name | `%s` |\n", packageName))
 		}
 
-		// Build Python version
 		if buildVersion, ok := metadata["build_version"].(string); ok && buildVersion != "" {
 			sb.WriteString(fmt.Sprintf("| Build Python | %s |\n", buildVersion))
 		}
@@ -262,7 +261,6 @@ func addLanguageSpecificToTable(sb *strings.Builder, projectType string, metadat
 			sb.WriteString(fmt.Sprintf("| Requires Python | %s |\n", requiresPython))
 		}
 
-		// Build Backend
 		if buildBackend, ok := metadata["build_backend"].(string); ok && buildBackend != "" {
 			sb.WriteString(fmt.Sprintf("| Build Backend | %s |\n", buildBackend))
 		}

@@ -66,7 +66,6 @@ type GemfileMetadata struct {
 
 // Detect checks if this is a Ruby project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for common Ruby project files
 	indicators := []string{
 		"*.gemspec",
 		"Gemfile",
@@ -82,7 +81,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for Ruby files in lib/ directory
 	libPath := filepath.Join(projectPath, "lib")
 	if info, err := os.Stat(libPath); err == nil && info.IsDir() {
 		entries, err := os.ReadDir(libPath)
@@ -112,7 +110,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Extract from Gemfile
 	gemfilePath := filepath.Join(projectPath, "Gemfile")
 	if _, err := os.Stat(gemfilePath); err == nil {
 		if err := e.extractFromGemfile(gemfilePath, metadata); err != nil {
@@ -120,7 +117,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Extract Ruby version from .ruby-version
 	rubyVersionPath := filepath.Join(projectPath, ".ruby-version")
 	if _, err := os.Stat(rubyVersionPath); err == nil {
 		if version, err := e.extractRubyVersion(rubyVersionPath); err == nil {
@@ -202,17 +198,14 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 			continue
 		}
 
-		// Extract name
 		if matches := nameRe.FindStringSubmatch(line); len(matches) > 1 {
 			name = matches[1]
 		}
 
-		// Extract version
 		if matches := versionRe.FindStringSubmatch(line); len(matches) > 1 {
 			version = matches[1]
 		}
 
-		// Extract authors
 		if matches := authorsRe.FindStringSubmatch(line); len(matches) > 1 {
 			if matches[1] != "" {
 				authors = append(authors, matches[1])
@@ -221,7 +214,6 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 			}
 		}
 
-		// Extract email
 		if matches := emailRe.FindStringSubmatch(line); len(matches) > 1 {
 			if matches[1] != "" {
 				email = append(email, matches[1])
@@ -230,37 +222,30 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 			}
 		}
 
-		// Extract summary
 		if matches := summaryRe.FindStringSubmatch(line); len(matches) > 1 {
 			summary = matches[1]
 		}
 
-		// Extract description
 		if matches := descriptionRe.FindStringSubmatch(line); len(matches) > 1 {
 			description = matches[1]
 		}
 
-		// Extract homepage
 		if matches := homepageRe.FindStringSubmatch(line); len(matches) > 1 {
 			homepage = matches[1]
 		}
 
-		// Extract license
 		if matches := licenseRe.FindStringSubmatch(line); len(matches) > 1 {
 			license = matches[1]
 		}
 
-		// Extract required Ruby version
 		if matches := rubyVersionRe.FindStringSubmatch(line); len(matches) > 1 {
 			requiredRubyVersion = matches[1]
 		}
 
-		// Extract platform
 		if matches := platformRe.FindStringSubmatch(line); len(matches) > 1 {
 			platform = matches[1]
 		}
 
-		// Extract runtime dependencies
 		if matches := runtimeDepRe.FindStringSubmatch(line); len(matches) > 1 {
 			dep := Dependency{
 				Name: matches[1],
@@ -272,7 +257,6 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 			runtimeDeps = append(runtimeDeps, dep)
 		}
 
-		// Extract development dependencies
 		if matches := devDepRe.FindStringSubmatch(line); len(matches) > 1 {
 			dep := Dependency{
 				Name: matches[1],
@@ -350,17 +334,14 @@ func (e *Extractor) extractFromGemfile(gemfilePath string, metadata *extractor.P
 			continue
 		}
 
-		// Extract Ruby version
 		if matches := rubyRe.FindStringSubmatch(line); len(matches) > 1 {
 			rubyVersion = matches[1]
 		}
 
-		// Extract source
 		if matches := sourceRe.FindStringSubmatch(line); len(matches) > 1 {
 			source = matches[1]
 		}
 
-		// Extract gems
 		if matches := gemRe.FindStringSubmatch(line); len(matches) > 1 {
 			dep := Dependency{
 				Name: matches[1],
@@ -377,7 +358,6 @@ func (e *Extractor) extractFromGemfile(gemfilePath string, metadata *extractor.P
 			}
 		}
 
-		// Extract platform
 		if matches := platformRe.FindStringSubmatch(line); len(matches) > 1 {
 			if !contains(platforms, matches[1]) {
 				platforms = append(platforms, matches[1])
@@ -426,11 +406,9 @@ func (e *Extractor) extractRubyVersion(versionPath string) (string, error) {
 func (e *Extractor) detectFrameworks(projectPath string) []string {
 	var frameworks []string
 
-	// Check for Rails
 	if e.isRailsProject(projectPath) {
 		frameworks = append(frameworks, "rails")
 
-		// Check for specific Rails features
 		if e.hasPath(projectPath, "app/javascript") {
 			frameworks = append(frameworks, "webpacker")
 		}
@@ -445,12 +423,10 @@ func (e *Extractor) detectFrameworks(projectPath string) []string {
 		}
 	}
 
-	// Check for Sinatra
 	if e.isSinatraProject(projectPath) {
 		frameworks = append(frameworks, "sinatra")
 	}
 
-	// Check for Hanami
 	if e.hasPath(projectPath, "config/hanami.rb") {
 		frameworks = append(frameworks, "hanami")
 	}
@@ -460,17 +436,14 @@ func (e *Extractor) detectFrameworks(projectPath string) []string {
 		frameworks = append(frameworks, "grape")
 	}
 
-	// Check for RSpec
 	if e.hasPath(projectPath, "spec") {
 		frameworks = append(frameworks, "rspec")
 	}
 
-	// Check for Minitest
 	if e.hasPath(projectPath, "test") {
 		frameworks = append(frameworks, "minitest")
 	}
 
-	// Check for Cucumber
 	if e.hasPath(projectPath, "features") {
 		frameworks = append(frameworks, "cucumber")
 	}
@@ -485,12 +458,10 @@ func (e *Extractor) isRailsProject(projectPath string) bool {
 		return true
 	}
 
-	// Check for bin/rails
 	if e.hasPath(projectPath, "bin/rails") {
 		return true
 	}
 
-	// Check for Gemfile with rails dependency
 	if e.hasGemfileDependency(projectPath, "rails") {
 		return true
 	}
@@ -508,7 +479,6 @@ func (e *Extractor) isSinatraProject(projectPath string) bool {
 		}
 	}
 
-	// Check for Gemfile with sinatra dependency
 	if e.hasGemfileDependency(projectPath, "sinatra") {
 		return true
 	}
@@ -574,7 +544,6 @@ func (e *Extractor) GenerateVersionMatrix(metadata *extractor.ProjectMetadata) m
 
 // parseRubyVersionRequirement parses Ruby version requirements into a list of versions
 func (e *Extractor) parseRubyVersionRequirement(requirement string) []string {
-	// Remove operators and get base versions
 	requirement = strings.TrimSpace(requirement)
 
 	// Handle >= requirements
@@ -589,7 +558,6 @@ func (e *Extractor) parseRubyVersionRequirement(requirement string) []string {
 		return e.getCompatibleVersions(version)
 	}
 
-	// Handle exact version
 	return []string{requirement}
 }
 
@@ -615,7 +583,6 @@ func (e *Extractor) getCompatibleVersions(baseVersion string) []string {
 // isVersionCompatible checks if a version satisfies a requirement
 // Uses numeric comparison to correctly handle versions like 3.0 vs 3.10
 func (e *Extractor) isVersionCompatible(requirement, version string) bool {
-	// Parse versions into major.minor components
 	reqParts := strings.Split(requirement, ".")
 	verParts := strings.Split(version, ".")
 

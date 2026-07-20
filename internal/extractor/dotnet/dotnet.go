@@ -112,19 +112,16 @@ func init() {
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for .csproj files
 	csprojMatches, _ := filepath.Glob(filepath.Join(projectPath, "*.csproj"))
 	if len(csprojMatches) > 0 {
 		return true
 	}
 
-	// Check for .sln files
 	slnMatches, _ := filepath.Glob(filepath.Join(projectPath, "*.sln"))
 	if len(slnMatches) > 0 {
 		return true
 	}
 
-	// Check for .props files
 	propsMatches, _ := filepath.Glob(filepath.Join(projectPath, "*.props"))
 	if len(propsMatches) > 0 {
 		return true
@@ -174,19 +171,15 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 
 // extractFromProjectFile extracts metadata from a .csproj file
 func (e *Extractor) extractFromProjectFile(csprojPath string, metadata *extractor.ProjectMetadata) error {
-	// Parse the project file
 	project, err := e.parseProjectFile(csprojPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse project file: %w", err)
 	}
 
-	// Extract metadata from property groups
 	e.extractProjectProperties(project, metadata)
 
-	// Extract package references
 	e.extractPackageReferences(project, metadata)
 
-	// Extract project references
 	e.extractProjectReferences(project, metadata)
 
 	// Store the project file path
@@ -205,7 +198,6 @@ func (e *Extractor) extractFromProjectFile(csprojPath string, metadata *extracto
 
 // extractFromSolution extracts metadata from a .sln file
 func (e *Extractor) extractFromSolution(projectPath string, slnPath string, metadata *extractor.ProjectMetadata) error {
-	// Parse the solution file
 	solution, err := e.parseSolutionFile(slnPath)
 	if err != nil {
 		return fmt.Errorf("failed to parse solution file: %w", err)
@@ -293,7 +285,6 @@ func (e *Extractor) parseSolutionFile(path string) (*Solution, error) {
 
 	lines := strings.Split(string(data), "\n")
 
-	// Parse solution version
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "Microsoft Visual Studio Solution File, Format Version") {
@@ -320,7 +311,6 @@ func (e *Extractor) parseSolutionFile(path string) (*Solution, error) {
 func (e *Extractor) parseSolutionProject(line string) SolutionProject {
 	project := SolutionProject{}
 
-	// Extract project type GUID
 	typeGUIDMatch := regexp.MustCompile(`Project\("([^"]+)"\)`).FindStringSubmatch(line)
 	if len(typeGUIDMatch) > 1 {
 		project.Type = typeGUIDMatch[1]
@@ -333,7 +323,6 @@ func (e *Extractor) parseSolutionProject(line string) SolutionProject {
 		return project
 	}
 
-	// Parse the quoted values
 	quotedPattern := regexp.MustCompile(`"([^"]+)"`)
 	matches := quotedPattern.FindAllStringSubmatch(parts[1], -1)
 
@@ -541,7 +530,6 @@ func (e *Extractor) extractVersionFromFramework(framework string) string {
 func (e *Extractor) detectFrameworks(metadata *extractor.ProjectMetadata) {
 	frameworks := make([]string, 0)
 
-	// Check package references
 	if pkgs, ok := metadata.LanguageSpecific["dotnet_package_references"].([]map[string]string); ok {
 		for _, pkg := range pkgs {
 			name := strings.ToLower(pkg["name"])
@@ -613,7 +601,6 @@ func (e *Extractor) detectFrameworks(metadata *extractor.ProjectMetadata) {
 		}
 	}
 
-	// Check SDK type
 	if sdk, ok := metadata.LanguageSpecific["dotnet_sdk"].(string); ok {
 		if strings.Contains(sdk, "Microsoft.NET.Sdk.Web") {
 			frameworks = appendUnique(frameworks, "ASP.NET Core")
@@ -659,7 +646,6 @@ func (e *Extractor) generateVersionMatrix(metadata *extractor.ProjectMetadata) {
 
 	metadata.LanguageSpecific["dotnet_version_matrix"] = versions
 
-	// Create matrix JSON for GitHub Actions
 	matrixJSON := fmt.Sprintf(`{"dotnet-version":["%s"]}`, strings.Join(versions, `","`))
 	metadata.LanguageSpecific["matrix_json"] = matrixJSON
 }
@@ -699,7 +685,6 @@ func isModernDotNet(framework string) bool {
 		return false
 	}
 
-	// Extract what comes after "net"
 	afterNet := strings.TrimPrefix(framework, "net")
 
 	// Check if it starts with a digit (this excludes netstandard, netcoreapp, etc.)

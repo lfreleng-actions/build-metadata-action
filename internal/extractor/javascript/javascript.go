@@ -58,7 +58,6 @@ type PackageJSON struct {
 	PackageManager string                 `json:"packageManager"` // e.g., "pnpm@8.0.0"
 	Volta          map[string]interface{} `json:"volta"`
 
-	// Build tool specific
 	Config map[string]interface{} `json:"config"`
 }
 
@@ -82,7 +81,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		LanguageSpecific: make(map[string]interface{}),
 	}
 
-	// Parse package.json
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	if _, err := os.Stat(packageJSONPath); err != nil {
 		return nil, fmt.Errorf("package.json not found in %s", projectPath)
@@ -107,20 +105,16 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 		return fmt.Errorf("failed to parse package.json: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = pkg.Name
 	metadata.Version = pkg.Version
 	metadata.Description = pkg.Description
 	metadata.Homepage = pkg.Homepage
 	metadata.VersionSource = "package.json"
 
-	// Extract license
 	metadata.License = extractLicense(pkg.License)
 
-	// Extract authors
 	metadata.Authors = extractAuthors(pkg.Author, pkg.Contributors)
 
-	// Extract repository
 	metadata.Repository = extractRepository(pkg.Repository)
 
 	// JavaScript-specific metadata
@@ -215,7 +209,6 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 		metadata.LanguageSpecific["frameworks"] = frameworks
 	}
 
-	// Build tools
 	buildTools := detectBuildTools(pkg.Dependencies, pkg.DevDependencies)
 	if len(buildTools) > 0 {
 		metadata.LanguageSpecific["build_tools"] = buildTools
@@ -287,7 +280,6 @@ func extractLicense(license interface{}) string {
 func extractAuthors(author interface{}, contributors []interface{}) []string {
 	authors := make([]string, 0)
 
-	// Extract main author
 	if author != nil {
 		authorStr := formatAuthor(author)
 		if authorStr != "" {
@@ -295,7 +287,6 @@ func extractAuthors(author interface{}, contributors []interface{}) []string {
 		}
 	}
 
-	// Extract contributors
 	for _, contributor := range contributors {
 		contributorStr := formatAuthor(contributor)
 		if contributorStr != "" {
@@ -376,7 +367,6 @@ func extractWorkspaces(workspaces interface{}) []string {
 
 // detectPackageManager detects which package manager is being used
 func detectPackageManager(projectPath, packageManagerField string) string {
-	// Check packageManager field first
 	if packageManagerField != "" {
 		// Format: "pnpm@8.0.0" or "yarn@3.0.0"
 		if strings.Contains(packageManagerField, "@") {
@@ -386,7 +376,6 @@ func detectPackageManager(projectPath, packageManagerField string) string {
 		return packageManagerField
 	}
 
-	// Check for lock files
 	if _, err := os.Stat(filepath.Join(projectPath, "pnpm-lock.yaml")); err == nil {
 		return "pnpm"
 	}
@@ -547,7 +536,6 @@ func detectTestingFrameworks(deps, devDeps map[string]string) []string {
 
 // detectTypeScript checks if the project uses TypeScript
 func detectTypeScript(projectPath string, deps, devDeps map[string]string) bool {
-	// Check for typescript dependency
 	if _, exists := deps["typescript"]; exists {
 		return true
 	}
@@ -555,7 +543,6 @@ func detectTypeScript(projectPath string, deps, devDeps map[string]string) bool 
 		return true
 	}
 
-	// Check for tsconfig.json
 	tsconfigPath := filepath.Join(projectPath, "tsconfig.json")
 	if _, err := os.Stat(tsconfigPath); err == nil {
 		return true
@@ -578,7 +565,6 @@ func readTSConfig(path string) (map[string]interface{}, error) {
 	// Parse JSON (tsconfig.json allows comments, but we'll do basic parsing)
 	var config map[string]interface{}
 
-	// Remove comments using jsonutil package
 	contentStr := string(content)
 	contentStr = jsonutil.RemoveComments(contentStr)
 

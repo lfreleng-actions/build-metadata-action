@@ -37,7 +37,6 @@ type GradleProject struct {
 	Dependencies []GradleDependency
 	Plugins      []GradlePlugin
 
-	// Build script type
 	IsKotlinDSL bool
 	BuildFile   string
 
@@ -76,7 +75,6 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 		return nil, err
 	}
 
-	// Parse build file
 	gradleProject, err := e.parseGradleBuild(buildFile, isKotlin)
 	if err != nil {
 		return nil, err
@@ -88,7 +86,6 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	// Parse gradle.properties if exists
 	e.parseProperties(projectPath, gradleProject)
 
-	// Extract common metadata
 	metadata.Name = gradleProject.Name
 	metadata.Version = gradleProject.Version
 	metadata.Description = gradleProject.Description
@@ -166,7 +163,6 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 		}
 	}
 
-	// Check for dynamic version
 	if strings.Contains(metadata.Version, "SNAPSHOT") ||
 		strings.Contains(metadata.Version, "project.version") ||
 		strings.Contains(metadata.Version, "rootProject.version") {
@@ -212,19 +208,14 @@ func (e *GradleExtractor) parseGradleBuild(buildFile string, isKotlin bool) (*Gr
 
 	text := string(content)
 
-	// Extract group
 	project.Group = e.extractGradleProperty(text, "group", isKotlin)
 
-	// Extract version
 	project.Version = e.extractGradleProperty(text, "version", isKotlin)
 
-	// Extract description
 	project.Description = e.extractGradleProperty(text, "description", isKotlin)
 
-	// Extract plugins
 	project.Plugins = e.extractPlugins(text, isKotlin)
 
-	// Extract dependencies
 	project.Dependencies = e.extractDependencies(text, isKotlin)
 
 	return project, nil
@@ -391,12 +382,10 @@ func (e *GradleExtractor) parseSettings(projectPath string, project *GradleProje
 
 	text := string(content)
 
-	// Extract root project name
 	if project.Name == "" {
 		project.Name = e.extractGradleProperty(text, "rootProject.name", isKotlin)
 	}
 
-	// Extract subprojects
 	subprojects := e.extractSubprojects(text, isKotlin)
 	if len(subprojects) > 0 {
 		project.IsMultiProject = true
@@ -503,13 +492,11 @@ func (e *GradleExtractor) detectGradleFrameworks(plugins []GradlePlugin) []strin
 
 // Detect checks if this extractor can handle the project
 func (e *GradleExtractor) Detect(projectPath string) bool {
-	// Check for build.gradle.kts
 	ktsPath := filepath.Join(projectPath, "build.gradle.kts")
 	if _, err := os.Stat(ktsPath); err == nil {
 		return true
 	}
 
-	// Check for build.gradle
 	groovyPath := filepath.Join(projectPath, "build.gradle")
 	if _, err := os.Stat(groovyPath); err == nil {
 		return true

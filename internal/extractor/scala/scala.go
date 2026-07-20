@@ -32,7 +32,6 @@ func init() {
 
 // Detect checks if this is a Scala project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for build.sbt
 	if _, err := os.Stat(filepath.Join(projectPath, "build.sbt")); err == nil {
 		return true
 	}
@@ -55,13 +54,11 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for Scala source files
 	srcMain := filepath.Join(projectPath, "src", "main", "scala")
 	if info, err := os.Stat(srcMain); err == nil && info.IsDir() {
 		return true
 	}
 
-	// Check for .scala files in root or src
 	patterns := []string{
 		filepath.Join(projectPath, "*.scala"),
 		filepath.Join(projectPath, "src", "*.scala"),
@@ -190,13 +187,11 @@ func (e *Extractor) extractFromBuildSbt(path string, metadata *extractor.Project
 			continue
 		}
 
-		// Extract dependencies from standalone lines within Seq block
 		if inLibraryDependencies {
 			if matches := standaloneDependencyRegex.FindStringSubmatch(line); matches != nil {
 				dep := fmt.Sprintf("%s:%s:%s", matches[1], matches[2], matches[3])
 				dependencies = append(dependencies, dep)
 			}
-			// Update parenthesis depth for this line
 			parenDepth += strings.Count(line, "(") - strings.Count(line, ")")
 			// End of Seq block when we've closed all parentheses
 			if parenDepth <= 0 {
@@ -301,7 +296,6 @@ func (e *Extractor) extractFromMill(path string, metadata *extractor.ProjectMeta
 
 // generateScalaVersionMatrix generates a matrix of compatible Scala versions
 func generateScalaVersionMatrix(version string) []string {
-	// Parse major.minor from version
 	parts := strings.Split(version, ".")
 	if len(parts) < 2 {
 		return []string{version}

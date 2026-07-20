@@ -206,7 +206,6 @@ func (e *MavenExtractor) Extract(projectPath string) (*extractor.ProjectMetadata
 		LanguageSpecific: make(map[string]interface{}),
 	}
 
-	// Parse pom.xml
 	pomPath := filepath.Join(projectPath, "pom.xml")
 	if _, err := os.Stat(pomPath); err != nil {
 		return nil, fmt.Errorf("pom.xml not found in %s", projectPath)
@@ -234,7 +233,6 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	// Resolve properties
 	resolvedPOM := e.resolveProperties(&pom)
 
-	// Extract common metadata
 	metadata.Name = resolvedPOM.ArtifactID
 	if resolvedPOM.Name != "" {
 		metadata.Name = resolvedPOM.Name
@@ -244,12 +242,10 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	metadata.Homepage = resolvedPOM.URL
 	metadata.VersionSource = "pom.xml"
 
-	// Extract license
 	if resolvedPOM.Licenses != nil && len(resolvedPOM.Licenses.License) > 0 {
 		metadata.License = resolvedPOM.Licenses.License[0].Name
 	}
 
-	// Extract developers/authors
 	authors := make([]string, 0)
 	if resolvedPOM.Developers != nil {
 		for _, dev := range resolvedPOM.Developers.Developer {
@@ -264,7 +260,6 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	}
 	metadata.Authors = authors
 
-	// Extract SCM/repository
 	if resolvedPOM.SCM != nil && resolvedPOM.SCM.URL != "" {
 		metadata.Repository = resolvedPOM.SCM.URL
 	}
@@ -349,7 +344,6 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 		metadata.LanguageSpecific["dependency_scopes"] = scopeCounts
 	}
 
-	// Build plugins
 	if resolvedPOM.Build != nil && resolvedPOM.Build.Plugins != nil {
 		plugins := make([]string, 0, len(resolvedPOM.Build.Plugins.Plugin))
 		for _, plugin := range resolvedPOM.Build.Plugins.Plugin {
@@ -411,7 +405,6 @@ func (e *MavenExtractor) resolveProperties(pom *POM) *POM {
 	// Create a copy to avoid modifying the original
 	resolved := *pom
 
-	// Build property map
 	props := make(map[string]string)
 	if pom.Properties.Entries != nil {
 		for k, v := range pom.Properties.Entries {
@@ -459,7 +452,6 @@ func detectMavenFrameworks(plugins []Plugin, deps *Dependencies) []string {
 	frameworks := make([]string, 0)
 	seen := make(map[string]bool)
 
-	// Check plugins
 	for _, plugin := range plugins {
 		framework := ""
 		switch {
@@ -481,7 +473,6 @@ func detectMavenFrameworks(plugins []Plugin, deps *Dependencies) []string {
 		}
 	}
 
-	// Check dependencies
 	if deps != nil {
 		for _, dep := range deps.Dependency {
 			framework := ""

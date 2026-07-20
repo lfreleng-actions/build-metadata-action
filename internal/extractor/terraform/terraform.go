@@ -69,7 +69,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		Resources:         make([]Resource, 0),
 	}
 
-	// Parse all .tf files
 	files, err := filepath.Glob(filepath.Join(projectPath, "*.tf"))
 	if err != nil || len(files) == 0 {
 		return nil, fmt.Errorf("no Terraform files found in %s", projectPath)
@@ -82,7 +81,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Check for OpenTofu-specific files
 	openTofuFiles := []string{
 		filepath.Join(projectPath, ".opentofu"),
 		filepath.Join(projectPath, ".terraform-version"),
@@ -97,7 +95,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Extract metadata
 	e.populateMetadata(config, metadata, projectPath)
 
 	return metadata, nil
@@ -118,7 +115,6 @@ func (e *Extractor) parseFile(path string, config *TerraformConfig) error {
 		return e.parseWithRegex(string(content), config)
 	}
 
-	// Extract terraform block
 	if file != nil && file.Body != nil {
 		schema := &hcl.BodySchema{
 			Blocks: []hcl.BlockHeaderSchema{
@@ -162,21 +158,17 @@ func (e *Extractor) parseTerraformBlock(block *hcl.Block, config *TerraformConfi
 
 	content, _, _ := block.Body.PartialContent(schema)
 	if content != nil {
-		// Extract required_version
 		if attr, exists := content.Attributes["required_version"]; exists {
 			val, _ := attr.Expr.Value(nil)
 			config.RequiredVersion = strings.Trim(val.AsString(), `"`)
 		}
 
-		// Extract required_providers
 		for _, innerBlock := range content.Blocks {
 			if innerBlock.Type == "required_providers" {
 				attrs, _ := innerBlock.Body.JustAttributes()
 				for name, attr := range attrs {
 					val, _ := attr.Expr.Value(nil)
-					// Handle both string and object syntax
 					if val.Type().IsObjectType() {
-						// Parse object attributes
 						config.RequiredProviders[name] = ProviderRequirement{}
 					} else {
 						config.RequiredProviders[name] = ProviderRequirement{
@@ -232,18 +224,15 @@ func (e *Extractor) parseResourceBlock(block *hcl.Block, config *TerraformConfig
 
 // parseWithRegex uses regex patterns as a fallback parser
 func (e *Extractor) parseWithRegex(content string, config *TerraformConfig) error {
-	// Check for OpenTofu in comments
 	if strings.Contains(content, "OpenTofu") || strings.Contains(content, "opentofu") {
 		config.IsOpenTofu = true
 	}
 
-	// Extract required_version
 	versionRe := regexp.MustCompile(`required_version\s*=\s*"([^"]+)"`)
 	if matches := versionRe.FindStringSubmatch(content); len(matches) > 1 {
 		config.RequiredVersion = matches[1]
 	}
 
-	// Extract required_providers
 	providerBlockRe := regexp.MustCompile(`required_providers\s*{([^}]+)}`)
 	if matches := providerBlockRe.FindStringSubmatch(content); len(matches) > 1 {
 		providerContent := matches[1]
@@ -268,13 +257,11 @@ func (e *Extractor) parseWithRegex(content string, config *TerraformConfig) erro
 		}
 	}
 
-	// Extract backend
 	backendRe := regexp.MustCompile(`backend\s+"(\w+)"\s*{`)
 	if matches := backendRe.FindStringSubmatch(content); len(matches) > 1 {
 		config.Backend = matches[1]
 	}
 
-	// Extract modules
 	moduleRe := regexp.MustCompile(`module\s+"([^"]+)"\s*{([^}]+)}`)
 	for _, match := range moduleRe.FindAllStringSubmatch(content, -1) {
 		if len(match) > 2 {
@@ -386,7 +373,6 @@ func (e *Extractor) populateMetadata(config *TerraformConfig, metadata *extracto
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for any .tf files
 	files, err := filepath.Glob(filepath.Join(projectPath, "*.tf"))
 	return err == nil && len(files) > 0
 }
@@ -397,7 +383,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generateTerraformVersionMatrix(requiredVersion string) []string {
 	versions := []string{}
 
-	// Parse common version constraints
 	minVersion := ""
 	if strings.Contains(requiredVersion, ">=") {
 		re := regexp.MustCompile(`>=\s*(\d+\.\d+)`)

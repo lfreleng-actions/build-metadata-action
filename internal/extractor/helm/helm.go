@@ -94,14 +94,12 @@ func (e *Extractor) extractFromChartYAML(path string, metadata *extractor.Projec
 		return fmt.Errorf("failed to parse Chart.yaml: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = chart.Name
 	metadata.Version = chart.Version
 	metadata.Description = chart.Description
 	metadata.Homepage = chart.Home
 	metadata.VersionSource = "Chart.yaml"
 
-	// Extract maintainers as authors
 	authors := make([]string, 0, len(chart.Maintainers))
 	for _, maintainer := range chart.Maintainers {
 		if maintainer.Name != "" {
@@ -144,7 +142,6 @@ func (e *Extractor) extractFromChartYAML(path string, metadata *extractor.Projec
 		metadata.LanguageSpecific["annotations"] = chart.Annotations
 	}
 
-	// Extract dependencies
 	if len(chart.Dependencies) > 0 {
 		deps := make([]map[string]interface{}, 0, len(chart.Dependencies))
 		for _, dep := range chart.Dependencies {
@@ -191,7 +188,6 @@ func (e *Extractor) extractFromChartYAML(path string, metadata *extractor.Projec
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Chart.yaml
 	chartPath := filepath.Join(projectPath, "Chart.yaml")
 	if _, err := os.Stat(chartPath); err == nil {
 		return true
@@ -209,18 +205,15 @@ func generateKubernetesVersionMatrix(kubeVersion string) []string {
 	// Parse common version constraints
 	// Examples: ">=1.19.0", ">=1.20.0-0", "^1.20.0", "~1.20.0"
 
-	// Extract minimum version
 	minVersion := ""
 	if strings.Contains(kubeVersion, ">=") {
 		// Extract version after >=
 		parts := strings.Split(kubeVersion, ">=")
 		if len(parts) > 1 {
 			version := strings.TrimSpace(parts[1])
-			// Remove any trailing conditions
 			if idx := strings.IndexAny(version, " ,<"); idx != -1 {
 				version = version[:idx]
 			}
-			// Extract major.minor
 			versionParts := strings.Split(version, ".")
 			if len(versionParts) >= 2 {
 				minVersion = versionParts[0] + "." + versionParts[1]

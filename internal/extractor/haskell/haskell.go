@@ -31,13 +31,11 @@ func init() {
 
 // Detect checks if this is a Haskell project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for .cabal file
 	matches, err := filepath.Glob(filepath.Join(projectPath, "*.cabal"))
 	if err == nil && len(matches) > 0 {
 		return true
 	}
 
-	// Check for stack.yaml
 	if _, err := os.Stat(filepath.Join(projectPath, "stack.yaml")); err == nil {
 		return true
 	}
@@ -47,12 +45,10 @@ func (e *Extractor) Detect(projectPath string) bool {
 		return true
 	}
 
-	// Check for cabal.project
 	if _, err := os.Stat(filepath.Join(projectPath, "cabal.project")); err == nil {
 		return true
 	}
 
-	// Check for Haskell source files
 	srcDir := filepath.Join(projectPath, "src")
 	if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
 		matches, err := filepath.Glob(filepath.Join(srcDir, "*.hs"))
@@ -78,7 +74,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Check for Stack
 	stackPath := filepath.Join(projectPath, "stack.yaml")
 	if _, err := os.Stat(stackPath); err == nil {
 		e.extractFromStack(stackPath, metadata)
@@ -284,7 +279,6 @@ func (e *Extractor) extractFromPackageYaml(path string, metadata *extractor.Proj
 func parseDependencies(line string) []string {
 	var deps []string
 
-	// Remove trailing comma
 	line = strings.TrimSuffix(line, ",")
 
 	// Split by comma
@@ -341,6 +335,5 @@ func extractGHCVersionFromResolver(resolver string) string {
 
 // generateGHCVersionMatrix generates a matrix of GHC versions
 func generateGHCVersionMatrix(ghcVersion string) []string {
-	// Return common GHC versions for testing
 	return []string{"9.4", "9.6", "9.8"}
 }

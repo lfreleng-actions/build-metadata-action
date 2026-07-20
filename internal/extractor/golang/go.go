@@ -87,7 +87,6 @@ func (e *Extractor) extractFromGoMod(path string, metadata *extractor.ProjectMet
 		metadata.LanguageSpecific["base_name"] = baseName
 	}
 
-	// Extract repository URL from module path
 	if strings.HasPrefix(goMod.Module, "github.com/") ||
 		strings.HasPrefix(goMod.Module, "gitlab.com/") ||
 		strings.HasPrefix(goMod.Module, "bitbucket.org/") {
@@ -104,7 +103,6 @@ func (e *Extractor) extractFromGoMod(path string, metadata *extractor.ProjectMet
 		metadata.LanguageSpecific["toolchain"] = goMod.Toolchain
 	}
 
-	// Extract dependencies
 	if len(goMod.Require) > 0 {
 		directDeps := []string{}
 		indirectDeps := []string{}
@@ -126,7 +124,6 @@ func (e *Extractor) extractFromGoMod(path string, metadata *extractor.ProjectMet
 		metadata.LanguageSpecific["dependency_map"] = depMap
 	}
 
-	// Extract replace directives
 	if len(goMod.Replace) > 0 {
 		replaces := make([]map[string]string, 0, len(goMod.Replace))
 		for _, r := range goMod.Replace {
@@ -139,13 +136,11 @@ func (e *Extractor) extractFromGoMod(path string, metadata *extractor.ProjectMet
 		metadata.LanguageSpecific["replace_count"] = len(goMod.Replace)
 	}
 
-	// Extract exclude directives
 	if len(goMod.Exclude) > 0 {
 		metadata.LanguageSpecific["exclude_directives"] = goMod.Exclude
 		metadata.LanguageSpecific["exclude_count"] = len(goMod.Exclude)
 	}
 
-	// Extract retract directives
 	if len(goMod.Retract) > 0 {
 		metadata.LanguageSpecific["retract_directives"] = goMod.Retract
 		metadata.LanguageSpecific["retract_count"] = len(goMod.Retract)
@@ -224,9 +219,7 @@ func parseGoMod(path string) (*GoMod, error) {
 			continue
 		}
 
-		// Handle block closing
 		if inBlock != "" && line == ")" {
-			// Process accumulated block lines
 			switch inBlock {
 			case "require":
 				goMod.Require = append(goMod.Require, parseRequireBlock(blockLines)...)
@@ -248,7 +241,6 @@ func parseGoMod(path string) (*GoMod, error) {
 			continue
 		}
 
-		// Parse single-line directives
 		if matches := moduleRe.FindStringSubmatch(line); len(matches) > 1 {
 			goMod.Module = strings.TrimSpace(matches[1])
 			continue
@@ -264,7 +256,6 @@ func parseGoMod(path string) (*GoMod, error) {
 			continue
 		}
 
-		// Check for block start
 		if matches := requireRe.FindStringSubmatch(line); len(matches) > 1 {
 			rest := strings.TrimSpace(matches[1])
 			if rest == "(" {
@@ -318,7 +309,6 @@ func parseGoMod(path string) (*GoMod, error) {
 		return nil, err
 	}
 
-	// Build dependency map
 	for _, dep := range goMod.Require {
 		goMod.Dependencies[dep.Module] = dep.Version
 	}
@@ -339,7 +329,6 @@ func parseRequireBlock(lines []string) []Dependency {
 
 // parseRequireLine parses a single require line
 func parseRequireLine(line string) Dependency {
-	// Remove inline comments
 	if idx := strings.Index(line, "//"); idx != -1 {
 		comment := strings.TrimSpace(line[idx+2:])
 		line = strings.TrimSpace(line[:idx])
@@ -506,7 +495,6 @@ func extractVersionFromProject(projectPath string) string {
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for go.mod
 	if _, err := os.Stat(filepath.Join(projectPath, "go.mod")); err == nil {
 		return true
 	}

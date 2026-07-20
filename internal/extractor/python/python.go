@@ -115,7 +115,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		setupPyExists = true
 	}
 
-	// Build diagnostic message about which files were found
 	filesFound := []string{}
 	filesNotFound := []string{}
 
@@ -233,7 +232,6 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		return fmt.Errorf("failed to read pyproject.toml: %w", readErr)
 	}
 
-	// Check for common corruption patterns BEFORE parsing
 	fileContentStr := string(fileContent)
 
 	// Detect unquoted version value (invalid TOML syntax)
@@ -252,7 +250,6 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		// Check if the error message indicates common issues
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "expected") || strings.Contains(errMsg, "invalid") {
-			// Log problematic content around the error
 			fmt.Fprintf(os.Stderr, "[ERROR] TOML parsing failed for %s\n", path)
 			fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 			// Show first 500 chars of file for debugging
@@ -266,7 +263,6 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		return fmt.Errorf("TOML parsing failed: %w", err)
 	}
 
-	// Validate parsed data
 	if pyproject.Project.Name == "" {
 		fmt.Fprintf(os.Stderr, "[WARNING] pyproject.toml parsed successfully but [project].name is empty\n")
 	}
@@ -286,12 +282,10 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		}
 	}
 
-	// Extract common metadata
 	metadata.Name = pyproject.Project.Name
 	metadata.Version = pyproject.Project.Version
 	metadata.Description = pyproject.Project.Description
 
-	// Handle license - can be string or table format per PEP 621
 	if pyproject.Project.License != nil {
 		switch license := pyproject.Project.License.(type) {
 		case string:
@@ -308,7 +302,6 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 
 	metadata.VersionSource = "pyproject.toml"
 
-	// Extract authors
 	authors := make([]string, 0, len(pyproject.Project.Authors))
 	for _, author := range pyproject.Project.Authors {
 		if author.Name != "" {
@@ -321,7 +314,6 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 	}
 	metadata.Authors = authors
 
-	// Extract URLs
 	if len(pyproject.Project.URLs) > 0 {
 		for key, value := range pyproject.Project.URLs {
 			lowerKey := strings.ToLower(key)
@@ -364,14 +356,12 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		metadata.LanguageSpecific["versioning_type"] = "static"
 	}
 
-	// Extract dependencies
 	if len(pyproject.Project.Dependencies) > 0 {
 		metadata.LanguageSpecific["dependencies"] = pyproject.Project.Dependencies
 		metadata.LanguageSpecific["dependency_count"] = len(pyproject.Project.Dependencies)
 		metadata.LanguageSpecific["dependencies_source"] = "pyproject.toml"
 	}
 
-	// Extract tool-specific configurations
 	poetryPythonConstraint := ""
 	if pyproject.Tool != nil {
 		// Poetry
@@ -594,7 +584,6 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 
 	text := string(content)
 
-	// Extract common fields using regex
 	metadata.Name = extractSetupPyField(text, "name")
 	metadata.Version = extractSetupPyField(text, "version")
 	metadata.Description = extractSetupPyField(text, "description")
@@ -602,7 +591,6 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 	metadata.Homepage = extractSetupPyField(text, "url")
 	metadata.VersionSource = "setup.py"
 
-	// Extract author
 	if author := extractSetupPyField(text, "author"); author != "" {
 		email := extractSetupPyField(text, "author_email")
 		if email != "" {
@@ -670,17 +658,14 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for pyproject.toml
 	if _, err := os.Stat(filepath.Join(projectPath, "pyproject.toml")); err == nil {
 		return true
 	}
 
-	// Check for setup.cfg
 	if _, err := os.Stat(filepath.Join(projectPath, "setup.cfg")); err == nil {
 		return true
 	}
 
-	// Check for setup.py
 	if _, err := os.Stat(filepath.Join(projectPath, "setup.py")); err == nil {
 		return true
 	}
@@ -1115,6 +1100,7 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 	}
 
 	policy := ActivePolicy()
+	// aislop-ignore-next-line ai-slop/swallowed-exception -- second return is a matrixStatus enum, not an error; the empty constraint always yields the full supported set
 	fallback, _ := generatePythonVersionMatrix("", policy.SupportedSet)
 	if len(fallback) == 0 {
 		return

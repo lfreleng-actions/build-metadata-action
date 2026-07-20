@@ -121,7 +121,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		return fmt.Errorf("failed to parse composer.json: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = composer.Name
 	metadata.Version = composer.Version
 	metadata.Description = composer.Description
@@ -146,7 +145,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		}
 	}
 
-	// Extract authors
 	authors := make([]string, 0, len(composer.Authors))
 	for _, author := range composer.Authors {
 		if author.Name != "" {
@@ -159,7 +157,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 	}
 	metadata.Authors = authors
 
-	// Extract repository from support
 	if composer.Support.Source != "" {
 		metadata.Repository = composer.Support.Source
 	}
@@ -173,7 +170,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		metadata.LanguageSpecific["keywords"] = composer.Keywords
 	}
 
-	// Extract PHP version requirement
 	if phpVersion, ok := composer.Require["php"]; ok {
 		metadata.LanguageSpecific["requires_php"] = phpVersion
 
@@ -187,7 +183,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		}
 	}
 
-	// Extract dependencies
 	if len(composer.Require) > 0 {
 		deps := make(map[string]string)
 		for pkg, version := range composer.Require {
@@ -201,13 +196,11 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		}
 	}
 
-	// Extract dev dependencies
 	if len(composer.RequireDev) > 0 {
 		metadata.LanguageSpecific["dev_dependencies"] = composer.RequireDev
 		metadata.LanguageSpecific["dev_dependency_count"] = len(composer.RequireDev)
 	}
 
-	// Extract PHP extensions
 	extensions := make([]string, 0)
 	for pkg := range composer.Require {
 		if strings.HasPrefix(pkg, "ext-") {
@@ -299,7 +292,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for composer.json
 	composerPath := filepath.Join(projectPath, "composer.json")
 	if _, err := os.Stat(composerPath); err == nil {
 		return true
@@ -314,10 +306,8 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generatePHPVersionMatrix(phpVersion string) []string {
 	versions := []string{}
 
-	// Clean up the version string
 	phpVersion = strings.TrimSpace(phpVersion)
 
-	// Extract minimum version
 	minVersion := ""
 
 	// Handle >= constraints

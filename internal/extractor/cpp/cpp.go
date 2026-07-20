@@ -46,7 +46,6 @@ type CMakeProject struct {
 
 // Detect checks if this is a C++ project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for CMakeLists.txt
 	if _, err := os.Stat(filepath.Join(projectPath, "CMakeLists.txt")); err == nil {
 		return true
 	}
@@ -56,7 +55,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		return true
 	}
 
-	// Check for Makefile
 	if _, err := os.Stat(filepath.Join(projectPath, "Makefile")); err == nil {
 		return true
 	}
@@ -66,12 +64,10 @@ func (e *Extractor) Detect(projectPath string) bool {
 		return true
 	}
 
-	// Check for meson.build
 	if _, err := os.Stat(filepath.Join(projectPath, "meson.build")); err == nil {
 		return true
 	}
 
-	// Check for common C++ source files
 	patterns := []string{"*.cpp", "*.cc", "*.cxx", "*.hpp", "*.hxx", "*.h"}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(projectPath, pattern))
@@ -80,7 +76,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check in src/ or include/ directories
 	srcDir := filepath.Join(projectPath, "src")
 	if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
 		for _, pattern := range patterns {
@@ -172,7 +167,6 @@ func (e *Extractor) extractFromCMake(path string, metadata *extractor.ProjectMet
 			continue
 		}
 
-		// Extract project info
 		if matches := projectRegex.FindStringSubmatch(line); matches != nil {
 			metadata.Name = matches[1]
 			if len(matches) > 2 && matches[2] != "" {
@@ -184,27 +178,22 @@ func (e *Extractor) extractFromCMake(path string, metadata *extractor.ProjectMet
 			}
 		}
 
-		// Extract C++ standard
 		if matches := cxxStandardRegex.FindStringSubmatch(line); matches != nil {
 			metadata.LanguageSpecific["cxx_standard"] = matches[1]
 		}
 
-		// Extract C standard
 		if matches := cStandardRegex.FindStringSubmatch(line); matches != nil {
 			metadata.LanguageSpecific["c_standard"] = matches[1]
 		}
 
-		// Extract executables
 		if matches := addExecutableRegex.FindStringSubmatch(line); matches != nil {
 			executables = append(executables, matches[1])
 		}
 
-		// Extract libraries
 		if matches := addLibraryRegex.FindStringSubmatch(line); matches != nil {
 			libraries = append(libraries, matches[1])
 		}
 
-		// Extract dependencies
 		if matches := findPackageRegex.FindStringSubmatch(line); matches != nil {
 			dependencies = append(dependencies, matches[1])
 		}
@@ -246,7 +235,6 @@ func (e *Extractor) extractFromQmake(path string, metadata *extractor.ProjectMet
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		// Check for MODULE_VERSION
 		if matches := moduleVersionRegex.FindStringSubmatch(line); len(matches) > 1 {
 			metadata.Version = matches[1]
 			metadata.VersionSource = ".qmake.conf"
@@ -327,7 +315,6 @@ func (e *Extractor) extractFromMeson(path string, metadata *extractor.ProjectMet
 	var libraries []string
 	var dependencies []string
 
-	// Extract project name
 	if matches := projectNameRegex.FindStringSubmatch(fileContent); matches != nil {
 		metadata.Name = matches[1]
 	}
@@ -338,7 +325,6 @@ func (e *Extractor) extractFromMeson(path string, metadata *extractor.ProjectMet
 		metadata.VersionSource = "meson.build"
 	}
 
-	// Extract executables
 	execMatches := executableRegex.FindAllStringSubmatch(fileContent, -1)
 	for _, match := range execMatches {
 		if len(match) > 1 {
@@ -346,7 +332,6 @@ func (e *Extractor) extractFromMeson(path string, metadata *extractor.ProjectMet
 		}
 	}
 
-	// Extract libraries
 	libMatches := libraryRegex.FindAllStringSubmatch(fileContent, -1)
 	for _, match := range libMatches {
 		if len(match) > 1 {
@@ -354,7 +339,6 @@ func (e *Extractor) extractFromMeson(path string, metadata *extractor.ProjectMet
 		}
 	}
 
-	// Extract dependencies
 	depMatches := dependencyRegex.FindAllStringSubmatch(fileContent, -1)
 	for _, match := range depMatches {
 		if len(match) > 1 {
@@ -409,7 +393,6 @@ func (e *Extractor) extractFromAutotools(path string, metadata *extractor.Projec
 
 		if matches := pkgCheckRegex.FindStringSubmatch(line); matches != nil {
 			dep := strings.TrimSpace(matches[1])
-			// Remove version constraints
 			dep = strings.Split(dep, " ")[0]
 			dependencies = append(dependencies, dep)
 		}

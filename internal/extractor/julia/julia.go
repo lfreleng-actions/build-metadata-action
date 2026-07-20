@@ -41,7 +41,6 @@ type ProjectToml struct {
 
 // Detect checks if this is a Julia project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Project.toml
 	if _, err := os.Stat(filepath.Join(projectPath, "Project.toml")); err == nil {
 		return true
 	}
@@ -56,7 +55,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		return true
 	}
 
-	// Check for src/ directory with .jl files
 	srcDir := filepath.Join(projectPath, "src")
 	if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
 		matches, err := filepath.Glob(filepath.Join(srcDir, "*.jl"))
@@ -65,7 +63,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for .jl files in root
 	matches, err := filepath.Glob(filepath.Join(projectPath, "*.jl"))
 	if err == nil && len(matches) > 0 {
 		return true
@@ -96,7 +93,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Check for Manifest.toml
 	manifestPath := filepath.Join(projectPath, "Manifest.toml")
 	if _, err := os.Stat(manifestPath); err == nil {
 		metadata.LanguageSpecific["has_manifest"] = true
@@ -114,7 +110,6 @@ func (e *Extractor) extractFromProjectToml(path string, metadata *extractor.Proj
 		return err
 	}
 
-	// Extract basic metadata
 	if project.Name != "" {
 		metadata.Name = project.Name
 	}
@@ -132,7 +127,6 @@ func (e *Extractor) extractFromProjectToml(path string, metadata *extractor.Proj
 		metadata.LanguageSpecific["uuid"] = project.UUID
 	}
 
-	// Extract dependencies
 	if len(project.Deps) > 0 {
 		var dependencies []string
 		for dep := range project.Deps {
@@ -142,7 +136,6 @@ func (e *Extractor) extractFromProjectToml(path string, metadata *extractor.Proj
 		metadata.LanguageSpecific["dependency_count"] = len(dependencies)
 	}
 
-	// Extract Julia version compatibility
 	if juliaCompat, ok := project.Compat["julia"]; ok {
 		metadata.LanguageSpecific["julia_version"] = juliaCompat
 
@@ -153,7 +146,6 @@ func (e *Extractor) extractFromProjectToml(path string, metadata *extractor.Proj
 		}
 	}
 
-	// Extract other compatibility info
 	if len(project.Compat) > 0 {
 		compat := make(map[string]string)
 		for pkg, version := range project.Compat {
@@ -186,19 +178,16 @@ func (e *Extractor) detectPackageType(projectPath string, metadata *extractor.Pr
 		}
 	}
 
-	// Check for test/ directory
 	testDir := filepath.Join(projectPath, "test")
 	if info, err := os.Stat(testDir); err == nil && info.IsDir() {
 		metadata.LanguageSpecific["has_tests"] = true
 	}
 
-	// Check for docs/ directory
 	docsDir := filepath.Join(projectPath, "docs")
 	if info, err := os.Stat(docsDir); err == nil && info.IsDir() {
 		metadata.LanguageSpecific["has_docs"] = true
 	}
 
-	// Check for notebooks
 	notebooks, _ := filepath.Glob(filepath.Join(projectPath, "*.ipynb"))
 	if len(notebooks) > 0 {
 		metadata.LanguageSpecific["has_notebooks"] = true
@@ -208,10 +197,8 @@ func (e *Extractor) detectPackageType(projectPath string, metadata *extractor.Pr
 
 // generateJuliaVersionMatrix generates a matrix of Julia versions
 func generateJuliaVersionMatrix(versionSpec string) []string {
-	// Remove spaces
 	versionSpec = strings.ReplaceAll(versionSpec, " ", "")
 
-	// Parse version specification
 	if strings.HasPrefix(versionSpec, "^") {
 		// Caret notation: ^1.9 means >=1.9.0, <2.0.0
 		version := strings.TrimPrefix(versionSpec, "^")

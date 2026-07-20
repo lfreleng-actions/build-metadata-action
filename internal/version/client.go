@@ -36,7 +36,6 @@ func ExtractVersion(projectPath, projectType string) (*VersionInfo, error) {
 
 // extractWithTool uses the version-extract-action tool to extract version
 func extractWithTool(projectPath, projectType, toolPath string) (*VersionInfo, error) {
-	// Execute the version-extract-action binary
 	cmd := exec.Command(toolPath, "--path", projectPath, "--type", projectType, "--format", "json")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -368,7 +367,6 @@ func extractRustVersion(projectPath string) (*VersionInfo, error) {
 				parts := strings.SplitN(line, "=", 2)
 				if len(parts) == 2 {
 					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					// Validate that it's not a boolean or invalid value
 					if version != "true" && version != "false" && version != "" {
 						isDynamic := version == "0.0.0" || version == "0.1.0-dev"
 						return &VersionInfo{

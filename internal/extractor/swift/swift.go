@@ -104,25 +104,18 @@ func (e *Extractor) parsePackageSwift(path string) (*PackageManifest, error) {
 		Targets:      make([]Target, 0),
 	}
 
-	// Extract package name
 	manifest.Name = e.extractPackageName(text)
 
-	// Extract Swift tools version
 	manifest.SwiftVersion = e.extractSwiftToolsVersion(text)
 
-	// Extract platforms
 	manifest.Platforms = e.extractPlatforms(text)
 
-	// Extract products
 	manifest.Products = e.extractProducts(text)
 
-	// Extract dependencies
 	manifest.Dependencies = e.extractDependencies(text)
 
-	// Extract targets
 	manifest.Targets = e.extractTargets(text)
 
-	// Extract language standards
 	manifest.CLanguageStd = e.extractFieldValue(text, "cLanguageStandard")
 	manifest.CXXLanguageStd = e.extractFieldValue(text, "cxxLanguageStandard")
 
@@ -165,7 +158,6 @@ func (e *Extractor) extractPlatforms(text string) []Platform {
 	if matches := re.FindStringSubmatch(text); len(matches) > 1 {
 		platformsText := matches[1]
 
-		// Extract individual platforms
 		platformRe := regexp.MustCompile(`\.(\w+)\(\.(v\d+(?:_\d+)?)\)`)
 		for _, match := range platformRe.FindAllStringSubmatch(platformsText, -1) {
 			if len(match) > 2 {
@@ -189,7 +181,6 @@ func (e *Extractor) extractProducts(text string) []Product {
 	if matches := re.FindStringSubmatch(text); len(matches) > 1 {
 		productsText := matches[1]
 
-		// Extract library products
 		libRe := regexp.MustCompile(`\.library\(\s*name:\s*"([^"]+)".*?targets:\s*\[([^\]]+)\]`)
 		for _, match := range libRe.FindAllStringSubmatch(productsText, -1) {
 			if len(match) > 2 {
@@ -202,7 +193,6 @@ func (e *Extractor) extractProducts(text string) []Product {
 			}
 		}
 
-		// Extract executable products
 		execRe := regexp.MustCompile(`\.executable\(\s*name:\s*"([^"]+)".*?targets:\s*\[([^\]]+)\]`)
 		for _, match := range execRe.FindAllStringSubmatch(productsText, -1) {
 			if len(match) > 2 {
@@ -215,7 +205,6 @@ func (e *Extractor) extractProducts(text string) []Product {
 			}
 		}
 
-		// Extract plugin products
 		pluginRe := regexp.MustCompile(`\.plugin\(\s*name:\s*"([^"]+)".*?targets:\s*\[([^\]]+)\]`)
 		for _, match := range pluginRe.FindAllStringSubmatch(productsText, -1) {
 			if len(match) > 2 {
@@ -241,7 +230,6 @@ func (e *Extractor) extractDependencies(text string) []Dependency {
 	if matches := re.FindStringSubmatch(text); len(matches) > 1 {
 		depsText := matches[1]
 
-		// Extract package dependencies with URL
 		urlRe := regexp.MustCompile(`\.package\(\s*url:\s*"([^"]+)"`)
 		urls := urlRe.FindAllStringSubmatch(depsText, -1)
 
@@ -262,19 +250,16 @@ func (e *Extractor) extractDependencies(text string) []Dependency {
 					dep.Version = ">=" + versionMatch[1]
 				}
 
-				// Check for exact version
 				exactRe := regexp.MustCompile(`exact:\s*"([^"]+)"`)
 				if exactMatch := exactRe.FindStringSubmatch(depsText); len(exactMatch) > 1 {
 					dep.Version = exactMatch[1]
 				}
 
-				// Check for branch
 				branchRe := regexp.MustCompile(`branch:\s*"([^"]+)"`)
 				if branchMatch := branchRe.FindStringSubmatch(depsText); len(branchMatch) > 1 {
 					dep.Branch = branchMatch[1]
 				}
 
-				// Check for revision
 				revisionRe := regexp.MustCompile(`revision:\s*"([^"]+)"`)
 				if revisionMatch := revisionRe.FindStringSubmatch(depsText); len(revisionMatch) > 1 {
 					dep.Commit = revisionMatch[1]
@@ -297,7 +282,6 @@ func (e *Extractor) extractTargets(text string) []Target {
 	if matches := re.FindStringSubmatch(text); len(matches) > 1 {
 		targetsText := matches[1]
 
-		// Extract regular targets
 		targetRe := regexp.MustCompile(`\.target\(\s*name:\s*"([^"]+)"`)
 		for _, match := range targetRe.FindAllStringSubmatch(targetsText, -1) {
 			if len(match) > 1 {
@@ -308,7 +292,6 @@ func (e *Extractor) extractTargets(text string) []Target {
 			}
 		}
 
-		// Extract test targets
 		testRe := regexp.MustCompile(`\.testTarget\(\s*name:\s*"([^"]+)"`)
 		for _, match := range testRe.FindAllStringSubmatch(targetsText, -1) {
 			if len(match) > 1 {
@@ -319,7 +302,6 @@ func (e *Extractor) extractTargets(text string) []Target {
 			}
 		}
 
-		// Extract binary targets
 		binaryRe := regexp.MustCompile(`\.binaryTarget\(\s*name:\s*"([^"]+)"`)
 		for _, match := range binaryRe.FindAllStringSubmatch(targetsText, -1) {
 			if len(match) > 1 {
@@ -357,10 +339,8 @@ func (e *Extractor) parseStringArray(text string) []string {
 
 // extractNameFromURL extracts a package name from a Git URL
 func (e *Extractor) extractNameFromURL(url string) string {
-	// Remove .git suffix
 	url = strings.TrimSuffix(url, ".git")
 
-	// Get the last path component
 	parts := strings.Split(url, "/")
 	if len(parts) > 0 {
 		return parts[len(parts)-1]
@@ -371,7 +351,6 @@ func (e *Extractor) extractNameFromURL(url string) string {
 
 // populateMetadata converts PackageManifest to ProjectMetadata
 func (e *Extractor) populateMetadata(manifest *PackageManifest, metadata *extractor.ProjectMetadata, projectPath string) {
-	// Extract common metadata
 	metadata.Name = manifest.Name
 	metadata.VersionSource = "Package.swift"
 
@@ -508,7 +487,6 @@ func (e *Extractor) populateMetadata(manifest *PackageManifest, metadata *extrac
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Package.swift
 	packagePath := filepath.Join(projectPath, "Package.swift")
 	if _, err := os.Stat(packagePath); err == nil {
 		return true
@@ -523,7 +501,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generateSwiftVersionMatrix(toolsVersion string) []string {
 	versions := []string{}
 
-	// Parse the tools version
 	parts := strings.Split(toolsVersion, ".")
 	if len(parts) < 2 {
 		return []string{"5.9", "5.10"}

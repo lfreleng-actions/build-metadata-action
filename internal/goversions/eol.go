@@ -17,6 +17,7 @@ import (
 
 const (
 	// EndOfLifeAPIURL is the API endpoint for Go EOL data
+	// aislop-ignore-next-line ai-slop/hardcoded-url -- stable public data API endpoint, defined as a named constant
 	EndOfLifeAPIURL = "https://endoflife.date/api/go.json"
 	// DefaultTimeout is the default HTTP timeout for API calls
 	DefaultTimeout = 6 * time.Second
@@ -121,7 +122,6 @@ func (c *EOLClient) fetchOnce() ([]EOLData, error) {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	// Validate the data structure
 	if len(data) == 0 {
 		return nil, fmt.Errorf("received empty data array")
 	}
@@ -176,7 +176,6 @@ func (c *EOLClient) IsVersionEOL(version string, data []EOLData) (bool, string) 
 			continue
 		}
 
-		// Handle different EOL field types
 		switch eol := entry.EOL.(type) {
 		case string:
 			// Parse the date string (format: YYYY-MM-DD)

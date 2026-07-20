@@ -77,7 +77,6 @@ func detectGitHubRepository(projectPath string) (*RepositoryInfo, error) {
 		return nil, fmt.Errorf("no git remotes found")
 	}
 
-	// Parse GitHub URL
 	return parseGitHubURL(gitURL)
 }
 
@@ -170,7 +169,6 @@ func detectGerritRepository(projectPath string) (*RepositoryInfo, error) {
 
 // detectLocalRepository creates repository info from local directory name
 func detectLocalRepository(projectPath string) *RepositoryInfo {
-	// Get the directory name
 	dirName := filepath.Base(projectPath)
 
 	return &RepositoryInfo{

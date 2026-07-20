@@ -63,7 +63,6 @@ func (v *YAMLValidator) MarshalAndValidate(data interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("YAML marshal failed: %w", err)
 	}
 
-	// Validate
 	if err := v.Validate(yamlBytes); err != nil {
 		return nil, err
 	}

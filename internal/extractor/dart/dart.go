@@ -128,7 +128,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 		return fmt.Errorf("failed to parse pubspec.yaml: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = pubspec.Name
 	metadata.Version = pubspec.Version
 	metadata.Description = pubspec.Description
@@ -151,7 +150,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 		metadata.LanguageSpecific["framework"] = "Dart"
 	}
 
-	// Extract SDK constraints
 	if pubspec.Environment.SDK != "" {
 		metadata.LanguageSpecific["dart_sdk"] = pubspec.Environment.SDK
 
@@ -169,7 +167,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 		metadata.LanguageSpecific["flutter_sdk"] = pubspec.Environment.Flutter
 	}
 
-	// Extract dependencies
 	if len(pubspec.Dependencies) > 0 {
 		deps := make(map[string]string)
 		for name, constraint := range pubspec.Dependencies {
@@ -184,7 +181,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 			case string:
 				constraintStr = v
 			case map[string]interface{}:
-				// Handle complex dependency specifications
 				if version, ok := v["version"].(string); ok {
 					constraintStr = version
 				} else if path, ok := v["path"].(string); ok {
@@ -207,7 +203,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 		}
 	}
 
-	// Extract dev dependencies
 	if len(pubspec.DevDependencies) > 0 {
 		devDeps := make(map[string]string)
 		for name, constraint := range pubspec.DevDependencies {
@@ -352,7 +347,6 @@ func (e *Extractor) extractFlutterMetadata(pubspec *PubspecYAML, metadata *extra
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for pubspec.yaml
 	pubspecPath := filepath.Join(projectPath, "pubspec.yaml")
 	if _, err := os.Stat(pubspecPath); err == nil {
 		return true
@@ -367,10 +361,8 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generateDartVersionMatrix(sdkConstraint string) []string {
 	versions := []string{}
 
-	// Clean up the constraint
 	sdkConstraint = strings.TrimSpace(sdkConstraint)
 
-	// Extract minimum version
 	minVersion := ""
 
 	// Handle >= constraints
