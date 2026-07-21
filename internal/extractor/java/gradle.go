@@ -37,7 +37,6 @@ type GradleProject struct {
 	Dependencies []GradleDependency
 	Plugins      []GradlePlugin
 
-	// Build script type
 	IsKotlinDSL bool
 	BuildFile   string
 
@@ -70,34 +69,39 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 		LanguageSpecific: make(map[string]interface{}),
 	}
 
-	// Determine build file type
 	buildFile, isKotlin, err := e.detectBuildFile(projectPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse build file
 	gradleProject, err := e.parseGradleBuild(buildFile, isKotlin)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse settings.gradle if exists
 	e.parseSettings(projectPath, gradleProject, isKotlin)
-
-	// Parse gradle.properties if exists
 	e.parseProperties(projectPath, gradleProject)
 
-	// Extract common metadata
-	metadata.Name = gradleProject.Name
-	metadata.Version = gradleProject.Version
-	metadata.Description = gradleProject.Description
-	metadata.VersionSource = gradleProject.BuildFile
+	e.applyGradleCore(gradleProject, metadata, isKotlin)
+	applyGradleDependencies(gradleProject, metadata)
+	e.applyGradlePlugins(gradleProject, metadata)
+	applyGradleStructure(gradleProject, metadata)
+	applyGradleVersioningType(metadata)
 
-	// Gradle-specific metadata
-	metadata.LanguageSpecific["group_id"] = gradleProject.Group
-	metadata.LanguageSpecific["artifact_id"] = gradleProject.Name
-	metadata.LanguageSpecific["metadata_source"] = gradleProject.BuildFile
+	return metadata, nil
+}
+
+// applyGradleCore maps identity fields and records the build system and DSL
+// flavor (Kotlin vs Groovy) inferred from the build file extension.
+func (e *GradleExtractor) applyGradleCore(project *GradleProject, metadata *extractor.ProjectMetadata, isKotlin bool) {
+	metadata.Name = project.Name
+	metadata.Version = project.Version
+	metadata.Description = project.Description
+	metadata.VersionSource = project.BuildFile
+
+	metadata.LanguageSpecific["group_id"] = project.Group
+	metadata.LanguageSpecific["artifact_id"] = project.Name
+	metadata.LanguageSpecific["metadata_source"] = project.BuildFile
 	metadata.LanguageSpecific["build_system"] = "gradle"
 
 	if isKotlin {
@@ -105,68 +109,76 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	} else {
 		metadata.LanguageSpecific["build_dsl"] = "groovy"
 	}
+}
 
-	// Dependencies
-	if len(gradleProject.Dependencies) > 0 {
-		deps := make([]map[string]string, 0, len(gradleProject.Dependencies))
-		configCounts := make(map[string]int)
-
-		for _, dep := range gradleProject.Dependencies {
-			depMap := map[string]string{
-				"configuration": dep.Configuration,
-				"group":         dep.Group,
-				"name":          dep.Name,
-				"version":       dep.Version,
-			}
-			deps = append(deps, depMap)
-			configCounts[dep.Configuration]++
-		}
-
-		metadata.LanguageSpecific["dependencies"] = deps
-		metadata.LanguageSpecific["dependency_count"] = len(deps)
-		metadata.LanguageSpecific["dependency_configurations"] = configCounts
+// applyGradleDependencies records the dependency list plus a per-configuration
+// tally (implementation, api, testImplementation, and so on).
+func applyGradleDependencies(project *GradleProject, metadata *extractor.ProjectMetadata) {
+	if len(project.Dependencies) == 0 {
+		return
 	}
-
-	// Plugins
-	if len(gradleProject.Plugins) > 0 {
-		plugins := make([]string, 0, len(gradleProject.Plugins))
-		for _, plugin := range gradleProject.Plugins {
-			if plugin.Version != "" {
-				plugins = append(plugins, fmt.Sprintf("%s:%s", plugin.ID, plugin.Version))
-			} else {
-				plugins = append(plugins, plugin.ID)
-			}
+	deps := make([]map[string]string, 0, len(project.Dependencies))
+	configCounts := make(map[string]int)
+	for _, dep := range project.Dependencies {
+		depMap := map[string]string{
+			"configuration": dep.Configuration,
+			"group":         dep.Group,
+			"name":          dep.Name,
+			"version":       dep.Version,
 		}
-		metadata.LanguageSpecific["plugins"] = plugins
-		metadata.LanguageSpecific["plugin_count"] = len(plugins)
+		deps = append(deps, depMap)
+		configCounts[dep.Configuration]++
+	}
+	metadata.LanguageSpecific["dependencies"] = deps
+	metadata.LanguageSpecific["dependency_count"] = len(deps)
+	metadata.LanguageSpecific["dependency_configurations"] = configCounts
+}
 
-		// Detect frameworks from plugins
-		frameworks := e.detectGradleFrameworks(gradleProject.Plugins)
-		if len(frameworks) > 0 {
-			metadata.LanguageSpecific["frameworks"] = frameworks
+// applyGradlePlugins records plugin identifiers and any frameworks inferred
+// from them.
+func (e *GradleExtractor) applyGradlePlugins(project *GradleProject, metadata *extractor.ProjectMetadata) {
+	if len(project.Plugins) == 0 {
+		return
+	}
+	plugins := make([]string, 0, len(project.Plugins))
+	for _, plugin := range project.Plugins {
+		if plugin.Version != "" {
+			plugins = append(plugins, fmt.Sprintf("%s:%s", plugin.ID, plugin.Version))
+		} else {
+			plugins = append(plugins, plugin.ID)
 		}
 	}
+	metadata.LanguageSpecific["plugins"] = plugins
+	metadata.LanguageSpecific["plugin_count"] = len(plugins)
 
-	// Multi-project
-	if gradleProject.IsMultiProject {
+	frameworks := e.detectGradleFrameworks(project.Plugins)
+	if len(frameworks) > 0 {
+		metadata.LanguageSpecific["frameworks"] = frameworks
+	}
+}
+
+// applyGradleStructure records multi-project layout and gradle.properties data,
+// surfacing the Java version from either java.version or sourceCompatibility.
+func applyGradleStructure(project *GradleProject, metadata *extractor.ProjectMetadata) {
+	if project.IsMultiProject {
 		metadata.LanguageSpecific["is_multi_project"] = true
-		metadata.LanguageSpecific["subprojects"] = gradleProject.Subprojects
-		metadata.LanguageSpecific["subproject_count"] = len(gradleProject.Subprojects)
+		metadata.LanguageSpecific["subprojects"] = project.Subprojects
+		metadata.LanguageSpecific["subproject_count"] = len(project.Subprojects)
 	}
 
-	// Properties
-	if len(gradleProject.Properties) > 0 {
-		metadata.LanguageSpecific["properties"] = gradleProject.Properties
-
-		// Extract Java version if specified
-		if javaVersion, ok := gradleProject.Properties["java.version"]; ok {
+	if len(project.Properties) > 0 {
+		metadata.LanguageSpecific["properties"] = project.Properties
+		if javaVersion, ok := project.Properties["java.version"]; ok {
 			metadata.LanguageSpecific["java_version"] = javaVersion
-		} else if sourceCompat, ok := gradleProject.Properties["sourceCompatibility"]; ok {
+		} else if sourceCompat, ok := project.Properties["sourceCompatibility"]; ok {
 			metadata.LanguageSpecific["java_version"] = sourceCompat
 		}
 	}
+}
 
-	// Check for dynamic version
+// applyGradleVersioningType marks versions dynamic when they are SNAPSHOTs or
+// reference project.version / rootProject.version placeholders.
+func applyGradleVersioningType(metadata *extractor.ProjectMetadata) {
 	if strings.Contains(metadata.Version, "SNAPSHOT") ||
 		strings.Contains(metadata.Version, "project.version") ||
 		strings.Contains(metadata.Version, "rootProject.version") {
@@ -174,8 +186,6 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	} else {
 		metadata.LanguageSpecific["versioning_type"] = "static"
 	}
-
-	return metadata, nil
 }
 
 // detectBuildFile determines which build file to use
@@ -212,19 +222,14 @@ func (e *GradleExtractor) parseGradleBuild(buildFile string, isKotlin bool) (*Gr
 
 	text := string(content)
 
-	// Extract group
 	project.Group = e.extractGradleProperty(text, "group", isKotlin)
 
-	// Extract version
 	project.Version = e.extractGradleProperty(text, "version", isKotlin)
 
-	// Extract description
 	project.Description = e.extractGradleProperty(text, "description", isKotlin)
 
-	// Extract plugins
 	project.Plugins = e.extractPlugins(text, isKotlin)
 
-	// Extract dependencies
 	project.Dependencies = e.extractDependencies(text, isKotlin)
 
 	return project, nil
@@ -391,12 +396,10 @@ func (e *GradleExtractor) parseSettings(projectPath string, project *GradleProje
 
 	text := string(content)
 
-	// Extract root project name
 	if project.Name == "" {
 		project.Name = e.extractGradleProperty(text, "rootProject.name", isKotlin)
 	}
 
-	// Extract subprojects
 	subprojects := e.extractSubprojects(text, isKotlin)
 	if len(subprojects) > 0 {
 		project.IsMultiProject = true
@@ -503,13 +506,11 @@ func (e *GradleExtractor) detectGradleFrameworks(plugins []GradlePlugin) []strin
 
 // Detect checks if this extractor can handle the project
 func (e *GradleExtractor) Detect(projectPath string) bool {
-	// Check for build.gradle.kts
 	ktsPath := filepath.Join(projectPath, "build.gradle.kts")
 	if _, err := os.Stat(ktsPath); err == nil {
 		return true
 	}
 
-	// Check for build.gradle
 	groovyPath := filepath.Join(projectPath, "build.gradle")
 	if _, err := os.Stat(groovyPath); err == nil {
 		return true

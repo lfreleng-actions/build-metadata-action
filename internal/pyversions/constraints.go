@@ -290,7 +290,6 @@ func ResolveVersions(requiresPython string, supportedVersions []string) ([]strin
 		return nil, fmt.Errorf("no supported versions available")
 	}
 
-	// Parse constraints
 	constraints, err := ParseConstraints(requiresPython)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse constraints: %w", err)

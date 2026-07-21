@@ -63,7 +63,6 @@ func (v *YAMLValidator) MarshalAndValidate(data interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("YAML marshal failed: %w", err)
 	}
 
-	// Validate
 	if err := v.Validate(yamlBytes); err != nil {
 		return nil, err
 	}
@@ -79,18 +78,6 @@ func (v *YAMLValidator) ValidateString(yamlStr string) error {
 // IsValid checks if data is valid YAML without returning an error
 func (v *YAMLValidator) IsValid(data []byte) bool {
 	return v.Validate(data) == nil
-}
-
-// ValidateWithSchema validates YAML against a schema (placeholder for future enhancement)
-func (v *YAMLValidator) ValidateWithSchema(data []byte, schema interface{}) error {
-	// First validate basic YAML syntax
-	if err := v.Validate(data); err != nil {
-		return err
-	}
-
-	// TODO: Implement schema validation using a YAML schema library
-	// This is a placeholder for future enhancement
-	return nil
 }
 
 // NormalizeYAML unmarshals and remarshals YAML to produce consistent formatting

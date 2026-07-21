@@ -340,26 +340,6 @@ func TestYAMLValidator_IsValid(t *testing.T) {
 	}
 }
 
-func TestYAMLValidator_ValidateWithSchema(t *testing.T) {
-	// Test the placeholder schema validation function
-	data := []byte("name: test\nvalue: 123")
-
-	v := NewYAMLValidator(false)
-	err := v.ValidateWithSchema(data, nil)
-
-	// Should validate basic YAML syntax even with nil schema
-	if err != nil {
-		t.Errorf("ValidateWithSchema() unexpected error = %v", err)
-	}
-
-	// Test with invalid YAML
-	invalidData := []byte("name: test\n value: 123")
-	err = v.ValidateWithSchema(invalidData, nil)
-	if err == nil {
-		t.Error("ValidateWithSchema() expected error for invalid YAML")
-	}
-}
-
 func TestYAMLValidator_NormalizeYAML(t *testing.T) {
 	tests := []struct {
 		name    string

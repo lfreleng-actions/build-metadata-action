@@ -32,7 +32,6 @@ func init() {
 
 // Detect checks if this is a Scala project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for build.sbt
 	if _, err := os.Stat(filepath.Join(projectPath, "build.sbt")); err == nil {
 		return true
 	}
@@ -55,13 +54,11 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for Scala source files
 	srcMain := filepath.Join(projectPath, "src", "main", "scala")
 	if info, err := os.Stat(srcMain); err == nil && info.IsDir() {
 		return true
 	}
 
-	// Check for .scala files in root or src
 	patterns := []string{
 		filepath.Join(projectPath, "*.scala"),
 		filepath.Join(projectPath, "src", "*.scala"),
@@ -106,6 +103,73 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	return metadata, nil
 }
 
+// sbtMatcher pairs a single-value build.sbt regex with its assignment.
+type sbtMatcher struct {
+	re     *regexp.Regexp
+	assign func(value string)
+}
+
+// sbtFieldMatchers builds the ordered single-value field matchers for build.sbt.
+func sbtFieldMatchers(metadata *extractor.ProjectMetadata, scalaVersion *string) []sbtMatcher {
+	return []sbtMatcher{
+		{regexp.MustCompile(`name\s*:=\s*"([^"]+)"`), func(v string) { metadata.Name = v }},
+		{regexp.MustCompile(`version\s*:=\s*"([^"]+)"`), func(v string) {
+			metadata.Version = v
+			metadata.VersionSource = "build.sbt"
+		}},
+		{regexp.MustCompile(`scalaVersion\s*:=\s*"([^"]+)"`), func(v string) { *scalaVersion = v }},
+		{regexp.MustCompile(`organization\s*:=\s*"([^"]+)"`), func(v string) {
+			metadata.LanguageSpecific["organization"] = v
+		}},
+		{regexp.MustCompile(`description\s*:=\s*"([^"]+)"`), func(v string) { metadata.Description = v }},
+		{regexp.MustCompile(`homepage\s*:=\s*Some\(url\("([^"]+)"\)\)`), func(v string) { metadata.Homepage = v }},
+		// License name is the first quoted string in: licenses := Seq("Apache-2.0" -> url("..."))
+		{regexp.MustCompile(`licenses\s*:=\s*Seq\(\s*"([^"]+)"`), func(v string) { metadata.License = v }},
+	}
+}
+
+// formatSbtDependency renders an "org:name:version" dependency from a regex match.
+func formatSbtDependency(matches []string) string {
+	return fmt.Sprintf("%s:%s:%s", matches[1], matches[2], matches[3])
+}
+
+// trackSbtDependencyBlock advances the multi-line libraryDependencies Seq(...)
+// state machine, collecting standalone dependency lines while the block is open.
+// It returns the updated open flag and parenthesis depth.
+func trackSbtDependencyBlock(line string, standaloneRe *regexp.Regexp, inBlock bool, parenDepth int, dependencies *[]string) (bool, int) {
+	if strings.Contains(line, "libraryDependencies") && strings.Contains(line, "Seq(") {
+		depth := strings.Count(line, "(") - strings.Count(line, ")")
+		if depth <= 0 {
+			return false, depth
+		}
+		return true, depth
+	}
+
+	if !inBlock {
+		return inBlock, parenDepth
+	}
+
+	if matches := standaloneRe.FindStringSubmatch(line); matches != nil {
+		*dependencies = append(*dependencies, formatSbtDependency(matches))
+	}
+	parenDepth += strings.Count(line, "(") - strings.Count(line, ")")
+	if parenDepth <= 0 {
+		return false, 0
+	}
+	return true, parenDepth
+}
+
+// applySbtScalaVersion records the detected Scala version and its matrix.
+func applySbtScalaVersion(scalaVersion string, metadata *extractor.ProjectMetadata) {
+	if scalaVersion == "" {
+		return
+	}
+	metadata.LanguageSpecific["scala_version"] = scalaVersion
+	if matrix := generateScalaVersionMatrix(scalaVersion); len(matrix) > 0 {
+		metadata.LanguageSpecific["scala_version_matrix"] = matrix
+	}
+}
+
 // extractFromBuildSbt parses build.sbt
 func (e *Extractor) extractFromBuildSbt(path string, metadata *extractor.ProjectMetadata) error {
 	file, err := os.Open(path)
@@ -114,111 +178,45 @@ func (e *Extractor) extractFromBuildSbt(path string, metadata *extractor.Project
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-
-	// Regex patterns for SBT
-	nameRegex := regexp.MustCompile(`name\s*:=\s*"([^"]+)"`)
-	versionRegex := regexp.MustCompile(`version\s*:=\s*"([^"]+)"`)
-	scalaVersionRegex := regexp.MustCompile(`scalaVersion\s*:=\s*"([^"]+)"`)
-	organizationRegex := regexp.MustCompile(`organization\s*:=\s*"([^"]+)"`)
-	descriptionRegex := regexp.MustCompile(`description\s*:=\s*"([^"]+)"`)
-	homepageRegex := regexp.MustCompile(`homepage\s*:=\s*Some\(url\("([^"]+)"\)\)`)
-	// Match license name (first quoted string) in format: licenses := Seq("Apache-2.0" -> url("..."))
-	licenseRegex := regexp.MustCompile(`licenses\s*:=\s*Seq\(\s*"([^"]+)"`)
-	// Match dependencies on same line as libraryDependencies
-	libraryDependencyRegex := regexp.MustCompile(`libraryDependencies\s*\+\+?=\s*(?:Seq\()?\s*"([^"]+)"\s*%+\s*"([^"]+)"\s*%\s*"([^"]+)"`)
-	// Match standalone dependency lines within Seq block: "org" %% "name" % "version"
-	standaloneDependencyRegex := regexp.MustCompile(`^\s*"([^"]+)"\s*%%?\s*"([^"]+)"\s*%\s*"([^"]+)"`)
-
 	var dependencies []string
 	var scalaVersion string
-	var inLibraryDependencies bool
-	var parenDepth int // Track parenthesis depth for robust Seq block detection
+	matchers := sbtFieldMatchers(metadata, &scalaVersion)
+	// Match dependencies on same line as libraryDependencies
+	inlineDepRegex := regexp.MustCompile(`libraryDependencies\s*\+\+?=\s*(?:Seq\()?\s*"([^"]+)"\s*%+\s*"([^"]+)"\s*%\s*"([^"]+)"`)
+	// Match standalone dependency lines within Seq block: "org" %% "name" % "version"
+	standaloneDepRegex := regexp.MustCompile(`^\s*"([^"]+)"\s*%%?\s*"([^"]+)"\s*%\s*"([^"]+)"`)
 
+	inLibraryDependencies := false
+	parenDepth := 0
+
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
+		line := strings.TrimSpace(scanner.Text())
 
 		// Skip comments
 		if strings.HasPrefix(line, "//") {
 			continue
 		}
 
-		if matches := nameRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Name = matches[1]
-		}
-
-		if matches := versionRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Version = matches[1]
-			metadata.VersionSource = "build.sbt"
-		}
-
-		if matches := scalaVersionRegex.FindStringSubmatch(line); matches != nil {
-			scalaVersion = matches[1]
-		}
-
-		if matches := organizationRegex.FindStringSubmatch(line); matches != nil {
-			metadata.LanguageSpecific["organization"] = matches[1]
-		}
-
-		if matches := descriptionRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Description = matches[1]
-		}
-
-		if matches := homepageRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Homepage = matches[1]
-		}
-
-		if matches := licenseRegex.FindStringSubmatch(line); matches != nil {
-			metadata.License = matches[1]
-		}
-
-		if matches := libraryDependencyRegex.FindStringSubmatch(line); matches != nil {
-			dep := fmt.Sprintf("%s:%s:%s", matches[1], matches[2], matches[3])
-			dependencies = append(dependencies, dep)
-		}
-
-		// Track when we enter libraryDependencies block
-		if strings.Contains(line, "libraryDependencies") && strings.Contains(line, "Seq(") {
-			inLibraryDependencies = true
-			// Count initial parenthesis depth from this line
-			parenDepth = strings.Count(line, "(") - strings.Count(line, ")")
-			// If depth is already 0 or negative, it's a single-line declaration
-			if parenDepth <= 0 {
-				inLibraryDependencies = false
-			}
-			continue
-		}
-
-		// Extract dependencies from standalone lines within Seq block
-		if inLibraryDependencies {
-			if matches := standaloneDependencyRegex.FindStringSubmatch(line); matches != nil {
-				dep := fmt.Sprintf("%s:%s:%s", matches[1], matches[2], matches[3])
-				dependencies = append(dependencies, dep)
-			}
-			// Update parenthesis depth for this line
-			parenDepth += strings.Count(line, "(") - strings.Count(line, ")")
-			// End of Seq block when we've closed all parentheses
-			if parenDepth <= 0 {
-				inLibraryDependencies = false
-				parenDepth = 0
+		for _, matcher := range matchers {
+			if matches := matcher.re.FindStringSubmatch(line); matches != nil {
+				matcher.assign(matches[1])
 			}
 		}
+
+		if matches := inlineDepRegex.FindStringSubmatch(line); matches != nil {
+			dependencies = append(dependencies, formatSbtDependency(matches))
+		}
+
+		inLibraryDependencies, parenDepth = trackSbtDependencyBlock(
+			line, standaloneDepRegex, inLibraryDependencies, parenDepth, &dependencies)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 
-	if scalaVersion != "" {
-		metadata.LanguageSpecific["scala_version"] = scalaVersion
-
-		// Generate Scala version matrix
-		matrix := generateScalaVersionMatrix(scalaVersion)
-		if len(matrix) > 0 {
-			metadata.LanguageSpecific["scala_version_matrix"] = matrix
-		}
-	}
+	applySbtScalaVersion(scalaVersion, metadata)
 
 	if len(dependencies) > 0 {
 		metadata.LanguageSpecific["dependencies"] = dependencies
@@ -301,7 +299,6 @@ func (e *Extractor) extractFromMill(path string, metadata *extractor.ProjectMeta
 
 // generateScalaVersionMatrix generates a matrix of compatible Scala versions
 func generateScalaVersionMatrix(version string) []string {
-	// Parse major.minor from version
 	parts := strings.Split(version, ".")
 	if len(parts) < 2 {
 		return []string{version}

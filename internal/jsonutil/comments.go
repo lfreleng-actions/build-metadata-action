@@ -43,12 +43,10 @@ func RemoveComments(jsonStr string) string {
 			}
 		}
 
-		// Handle block comments
 		for {
 			if inBlockComment {
 				// Look for end of block comment
 				if endIdx := strings.Index(processedLine, "*/"); endIdx >= 0 {
-					// Remove everything up to and including */
 					processedLine = processedLine[endIdx+2:]
 					inBlockComment = false
 					// Continue processing the rest of the line
@@ -140,7 +138,6 @@ func findLineCommentOutsideString(line string) int {
 // Note: This is a basic implementation and may not handle all edge cases.
 // For complex JSON5 parsing, consider using a dedicated JSON5 parser library.
 func StripTrailingCommas(jsonStr string) string {
-	// Remove trailing comma before closing brace or bracket
 	re := regexp.MustCompile(`,(\s*[}\]])`)
 	return re.ReplaceAllString(jsonStr, "$1")
 }

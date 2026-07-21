@@ -62,7 +62,6 @@ func (v *JSONValidator) ValidateAndPrettify(data interface{}) (compact, pretty [
 		return nil, nil, fmt.Errorf("compact JSON marshal failed: %w", err)
 	}
 
-	// Validate compact
 	if err := v.Validate(compact); err != nil {
 		return nil, nil, fmt.Errorf("compact JSON validation failed: %w", err)
 	}
@@ -73,7 +72,6 @@ func (v *JSONValidator) ValidateAndPrettify(data interface{}) (compact, pretty [
 		return nil, nil, fmt.Errorf("pretty JSON marshal failed: %w", err)
 	}
 
-	// Validate pretty
 	if err := v.Validate(pretty); err != nil {
 		return nil, nil, fmt.Errorf("pretty JSON validation failed: %w", err)
 	}
@@ -89,7 +87,6 @@ func (v *JSONValidator) MarshalAndValidate(data interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("JSON marshal failed: %w", err)
 	}
 
-	// Validate
 	if err := v.Validate(jsonBytes); err != nil {
 		return nil, err
 	}

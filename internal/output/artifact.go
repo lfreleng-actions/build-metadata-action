@@ -68,10 +68,8 @@ func (a *ArtifactUploader) Upload(metadata interface{}, jobName string) (*Artifa
 		return nil, fmt.Errorf("failed to generate artifact suffix: %w", err)
 	}
 
-	// Create artifact name
 	artifactName := fmt.Sprintf("%s-%s-%s", a.NamePrefix, jobName, suffix)
 
-	// Create artifact directory
 	artifactPath := filepath.Join(a.OutputDir, artifactName)
 	if err := os.MkdirAll(artifactPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create artifact directory: %w", err)
@@ -113,7 +111,6 @@ func (a *ArtifactUploader) Upload(metadata interface{}, jobName string) (*Artifa
 func (a *ArtifactUploader) writeJSON(artifactPath string, metadata interface{}) ([]string, error) {
 	files := make([]string, 0, 2)
 
-	// Create validator
 	jsonValidator := validator.NewJSONValidator(a.StrictMode)
 
 	// Generate compact and pretty JSON
@@ -127,14 +124,12 @@ func (a *ArtifactUploader) writeJSON(artifactPath string, metadata interface{}) 
 		pretty, _ = json.MarshalIndent(metadata, "", "  ")
 	}
 
-	// Write compact JSON
 	compactPath := filepath.Join(artifactPath, "metadata.json")
 	if err := os.WriteFile(compactPath, compact, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write compact JSON: %w", err)
 	}
 	files = append(files, "metadata.json")
 
-	// Write pretty JSON
 	prettyPath := filepath.Join(artifactPath, "metadata-pretty.json")
 	if err := os.WriteFile(prettyPath, pretty, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write pretty JSON: %w", err)
@@ -148,7 +143,6 @@ func (a *ArtifactUploader) writeJSON(artifactPath string, metadata interface{}) 
 func (a *ArtifactUploader) writeYAML(artifactPath string, metadata interface{}) ([]string, error) {
 	files := make([]string, 0, 1)
 
-	// Create validator
 	yamlValidator := validator.NewYAMLValidator(a.StrictMode)
 
 	// Generate YAML
@@ -161,7 +155,6 @@ func (a *ArtifactUploader) writeYAML(artifactPath string, metadata interface{}) 
 		yamlBytes, _ = yaml.Marshal(metadata)
 	}
 
-	// Write YAML
 	yamlPath := filepath.Join(artifactPath, "metadata.yaml")
 	if err := os.WriteFile(yamlPath, yamlBytes, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write YAML: %w", err)

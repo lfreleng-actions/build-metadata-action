@@ -36,7 +36,6 @@ func ExtractVersion(projectPath, projectType string) (*VersionInfo, error) {
 
 // extractWithTool uses the version-extract-action tool to extract version
 func extractWithTool(projectPath, projectType, toolPath string) (*VersionInfo, error) {
-	// Execute the version-extract-action binary
 	cmd := exec.Command(toolPath, "--path", projectPath, "--type", projectType, "--format", "json")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -101,8 +100,28 @@ func ExtractVersionProperties(projectPath string) (*VersionInfo, bool) {
 		return nil, false
 	}
 
+	props := parseVersionProperties(string(content))
+
+	if version, ok := composeSemanticVersion(props); ok {
+		return newPropertiesVersion(version), true
+	}
+
+	// release_version wins over a bare version key when both are present.
+	for _, key := range []string{"release_version", "version"} {
+		if version, ok := props[key]; ok {
+			return newPropertiesVersion(version), true
+		}
+	}
+
+	return nil, false
+}
+
+// parseVersionProperties parses key=value lines into a map, skipping
+// blanks, comments, and shell-interpolated values (e.g. ${major}) that
+// this parser never resolves because it does not source the file.
+func parseVersionProperties(content string) map[string]string {
 	props := make(map[string]string)
-	for _, line := range strings.Split(string(content), "\n") {
+	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -113,40 +132,32 @@ func ExtractVersionProperties(projectPath string) (*VersionInfo, bool) {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
-		if value == "" || strings.Contains(value, "${") {
+		if value == "" || strings.Contains(value, "$\u007b") {
 			continue
 		}
 		props[key] = value
 	}
+	return props
+}
 
+// composeSemanticVersion builds major.minor.patch when all three keys
+// are present, the authoritative form used by global-jjb release files.
+func composeSemanticVersion(props map[string]string) (string, bool) {
 	major, hasMajor := props["major"]
 	minor, hasMinor := props["minor"]
 	patch, hasPatch := props["patch"]
 	if hasMajor && hasMinor && hasPatch {
-		return &VersionInfo{
-			Version:   major + "." + minor + "." + patch,
-			Source:    "version.properties",
-			IsDynamic: false,
-		}, true
+		return major + "." + minor + "." + patch, true
 	}
+	return "", false
+}
 
-	if version, ok := props["release_version"]; ok {
-		return &VersionInfo{
-			Version:   version,
-			Source:    "version.properties",
-			IsDynamic: false,
-		}, true
+func newPropertiesVersion(version string) *VersionInfo {
+	return &VersionInfo{
+		Version:   version,
+		Source:    "version.properties",
+		IsDynamic: false,
 	}
-
-	if version, ok := props["version"]; ok {
-		return &VersionInfo{
-			Version:   version,
-			Source:    "version.properties",
-			IsDynamic: false,
-		}, true
-	}
-
-	return nil, false
 }
 
 // isPlaceholderVersion reports whether a manifest version is an
@@ -235,30 +246,86 @@ func extractMavenVersion(projectPath string) (*VersionInfo, error) {
 		return extractFallback(projectPath)
 	}
 
-	// Simple XML parsing for <version>X.Y.Z</version>
-	lines := strings.Split(string(content), "\n")
 	inProject := false
-	for _, line := range lines {
+	inParent := false
+	for _, line := range strings.Split(string(content), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.Contains(line, "<project") {
 			inProject = true
 		}
-		if inProject && strings.Contains(line, "<version>") && strings.Contains(line, "</version>") {
-			start := strings.Index(line, "<version>") + 9
-			end := strings.Index(line, "</version>")
-			if start > 9 && end > start {
-				version := line[start:end]
-				isDynamic := strings.Contains(version, "${") || strings.Contains(version, "SNAPSHOT")
-				return &VersionInfo{
-					Version:   version,
-					Source:    "pom.xml",
-					IsDynamic: isDynamic,
-				}, nil
-			}
+		// The <parent> block carries the parent POM's coordinates,
+		// including its own <version>; skip it so the project version is
+		// not confused with the parent version.
+		if strings.Contains(line, "<parent>") {
+			inParent = true
+		}
+		// Once the scan reaches sections that commonly hold unrelated
+		// <version> tags (dependencies, build/plugins, profiles), stop
+		// looking: a well-formed POM declares the project version before
+		// these. If it was omitted (inherited from <parent>), fall back to
+		// version.properties/git rather than guess from a nested block.
+		if inProject && !inParent && isMavenVersionBoundary(line) {
+			break
+		}
+		if version, ok := parseMavenVersionLine(line, inProject && !inParent); ok {
+			return &VersionInfo{
+				Version:   version,
+				Source:    "pom.xml",
+				IsDynamic: isMavenDynamicVersion(version),
+			}, nil
+		}
+		if strings.Contains(line, "</parent>") {
+			inParent = false
 		}
 	}
 
 	return extractFallback(projectPath)
+}
+
+// isMavenVersionBoundary reports whether the line opens a POM section that
+// typically contains dependency or plugin <version> tags unrelated to the
+// project's own version.
+func isMavenVersionBoundary(line string) bool {
+	boundaries := []string{
+		"<dependencies>",
+		"<dependencyManagement>",
+		"<build>",
+		"<plugins>",
+		"<pluginManagement>",
+		"<profiles>",
+		"<reporting>",
+	}
+	for _, tag := range boundaries {
+		if strings.Contains(line, tag) {
+			return true
+		}
+	}
+	return false
+}
+
+// parseMavenVersionLine extracts the inline <version>X</version> value.
+// The caller passes eligible=true only for lines inside <project> but
+// outside its <parent> block. A well-formed POM declares the project's
+// own <version> before any dependency or plugin blocks, so returning at
+// the first eligible match yields the project version rather than a
+// dependency or plugin version.
+func parseMavenVersionLine(line string, eligible bool) (string, bool) {
+	if !eligible || !strings.Contains(line, "<version>") || !strings.Contains(line, "</version>") {
+		return "", false
+	}
+	// Contains above guarantees both tags exist, so Index is >= 0. The
+	// opening tag may sit at index 0 on a trimmed line, so gate only on
+	// the closing tag following the value.
+	start := strings.Index(line, "<version>") + len("<version>")
+	end := strings.Index(line, "</version>")
+	if end > start {
+		return line[start:end], true
+	}
+	return "", false
+}
+
+func isMavenDynamicVersion(version string) bool {
+	return strings.Contains(version, "$\u007b") || strings.Contains(version, "SNAPSHOT")
 }
 
 // extractGradleVersion extracts version from Gradle build files
@@ -368,7 +435,6 @@ func extractRustVersion(projectPath string) (*VersionInfo, error) {
 				parts := strings.SplitN(line, "=", 2)
 				if len(parts) == 2 {
 					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					// Validate that it's not a boolean or invalid value
 					if version != "true" && version != "false" && version != "" {
 						isDynamic := version == "0.0.0" || version == "0.1.0-dev"
 						return &VersionInfo{

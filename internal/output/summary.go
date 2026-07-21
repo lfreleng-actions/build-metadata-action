@@ -20,30 +20,12 @@ type Metadata interface{}
 func GenerateSummary(metadata interface{}) string {
 	var sb strings.Builder
 
-	// Try to extract metadata fields using type assertion
-	// In real implementation, this would work with the actual Metadata struct
 	metadataMap := convertToMap(metadata)
+	projectType := extractCommonString(metadataMap, "project_type")
+	projectPath := extractCommonString(metadataMap, "project_path")
 
-	// Extract project type early as we need it for filtering
-	var projectType string
-	if common, ok := metadataMap["common"].(map[string]interface{}); ok {
-		if pt, ok := common["project_type"].(string); ok {
-			projectType = pt
-		}
-	}
-
-	// Extract project path for repository detection
-	var projectPath string
-	if common, ok := metadataMap["common"].(map[string]interface{}); ok {
-		if pp, ok := common["project_path"].(string); ok {
-			projectPath = pp
-		}
-	}
-
-	// Header
 	sb.WriteString("## 🔧 Build Metadata\n\n")
 
-	// Detect repository information
 	var repoInfo string
 	if projectPath != "" {
 		if info, err := repository.DetectRepository(projectPath); err == nil {
@@ -51,131 +33,198 @@ func GenerateSummary(metadata interface{}) string {
 		}
 	}
 
-	// Project Information Section (consolidated)
-	if common, ok := metadataMap["common"].(map[string]interface{}); ok {
-		// Include repository info in header if available
-		if repoInfo != "" {
-			sb.WriteString(fmt.Sprintf("### %s\n\n", repoInfo))
-		} else {
-			sb.WriteString("### Project Information\n\n")
-		}
-		sb.WriteString("| Key | Value |\n")
-		sb.WriteString("|-----|-------|\n")
-
-		// Basic project info
-		if projectType != "" {
-			sb.WriteString(fmt.Sprintf("| Project Type | %s |\n", formatProjectType(projectType)))
-		}
-
-		if projectName, ok := common["project_name"].(string); ok && projectName != "" {
-			sb.WriteString(fmt.Sprintf("| Project Name | %s |\n", projectName))
-		}
-
-		if projectVersion, ok := common["project_version"].(string); ok && projectVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Project Version | %s |\n", projectVersion))
-		}
-
-		if versionSource, ok := common["version_source"].(string); ok && versionSource != "" {
-			sb.WriteString(fmt.Sprintf("| Version Source | %s |\n", versionSource))
-		}
-
-		if versioningType, ok := common["versioning_type"].(string); ok && versioningType != "" {
-			sb.WriteString(fmt.Sprintf("| Versioning Type | %s |\n", versioningType))
-		} else {
-			// Default to "static" if not specified
-			sb.WriteString("| Versioning Type | static |\n")
-		}
-
-		// version.properties (LF/ONAP release convention) details:
-		// rendered whenever the file yielded a version, so release
-		// pipelines can see the authoritative value even when a
-		// language manifest won the version_source selection
-		if propsVersion, ok := common["version_properties_version"].(string); ok && propsVersion != "" {
-			fmt.Fprintf(&sb, "| version.properties | %s |\n", propsVersion)
-			if propsMatch, ok := common["version_properties_match"].(string); ok && propsMatch != "" {
-				matchStatus := "true ✅"
-				if propsMatch != "true" {
-					matchStatus = "false ❌"
-				}
-				fmt.Fprintf(&sb, "| Version Match | %s |\n", matchStatus)
-			}
-		}
-
-		if snapshotVersion, ok := common["snapshot_version"].(string); ok && snapshotVersion != "" {
-			fmt.Fprintf(&sb, "| Snapshot Version | %s |\n", snapshotVersion)
-		}
-
-		// Handle timestamp - could be time.Time or string after JSON conversion
-		if buildTimestamp, ok := common["build_timestamp"].(time.Time); ok {
-			// Format as: 2025-11-03 11:37:48 UTC
-			formattedTime := buildTimestamp.UTC().Format("2006-01-02 15:04:05") + " UTC"
-			sb.WriteString(fmt.Sprintf("| Build Timestamp | %s |\n", formattedTime))
-		} else if buildTimestampStr, ok := common["build_timestamp"].(string); ok && buildTimestampStr != "" {
-			// Already in string format from JSON marshaling, try to parse and reformat
-			if parsedTime, err := time.Parse(time.RFC3339, buildTimestampStr); err == nil {
-				formattedTime := parsedTime.UTC().Format("2006-01-02 15:04:05") + " UTC"
-				sb.WriteString(fmt.Sprintf("| Build Timestamp | %s |\n", formattedTime))
-			} else {
-				// If parsing fails, use original string
-				sb.WriteString(fmt.Sprintf("| Build Timestamp | %s |\n", buildTimestampStr))
-			}
-		}
-
-		if gitBranch, ok := common["git_branch"].(string); ok && gitBranch != "" {
-			sb.WriteString(fmt.Sprintf("| Git Branch | `%s` |\n", gitBranch))
-		}
-
-		if gitTag, ok := common["git_tag"].(string); ok && gitTag != "" {
-			sb.WriteString(fmt.Sprintf("| Git Tag | `%s` |\n", gitTag))
-		}
-
-		// Add language-specific metadata to the same table
-		if langSpecific, ok := metadataMap["language_specific"].(map[string]interface{}); ok && len(langSpecific) > 0 {
-			addLanguageSpecificToTable(&sb, projectType, langSpecific)
-		}
-
-		// Add project_match_repo comparison (common to all project types)
-		if projectMatchRepo, ok := common["project_match_repo"].(bool); ok {
-			matchStatus := "true ✅"
-			if !projectMatchRepo {
-				matchStatus = "false ❌"
-			}
-			sb.WriteString(fmt.Sprintf("| Project Matches Repository | %s |\n", matchStatus))
-		} else if projectMatchRepoStr, ok := common["project_match_repo"].(string); ok {
-			if projectMatchRepoStr == "true" {
-				sb.WriteString("| Project Matches Repository | true ✅ |\n")
-			} else if projectMatchRepoStr == "false" {
-				sb.WriteString("| Project Matches Repository | false ❌ |\n")
-			}
-		}
-
-		// Add relevant tool versions to the same table
-		if env, ok := metadataMap["environment"].(map[string]interface{}); ok {
-			if toolsInterface, ok := env["tools"].(map[string]interface{}); ok && len(toolsInterface) > 0 {
-				// Convert map[string]interface{} to map[string]string
-				allTools := make(map[string]string)
-				for k, v := range toolsInterface {
-					if strVal, ok := v.(string); ok {
-						allTools[k] = strVal
-					}
-				}
-
-				// Filter to only relevant tools based on project type
-				relevantTools := filterRelevantTools(projectType, allTools)
-				if len(relevantTools) > 0 {
-					// Sort tools alphabetically for consistent output
-					sortedTools := sortMapKeys(relevantTools)
-					for _, tool := range sortedTools {
-						sb.WriteString(fmt.Sprintf("| %s | %s |\n", formatToolName(tool), relevantTools[tool]))
-					}
-				}
-			}
-		}
-
-		sb.WriteString("\n")
+	common, ok := metadataMap["common"].(map[string]interface{})
+	if !ok {
+		return sb.String()
 	}
 
+	writeProjectInfoHeader(&sb, repoInfo)
+	writeCommonProjectRows(&sb, common, projectType)
+
+	if langSpecific, ok := metadataMap["language_specific"].(map[string]interface{}); ok && len(langSpecific) > 0 {
+		addLanguageSpecificToTable(&sb, projectType, langSpecific)
+	}
+
+	writeProjectMatchRepoRow(&sb, common)
+	writeRelevantToolRows(&sb, metadataMap, projectType)
+
+	sb.WriteString("\n")
 	return sb.String()
+}
+
+// extractCommonString returns a string field from the "common" section, or ""
+// when the section or field is absent.
+func extractCommonString(metadataMap map[string]interface{}, key string) string {
+	common, ok := metadataMap["common"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	if v, ok := common[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func writeProjectInfoHeader(sb *strings.Builder, repoInfo string) {
+	if repoInfo != "" {
+		fmt.Fprintf(sb, "### %s\n\n", repoInfo)
+	} else {
+		sb.WriteString("### Project Information\n\n")
+	}
+	sb.WriteString("| Key | Value |\n")
+	sb.WriteString("|-----|-------|\n")
+}
+
+func writeCommonProjectRows(sb *strings.Builder, common map[string]interface{}, projectType string) {
+	if projectType != "" {
+		fmt.Fprintf(sb, "| Project Type | %s |\n", formatProjectType(projectType))
+	}
+
+	writeStringRows(sb, common, []stringRow{
+		{"project_name", "Project Name", false},
+		{"project_version", "Project Version", false},
+		{"version_source", "Version Source", false},
+	})
+
+	if versioningType, ok := common["versioning_type"].(string); ok && versioningType != "" {
+		fmt.Fprintf(sb, "| Versioning Type | %s |\n", versioningType)
+	} else {
+		sb.WriteString("| Versioning Type | static |\n")
+	}
+
+	writeVersionPropertiesRows(sb, common)
+
+	if snapshotVersion, ok := common["snapshot_version"].(string); ok && snapshotVersion != "" {
+		fmt.Fprintf(sb, "| Snapshot Version | %s |\n", snapshotVersion)
+	}
+
+	writeBuildTimestampRow(sb, common)
+
+	if gitBranch, ok := common["git_branch"].(string); ok && gitBranch != "" {
+		fmt.Fprintf(sb, "| Git Branch | `%s` |\n", gitBranch)
+	}
+	if gitTag, ok := common["git_tag"].(string); ok && gitTag != "" {
+		fmt.Fprintf(sb, "| Git Tag | `%s` |\n", gitTag)
+	}
+}
+
+// writeVersionPropertiesRows renders version.properties details (LF/ONAP
+// release convention) whenever the file yielded a version, so release
+// pipelines can see the authoritative value even when a language manifest
+// won the version_source selection.
+func writeVersionPropertiesRows(sb *strings.Builder, common map[string]interface{}) {
+	propsVersion, ok := common["version_properties_version"].(string)
+	if !ok || propsVersion == "" {
+		return
+	}
+	fmt.Fprintf(sb, "| version.properties | %s |\n", propsVersion)
+	if propsMatch, ok := common["version_properties_match"].(string); ok && propsMatch != "" {
+		matchStatus := "true ✅"
+		if propsMatch != "true" {
+			matchStatus = "false ❌"
+		}
+		fmt.Fprintf(sb, "| Version Match | %s |\n", matchStatus)
+	}
+}
+
+// writeBuildTimestampRow renders the build timestamp, which may arrive as a
+// time.Time or as an RFC3339 string after JSON round-tripping.
+func writeBuildTimestampRow(sb *strings.Builder, common map[string]interface{}) {
+	if buildTimestamp, ok := common["build_timestamp"].(time.Time); ok {
+		formattedTime := buildTimestamp.UTC().Format("2006-01-02 15:04:05") + " UTC"
+		fmt.Fprintf(sb, "| Build Timestamp | %s |\n", formattedTime)
+		return
+	}
+
+	buildTimestampStr, ok := common["build_timestamp"].(string)
+	if !ok || buildTimestampStr == "" {
+		return
+	}
+	if parsedTime, err := time.Parse(time.RFC3339, buildTimestampStr); err == nil {
+		formattedTime := parsedTime.UTC().Format("2006-01-02 15:04:05") + " UTC"
+		fmt.Fprintf(sb, "| Build Timestamp | %s |\n", formattedTime)
+	} else {
+		fmt.Fprintf(sb, "| Build Timestamp | %s |\n", buildTimestampStr)
+	}
+}
+
+// writeProjectMatchRepoRow renders the project/repository match comparison,
+// which is common to all project types.
+func writeProjectMatchRepoRow(sb *strings.Builder, common map[string]interface{}) {
+	if projectMatchRepo, ok := common["project_match_repo"].(bool); ok {
+		matchStatus := "true ✅"
+		if !projectMatchRepo {
+			matchStatus = "false ❌"
+		}
+		fmt.Fprintf(sb, "| Project Matches Repository | %s |\n", matchStatus)
+		return
+	}
+	if projectMatchRepoStr, ok := common["project_match_repo"].(string); ok {
+		switch projectMatchRepoStr {
+		case "true":
+			sb.WriteString("| Project Matches Repository | true ✅ |\n")
+		case "false":
+			sb.WriteString("| Project Matches Repository | false ❌ |\n")
+		}
+	}
+}
+
+func writeRelevantToolRows(sb *strings.Builder, metadataMap map[string]interface{}, projectType string) {
+	env, ok := metadataMap["environment"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	toolsInterface, ok := env["tools"].(map[string]interface{})
+	if !ok || len(toolsInterface) == 0 {
+		return
+	}
+
+	allTools := make(map[string]string)
+	for k, v := range toolsInterface {
+		if strVal, ok := v.(string); ok {
+			allTools[k] = strVal
+		}
+	}
+
+	relevantTools := filterRelevantTools(projectType, allTools)
+	if len(relevantTools) == 0 {
+		return
+	}
+	for _, tool := range sortMapKeys(relevantTools) {
+		fmt.Fprintf(sb, "| %s | %s |\n", formatToolName(tool), relevantTools[tool])
+	}
+}
+
+// stringRow describes a metadata field to render as a table row. When code is
+// true the value is wrapped in backticks.
+type stringRow struct {
+	key   string
+	label string
+	code  bool
+}
+
+func writeStringRows(sb *strings.Builder, metadata map[string]interface{}, rows []stringRow) {
+	for _, row := range rows {
+		v, ok := metadata[row.key].(string)
+		if !ok || v == "" {
+			continue
+		}
+		if row.code {
+			fmt.Fprintf(sb, "| %s | `%s` |\n", row.label, v)
+		} else {
+			fmt.Fprintf(sb, "| %s | %s |\n", row.label, v)
+		}
+	}
+}
+
+// hasAnyPrefix reports whether s starts with any of the given prefixes.
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // GenerateMarkdown creates a markdown formatted output
@@ -229,243 +278,183 @@ func formatProjectType(projectType string) string {
 	return strings.Join(parts, " ")
 }
 
+// languageTableWriters maps project-type prefixes to the writer that renders
+// their language-specific rows. The slice is ordered so that more specific
+// prefixes (e.g. "javascript") are matched before overlapping shorter ones
+// (e.g. "java").
+var languageTableWriters = []struct {
+	prefixes []string
+	write    func(sb *strings.Builder, metadata map[string]interface{})
+}{
+	{[]string{"python"}, writePythonRows},
+	{[]string{"javascript", "typescript"}, writeJSRows},
+	{[]string{"java"}, writeJavaRows},
+	{[]string{"go"}, writeGoRows},
+	{[]string{"rust"}, writeRustRows},
+	{[]string{"csharp", "dotnet"}, writeDotnetRows},
+	{[]string{"php"}, writePHPRows},
+	{[]string{"ruby"}, writeRubyRows},
+	{[]string{"swift"}, writeSwiftRows},
+	{[]string{"terraform"}, writeTerraformRows},
+	{[]string{"helm"}, writeHelmRows},
+	{[]string{"dart"}, writeDartRows},
+}
+
 // addLanguageSpecificToTable adds key language-specific metadata to the table
 func addLanguageSpecificToTable(sb *strings.Builder, projectType string, metadata map[string]interface{}) {
 	if metadata == nil {
 		return
 	}
-
-	switch {
-	case strings.HasPrefix(projectType, "python"):
-		// Metadata source
-		if metadataSource, ok := metadata["metadata_source"].(string); ok && metadataSource != "" {
-			sb.WriteString(fmt.Sprintf("| Metadata Source | %s |\n", metadataSource))
-		}
-
-		// Package name
-		if packageName, ok := metadata["package_name"].(string); ok && packageName != "" {
-			sb.WriteString(fmt.Sprintf("| Package Name | `%s` |\n", packageName))
-		}
-
-		// Build Python version
-		if buildVersion, ok := metadata["build_version"].(string); ok && buildVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Build Python | %s |\n", buildVersion))
-		}
-
-		// Matrix JSON
-		if matrixJSON, ok := metadata["matrix_json"].(string); ok && matrixJSON != "" {
-			sb.WriteString(fmt.Sprintf("| Matrix JSON | `%s` |\n", matrixJSON))
-		}
-
-		// Requires Python
-		if requiresPython, ok := metadata["requires_python"].(string); ok && requiresPython != "" {
-			sb.WriteString(fmt.Sprintf("| Requires Python | %s |\n", requiresPython))
-		}
-
-		// Build Backend
-		if buildBackend, ok := metadata["build_backend"].(string); ok && buildBackend != "" {
-			sb.WriteString(fmt.Sprintf("| Build Backend | %s |\n", buildBackend))
-		}
-
-		// Project/Package match
-		if projectMatchPackage, ok := metadata["project_match_package"].(bool); ok {
-			matchStatus := "true ✅"
-			if !projectMatchPackage {
-				matchStatus = "false ⚠️"
-			}
-			sb.WriteString(fmt.Sprintf("| Project/Package Names Match | %s |\n", matchStatus))
-		}
-
-	case strings.HasPrefix(projectType, "javascript") || strings.HasPrefix(projectType, "typescript"):
-		if packageManager, ok := metadata["package_manager"].(string); ok && packageManager != "" {
-			sb.WriteString(fmt.Sprintf("| Package Manager | %s |\n", packageManager))
-		}
-		if moduleType, ok := metadata["module_type"].(string); ok && moduleType != "" {
-			sb.WriteString(fmt.Sprintf("| Module Type | %s |\n", moduleType))
-		}
-		if requiresNode, ok := metadata["requires_node"].(string); ok && requiresNode != "" {
-			sb.WriteString(fmt.Sprintf("| Requires Node | %s |\n", requiresNode))
-		}
-
-	case strings.HasPrefix(projectType, "java"):
-		if groupID, ok := metadata["group_id"].(string); ok && groupID != "" {
-			sb.WriteString(fmt.Sprintf("| Group ID | `%s` |\n", groupID))
-		}
-		if artifactID, ok := metadata["artifact_id"].(string); ok && artifactID != "" {
-			sb.WriteString(fmt.Sprintf("| Artifact ID | `%s` |\n", artifactID))
-		}
-		if packaging, ok := metadata["packaging"].(string); ok && packaging != "" {
-			sb.WriteString(fmt.Sprintf("| Packaging | %s |\n", packaging))
-		}
-
-	case strings.HasPrefix(projectType, "go"):
-		if module, ok := metadata["module"].(string); ok && module != "" {
-			sb.WriteString(fmt.Sprintf("| Go Module | `%s` |\n", module))
-		}
-		if goVersion, ok := metadata["go_version"].(string); ok && goVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Go Version | %s |\n", goVersion))
-		}
-
-	case strings.HasPrefix(projectType, "rust"):
-		if edition, ok := metadata["edition"].(string); ok && edition != "" {
-			sb.WriteString(fmt.Sprintf("| Rust Edition | %s |\n", edition))
-		}
-		if msrv, ok := metadata["msrv"].(string); ok && msrv != "" {
-			sb.WriteString(fmt.Sprintf("| MSRV | %s |\n", msrv))
-		}
-
-	case strings.HasPrefix(projectType, "csharp") || strings.HasPrefix(projectType, "dotnet"):
-		if framework, ok := metadata["framework"].(string); ok && framework != "" {
-			sb.WriteString(fmt.Sprintf("| Target Framework | %s |\n", framework))
-		}
-
-	case strings.HasPrefix(projectType, "php"):
-		if requiresPhp, ok := metadata["requires_php"].(string); ok && requiresPhp != "" {
-			sb.WriteString(fmt.Sprintf("| Requires PHP | %s |\n", requiresPhp))
-		}
-
-	case strings.HasPrefix(projectType, "ruby"):
-		if rubyVersion, ok := metadata["ruby_version"].(string); ok && rubyVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Ruby Version | %s |\n", rubyVersion))
-		}
-
-	case strings.HasPrefix(projectType, "swift"):
-		if swiftVersion, ok := metadata["swift_tools_version"].(string); ok && swiftVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Swift Tools Version | %s |\n", swiftVersion))
-		}
-
-	case strings.HasPrefix(projectType, "terraform"):
-		if terraformVersion, ok := metadata["terraform_version"].(string); ok && terraformVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Terraform Version | %s |\n", terraformVersion))
-		}
-		if isOpenTofu, ok := metadata["is_opentofu"].(bool); ok && isOpenTofu {
-			sb.WriteString("| Engine | OpenTofu |\n")
-		}
-
-	case strings.HasPrefix(projectType, "helm"):
-		if apiVersion, ok := metadata["api_version"].(string); ok && apiVersion != "" {
-			sb.WriteString(fmt.Sprintf("| Chart API Version | %s |\n", apiVersion))
-		}
-		if appVersion, ok := metadata["app_version"].(string); ok && appVersion != "" {
-			sb.WriteString(fmt.Sprintf("| App Version | %s |\n", appVersion))
-		}
-
-	case strings.HasPrefix(projectType, "dart"):
-		if sdkConstraint, ok := metadata["sdk_constraint"].(string); ok && sdkConstraint != "" {
-			sb.WriteString(fmt.Sprintf("| Dart SDK | %s |\n", sdkConstraint))
-		}
-		if isFlutter, ok := metadata["is_flutter"].(bool); ok && isFlutter {
-			sb.WriteString("| Framework | Flutter |\n")
+	for _, w := range languageTableWriters {
+		if hasAnyPrefix(projectType, w.prefixes) {
+			w.write(sb, metadata)
+			return
 		}
 	}
 }
 
+func writePythonRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"metadata_source", "Metadata Source", false},
+		{"package_name", "Package Name", true},
+		{"build_version", "Build Python", false},
+		{"matrix_json", "Matrix JSON", true},
+		{"requires_python", "Requires Python", false},
+		{"build_backend", "Build Backend", false},
+	})
+
+	if projectMatchPackage, ok := metadata["project_match_package"].(bool); ok {
+		matchStatus := "true ✅"
+		if !projectMatchPackage {
+			matchStatus = "false ⚠️"
+		}
+		fmt.Fprintf(sb, "| Project/Package Names Match | %s |\n", matchStatus)
+	}
+}
+
+func writeJSRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"package_manager", "Package Manager", false},
+		{"module_type", "Module Type", false},
+		{"requires_node", "Requires Node", false},
+	})
+}
+
+func writeJavaRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"group_id", "Group ID", true},
+		{"artifact_id", "Artifact ID", true},
+		{"packaging", "Packaging", false},
+	})
+}
+
+func writeGoRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"module", "Go Module", true},
+		{"go_version", "Go Version", false},
+	})
+}
+
+func writeRustRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"edition", "Rust Edition", false},
+		{"msrv", "MSRV", false},
+	})
+}
+
+func writeDotnetRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"framework", "Target Framework", false},
+	})
+}
+
+func writePHPRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"requires_php", "Requires PHP", false},
+	})
+}
+
+func writeRubyRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"ruby_version", "Ruby Version", false},
+	})
+}
+
+func writeSwiftRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"swift_tools_version", "Swift Tools Version", false},
+	})
+}
+
+func writeTerraformRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"terraform_version", "Terraform Version", false},
+	})
+	if isOpenTofu, ok := metadata["is_opentofu"].(bool); ok && isOpenTofu {
+		sb.WriteString("| Engine | OpenTofu |\n")
+	}
+}
+
+func writeHelmRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"api_version", "Chart API Version", false},
+		{"app_version", "App Version", false},
+	})
+}
+
+func writeDartRows(sb *strings.Builder, metadata map[string]interface{}) {
+	writeStringRows(sb, metadata, []stringRow{
+		{"sdk_constraint", "Dart SDK", false},
+	})
+	if isFlutter, ok := metadata["is_flutter"].(bool); ok && isFlutter {
+		sb.WriteString("| Framework | Flutter |\n")
+	}
+}
+
+// toolsByProjectPrefix maps project-type prefixes to the tools worth showing
+// for that ecosystem. The slice is ordered so overlapping prefixes (e.g.
+// "javascript" before "java") resolve to the intended entry.
+var toolsByProjectPrefix = []struct {
+	prefixes []string
+	tools    []string
+}{
+	// python3 is intentionally omitted: the "Build Python" field already shows
+	// the recommended version from project metadata, and the detected python3
+	// is the system Python (build-metadata-action runs before setup-python),
+	// which would be misleading. Only pip is relevant for dependency install.
+	{[]string{"python"}, []string{"pip"}},
+	{[]string{"javascript", "typescript"}, []string{"node", "npm", "yarn"}},
+	{[]string{"java"}, []string{"java", "javac", "mvn", "gradle"}},
+	{[]string{"go"}, []string{"go"}},
+	{[]string{"rust"}, []string{"rustc", "cargo"}},
+	{[]string{"csharp", "dotnet"}, []string{"dotnet"}},
+	{[]string{"php"}, []string{"php", "composer"}},
+	{[]string{"ruby"}, []string{"ruby", "gem"}},
+	{[]string{"swift"}, []string{"swift"}},
+	{[]string{"terraform"}, []string{"terraform", "tofu"}},
+	{[]string{"docker"}, []string{"docker", "kubectl"}},
+	{[]string{"helm"}, []string{"helm", "kubectl"}},
+	{[]string{"dart"}, []string{"dart", "flutter"}},
+	{[]string{"c-"}, []string{"gcc", "clang", "cmake", "make"}},
+}
+
 // filterRelevantTools filters tools to only those relevant to the project type
 func filterRelevantTools(projectType string, allTools map[string]string) map[string]string {
+	relevant := make(map[string]string)
 	if projectType == "" || len(allTools) == 0 {
-		return make(map[string]string)
+		return relevant
 	}
 
-	relevant := make(map[string]string)
-
-	// Filter based on project type
-	switch {
-	case strings.HasPrefix(projectType, "python"):
-		// Note: We intentionally exclude python3 here because:
-		// 1. The "Build Python" field already shows the recommended version from project metadata
-		// 2. The detected python3 version is the system Python, not the matrix job's Python
-		// 3. build-metadata-action runs BEFORE setup-python, so the detected version is misleading
-		// Only show pip version as it may be relevant for dependency installation
-		for _, tool := range []string{"pip"} {
+	for _, entry := range toolsByProjectPrefix {
+		if !hasAnyPrefix(projectType, entry.prefixes) {
+			continue
+		}
+		for _, tool := range entry.tools {
 			if version, ok := allTools[tool]; ok {
 				relevant[tool] = version
 			}
 		}
-
-	case strings.HasPrefix(projectType, "javascript") || strings.HasPrefix(projectType, "typescript"):
-		for _, tool := range []string{"node", "npm", "yarn"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "java"):
-		for _, tool := range []string{"java", "javac", "mvn", "gradle"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "go"):
-		if version, ok := allTools["go"]; ok {
-			relevant["go"] = version
-		}
-
-	case strings.HasPrefix(projectType, "rust"):
-		for _, tool := range []string{"rustc", "cargo"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "csharp") || strings.HasPrefix(projectType, "dotnet"):
-		if version, ok := allTools["dotnet"]; ok {
-			relevant["dotnet"] = version
-		}
-
-	case strings.HasPrefix(projectType, "php"):
-		for _, tool := range []string{"php", "composer"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "ruby"):
-		for _, tool := range []string{"ruby", "gem"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "swift"):
-		if version, ok := allTools["swift"]; ok {
-			relevant["swift"] = version
-		}
-
-	case strings.HasPrefix(projectType, "terraform"):
-		for _, tool := range []string{"terraform", "tofu"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "docker"):
-		for _, tool := range []string{"docker", "kubectl"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "helm"):
-		for _, tool := range []string{"helm", "kubectl"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "dart"):
-		for _, tool := range []string{"dart", "flutter"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
-
-	case strings.HasPrefix(projectType, "c-"):
-		for _, tool := range []string{"gcc", "clang", "cmake", "make"} {
-			if version, ok := allTools[tool]; ok {
-				relevant[tool] = version
-			}
-		}
+		break
 	}
 
 	return relevant
