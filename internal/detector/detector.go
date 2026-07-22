@@ -133,7 +133,6 @@ func DetectProjectType(projectPath string) (string, error) {
 		return sortedRules[i].Priority < sortedRules[j].Priority
 	})
 
-	// Check each rule
 	for _, rule := range sortedRules {
 		if matchesRule(projectPath, rule) {
 			pt := &ProjectType{
@@ -160,7 +159,6 @@ func DetectAllProjectTypes(projectPath string) ([]string, error) {
 		return sortedRules[i].Priority < sortedRules[j].Priority
 	})
 
-	// Check each rule
 	for _, rule := range sortedRules {
 		if matchesRule(projectPath, rule) {
 			pt := &ProjectType{

@@ -93,18 +93,15 @@ func GetExtractor(name string) (Extractor, error) {
 
 // mapProjectTypeToExtractor converts detector project types to extractor names
 func mapProjectTypeToExtractor(projectType string) string {
-	// Handle Python variants
 	if projectType == "python-modern" || projectType == "python-legacy" || projectType == "python-setup-cfg" {
 		return "python"
 	}
 
-	// Handle JavaScript/TypeScript variants
 	if projectType == "javascript-npm" || projectType == "javascript-yarn" ||
 		projectType == "javascript-pnpm" || projectType == "typescript-npm" {
 		return "javascript"
 	}
 
-	// Handle Java variants
 	if projectType == "java-maven" {
 		return "java-maven"
 	}
@@ -112,78 +109,63 @@ func mapProjectTypeToExtractor(projectType string) string {
 		return "java-gradle"
 	}
 
-	// Handle .NET variants
 	if projectType == "csharp-project" || projectType == "csharp-solution" ||
 		projectType == "csharp-props" || projectType == "dotnet-project" {
 		return "dotnet"
 	}
 
-	// Handle Go variants
 	if projectType == "go-module" {
 		return "go-module"
 	}
 
-	// Handle Rust variants
 	if projectType == "rust-cargo" {
 		return "rust-cargo"
 	}
 
-	// Handle Ruby variants
 	if projectType == "ruby-gemspec" || projectType == "ruby-bundler" {
 		return "ruby"
 	}
 
-	// Handle PHP variants
 	if projectType == "php-composer" {
 		return "php"
 	}
 
-	// Handle Swift variants
 	if projectType == "swift-package" {
 		return "swift"
 	}
 
-	// Handle Dart/Flutter variants
 	if projectType == "dart-flutter" || projectType == "dart-package" {
 		return "dart"
 	}
 
-	// Handle Elixir variants
 	if projectType == "elixir-mix" {
 		return "elixir"
 	}
 
-	// Handle Scala variants
 	if projectType == "scala-sbt" {
 		return "scala"
 	}
 
-	// Handle Haskell variants
 	if projectType == "haskell-cabal" {
 		return "haskell"
 	}
 
-	// Handle Julia variants
 	if projectType == "julia-project" {
 		return "julia"
 	}
 
-	// Handle C/C++ variants
 	if projectType == "c-cmake" || projectType == "c-qmake" || projectType == "c-autoconf" || projectType == "c-autoconf-legacy" || projectType == "c-meson" {
 		return "cpp"
 	}
 
-	// Handle Docker
 	if projectType == "docker" {
 		return "docker"
 	}
 
-	// Handle Helm variants
 	if projectType == "helm" || projectType == "helm-chart" {
 		return "helm"
 	}
 
-	// Handle Terraform variants
 	if projectType == "terraform" || projectType == "terraform-module" {
 		return "terraform"
 	}

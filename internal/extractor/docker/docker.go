@@ -97,7 +97,6 @@ func (e *Extractor) parseDockerfile(path string) (*DockerfileMetadata, error) {
 			continue
 		}
 
-		// Handle line continuation
 		if strings.HasSuffix(line, "\\") {
 			currentLine += strings.TrimSuffix(line, "\\") + " "
 			continue
@@ -109,7 +108,6 @@ func (e *Extractor) parseDockerfile(path string) (*DockerfileMetadata, error) {
 			currentLine = ""
 		}
 
-		// Parse the instruction
 		e.parseInstruction(line, dockerMeta)
 	}
 
@@ -191,7 +189,6 @@ func (e *Extractor) parseFrom(args string, meta *DockerfileMetadata) {
 		baseImage := parts[0]
 		meta.BaseImages = append(meta.BaseImages, baseImage)
 
-		// Check for stage name
 		for i, part := range parts {
 			if strings.ToUpper(part) == "AS" && i+1 < len(parts) {
 				meta.Stages = append(meta.Stages, parts[i+1])
@@ -275,7 +272,6 @@ func (e *Extractor) parseArg(args string, meta *DockerfileMetadata) {
 
 // parseCopy extracts COPY --from references
 func (e *Extractor) parseCopy(args string, meta *DockerfileMetadata) {
-	// Check for --from flag
 	re := regexp.MustCompile(`--from=(\S+)`)
 	if matches := re.FindStringSubmatch(args); len(matches) > 1 {
 		meta.CopyFrom = append(meta.CopyFrom, matches[1])
@@ -303,118 +299,107 @@ func parseCommand(args string) []string {
 	return []string{args}
 }
 
-// populateMetadata converts DockerfileMetadata to ProjectMetadata
-func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata, projectPath string) {
-	// Extract name from directory
-	metadata.Name = filepath.Base(projectPath)
+// firstLabel returns the value of the first label key that is present.
+func firstLabel(labels map[string]string, keys ...string) (string, bool) {
+	for _, k := range keys {
+		if v, ok := labels[k]; ok {
+			return v, true
+		}
+	}
+	return "", false
+}
 
-	// Extract version from labels
-	if version, ok := dockerMeta.Labels["version"]; ok {
+// applyDockerLabelMetadata maps Dockerfile labels onto core project fields.
+// Precedence differs per field to preserve historical behaviour: version,
+// description, license and maintainer prefer the plain label key over its
+// OCI equivalent, whereas repository (source) and homepage (url) prefer the
+// org.opencontainers.image.* key first.
+func applyDockerLabelMetadata(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata) {
+	labels := dockerMeta.Labels
+
+	if version, ok := labels["version"]; ok {
 		metadata.Version = version
 		metadata.VersionSource = "Dockerfile LABEL version"
-	} else if version, ok := dockerMeta.Labels["org.opencontainers.image.version"]; ok {
+	} else if version, ok := labels["org.opencontainers.image.version"]; ok {
 		metadata.Version = version
 		metadata.VersionSource = "Dockerfile LABEL org.opencontainers.image.version"
 	}
 
-	// Extract description
-	if desc, ok := dockerMeta.Labels["description"]; ok {
-		metadata.Description = desc
-	} else if desc, ok := dockerMeta.Labels["org.opencontainers.image.description"]; ok {
-		metadata.Description = desc
+	if v, ok := firstLabel(labels, "description", "org.opencontainers.image.description"); ok {
+		metadata.Description = v
 	}
-
-	// Extract license
-	if license, ok := dockerMeta.Labels["license"]; ok {
-		metadata.License = license
-	} else if license, ok := dockerMeta.Labels["org.opencontainers.image.licenses"]; ok {
-		metadata.License = license
+	if v, ok := firstLabel(labels, "license", "org.opencontainers.image.licenses"); ok {
+		metadata.License = v
 	}
-
-	// Extract authors
-	if authors, ok := dockerMeta.Labels["maintainer"]; ok {
-		metadata.Authors = []string{authors}
-	} else if authors, ok := dockerMeta.Labels["org.opencontainers.image.authors"]; ok {
-		metadata.Authors = []string{authors}
+	if v, ok := firstLabel(labels, "maintainer", "org.opencontainers.image.authors"); ok {
+		metadata.Authors = []string{v}
 	}
-
-	// Extract repository
-	if url, ok := dockerMeta.Labels["org.opencontainers.image.source"]; ok {
-		metadata.Repository = url
-	} else if url, ok := dockerMeta.Labels["source"]; ok {
-		metadata.Repository = url
+	if v, ok := firstLabel(labels, "org.opencontainers.image.source", "source"); ok {
+		metadata.Repository = v
 	}
-
-	// Extract homepage
-	if url, ok := dockerMeta.Labels["org.opencontainers.image.url"]; ok {
-		metadata.Homepage = url
-	} else if url, ok := dockerMeta.Labels["url"]; ok {
-		metadata.Homepage = url
+	if v, ok := firstLabel(labels, "org.opencontainers.image.url", "url"); ok {
+		metadata.Homepage = v
 	}
+}
 
-	// Docker-specific metadata
-	metadata.LanguageSpecific["metadata_source"] = "Dockerfile"
-	metadata.LanguageSpecific["base_images"] = dockerMeta.BaseImages
+// applyDockerRuntimeMetadata records base images, labels, and runtime
+// instruction data under LanguageSpecific.
+func applyDockerRuntimeMetadata(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata) {
+	ls := metadata.LanguageSpecific
+	ls["metadata_source"] = "Dockerfile"
+	ls["base_images"] = dockerMeta.BaseImages
 
 	if len(dockerMeta.BaseImages) > 0 {
-		metadata.LanguageSpecific["primary_base_image"] = dockerMeta.BaseImages[0]
-		metadata.LanguageSpecific["base_image_count"] = len(dockerMeta.BaseImages)
+		ls["primary_base_image"] = dockerMeta.BaseImages[0]
+		ls["base_image_count"] = len(dockerMeta.BaseImages)
 	}
-
 	if len(dockerMeta.Labels) > 0 {
-		metadata.LanguageSpecific["labels"] = dockerMeta.Labels
-		metadata.LanguageSpecific["label_count"] = len(dockerMeta.Labels)
+		ls["labels"] = dockerMeta.Labels
+		ls["label_count"] = len(dockerMeta.Labels)
 	}
-
 	if len(dockerMeta.ExposedPorts) > 0 {
-		metadata.LanguageSpecific["exposed_ports"] = dockerMeta.ExposedPorts
+		ls["exposed_ports"] = dockerMeta.ExposedPorts
 	}
-
 	if len(dockerMeta.Volumes) > 0 {
-		metadata.LanguageSpecific["volumes"] = dockerMeta.Volumes
+		ls["volumes"] = dockerMeta.Volumes
 	}
-
 	if len(dockerMeta.Entrypoint) > 0 {
-		metadata.LanguageSpecific["entrypoint"] = dockerMeta.Entrypoint
+		ls["entrypoint"] = dockerMeta.Entrypoint
 	}
-
 	if len(dockerMeta.Cmd) > 0 {
-		metadata.LanguageSpecific["cmd"] = dockerMeta.Cmd
+		ls["cmd"] = dockerMeta.Cmd
 	}
-
 	if dockerMeta.WorkDir != "" {
-		metadata.LanguageSpecific["workdir"] = dockerMeta.WorkDir
+		ls["workdir"] = dockerMeta.WorkDir
 	}
-
 	if dockerMeta.User != "" {
-		metadata.LanguageSpecific["user"] = dockerMeta.User
+		ls["user"] = dockerMeta.User
 	}
-
 	if len(dockerMeta.Env) > 0 {
-		metadata.LanguageSpecific["env"] = dockerMeta.Env
+		ls["env"] = dockerMeta.Env
 	}
-
 	if len(dockerMeta.Args) > 0 {
-		metadata.LanguageSpecific["build_args"] = dockerMeta.Args
+		ls["build_args"] = dockerMeta.Args
 	}
-
 	if dockerMeta.HealthCheck != "" {
-		metadata.LanguageSpecific["healthcheck"] = dockerMeta.HealthCheck
+		ls["healthcheck"] = dockerMeta.HealthCheck
 	}
 
 	if len(dockerMeta.Stages) > 0 {
-		metadata.LanguageSpecific["build_stages"] = dockerMeta.Stages
-		metadata.LanguageSpecific["is_multistage"] = true
-		metadata.LanguageSpecific["stage_count"] = len(dockerMeta.Stages)
+		ls["build_stages"] = dockerMeta.Stages
+		ls["is_multistage"] = true
+		ls["stage_count"] = len(dockerMeta.Stages)
 	} else {
-		metadata.LanguageSpecific["is_multistage"] = false
+		ls["is_multistage"] = false
 	}
 
 	if len(dockerMeta.CopyFrom) > 0 {
-		metadata.LanguageSpecific["copy_from_stages"] = dockerMeta.CopyFrom
+		ls["copy_from_stages"] = dockerMeta.CopyFrom
 	}
+}
 
-	// Check for OCI image spec compliance
+// applyDockerOCICompliance flags whether the required OCI image labels are all present.
+func applyDockerOCICompliance(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata) {
 	ociLabels := []string{
 		"org.opencontainers.image.created",
 		"org.opencontainers.image.version",
@@ -432,9 +417,16 @@ func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *e
 	metadata.LanguageSpecific["oci_compliant"] = ociCompliant
 }
 
+// populateMetadata converts DockerfileMetadata to ProjectMetadata
+func (e *Extractor) populateMetadata(dockerMeta *DockerfileMetadata, metadata *extractor.ProjectMetadata, projectPath string) {
+	metadata.Name = filepath.Base(projectPath)
+	applyDockerLabelMetadata(dockerMeta, metadata)
+	applyDockerRuntimeMetadata(dockerMeta, metadata)
+	applyDockerOCICompliance(dockerMeta, metadata)
+}
+
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Dockerfile
 	dockerfilePath := filepath.Join(projectPath, "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err == nil {
 		return true

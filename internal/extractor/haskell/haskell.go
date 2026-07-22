@@ -31,13 +31,11 @@ func init() {
 
 // Detect checks if this is a Haskell project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for .cabal file
 	matches, err := filepath.Glob(filepath.Join(projectPath, "*.cabal"))
 	if err == nil && len(matches) > 0 {
 		return true
 	}
 
-	// Check for stack.yaml
 	if _, err := os.Stat(filepath.Join(projectPath, "stack.yaml")); err == nil {
 		return true
 	}
@@ -47,12 +45,10 @@ func (e *Extractor) Detect(projectPath string) bool {
 		return true
 	}
 
-	// Check for cabal.project
 	if _, err := os.Stat(filepath.Join(projectPath, "cabal.project")); err == nil {
 		return true
 	}
 
-	// Check for Haskell source files
 	srcDir := filepath.Join(projectPath, "src")
 	if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
 		matches, err := filepath.Glob(filepath.Join(srcDir, "*.hs"))
@@ -78,7 +74,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		}
 	}
 
-	// Check for Stack
 	stackPath := filepath.Join(projectPath, "stack.yaml")
 	if _, err := os.Stat(stackPath); err == nil {
 		e.extractFromStack(stackPath, metadata)
@@ -98,6 +93,67 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	return metadata, nil
 }
 
+// cabalBuildDependsRegex matches the opening line of a build-depends stanza.
+var cabalBuildDependsRegex = regexp.MustCompile(`(?i)^build-depends:\s*(.+)$`)
+
+// cabalMatcher pairs a single-value field regex with the assignment it drives.
+type cabalMatcher struct {
+	re     *regexp.Regexp
+	assign func(value string)
+}
+
+// cabalFieldMatchers builds the ordered set of single-value cabal field
+// matchers, closing over the destinations they write to.
+func cabalFieldMatchers(path string, metadata *extractor.ProjectMetadata, authors *[]string) []cabalMatcher {
+	field := func(name string) *regexp.Regexp {
+		return regexp.MustCompile(`(?i)^` + name + `:\s*(.+)$`)
+	}
+	return []cabalMatcher{
+		{field("name"), func(v string) { metadata.Name = v }},
+		{field("version"), func(v string) {
+			metadata.Version = v
+			metadata.VersionSource = filepath.Base(path)
+		}},
+		{field("synopsis"), func(v string) { metadata.Description = v }},
+		{field("description"), func(v string) {
+			if metadata.Description == "" {
+				metadata.Description = v
+			}
+		}},
+		{field("homepage"), func(v string) { metadata.Homepage = v }},
+		{field("license"), func(v string) { metadata.License = v }},
+		{field("author"), func(v string) {
+			if v != "" {
+				*authors = append(*authors, v)
+			}
+		}},
+		{field("maintainer"), func(v string) {
+			if v != "" {
+				metadata.LanguageSpecific["maintainer"] = v
+			}
+		}},
+		{field("category"), func(v string) { metadata.LanguageSpecific["category"] = v }},
+		{field("tested-with"), func(v string) { metadata.LanguageSpecific["tested_with"] = v }},
+	}
+}
+
+// appendBuildDepends processes a line against the (possibly multi-line)
+// build-depends stanza and returns whether the stanza is still open.
+func appendBuildDepends(line, trimmed string, inBuildDepends bool, dependencies *[]string) bool {
+	if matches := cabalBuildDependsRegex.FindStringSubmatch(trimmed); matches != nil {
+		*dependencies = append(*dependencies, parseDependencies(strings.TrimSpace(matches[1]))...)
+		return true
+	}
+	if inBuildDepends && strings.HasPrefix(line, " ") {
+		*dependencies = append(*dependencies, parseDependencies(trimmed)...)
+		return true
+	}
+	if inBuildDepends {
+		return false
+	}
+	return inBuildDepends
+}
+
 // extractFromCabal parses a .cabal file
 func (e *Extractor) extractFromCabal(path string, metadata *extractor.ProjectMetadata) error {
 	file, err := os.Open(path)
@@ -106,24 +162,12 @@ func (e *Extractor) extractFromCabal(path string, metadata *extractor.ProjectMet
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-
-	nameRegex := regexp.MustCompile(`(?i)^name:\s*(.+)$`)
-	versionRegex := regexp.MustCompile(`(?i)^version:\s*(.+)$`)
-	synopsisRegex := regexp.MustCompile(`(?i)^synopsis:\s*(.+)$`)
-	descriptionRegex := regexp.MustCompile(`(?i)^description:\s*(.+)$`)
-	homepageRegex := regexp.MustCompile(`(?i)^homepage:\s*(.+)$`)
-	licenseRegex := regexp.MustCompile(`(?i)^license:\s*(.+)$`)
-	authorRegex := regexp.MustCompile(`(?i)^author:\s*(.+)$`)
-	maintainerRegex := regexp.MustCompile(`(?i)^maintainer:\s*(.+)$`)
-	buildDependsRegex := regexp.MustCompile(`(?i)^build-depends:\s*(.+)$`)
-	categoryRegex := regexp.MustCompile(`(?i)^category:\s*(.+)$`)
-	testedWithRegex := regexp.MustCompile(`(?i)^tested-with:\s*(.+)$`)
-
-	var dependencies []string
 	var authors []string
+	var dependencies []string
 	inBuildDepends := false
+	matchers := cabalFieldMatchers(path, metadata, &authors)
 
+	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
@@ -133,65 +177,13 @@ func (e *Extractor) extractFromCabal(path string, metadata *extractor.ProjectMet
 			continue
 		}
 
-		if matches := nameRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.Name = strings.TrimSpace(matches[1])
-		}
-
-		if matches := versionRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.Version = strings.TrimSpace(matches[1])
-			metadata.VersionSource = filepath.Base(path)
-		}
-
-		if matches := synopsisRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.Description = strings.TrimSpace(matches[1])
-		}
-
-		if matches := descriptionRegex.FindStringSubmatch(trimmed); matches != nil && metadata.Description == "" {
-			metadata.Description = strings.TrimSpace(matches[1])
-		}
-
-		if matches := homepageRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.Homepage = strings.TrimSpace(matches[1])
-		}
-
-		if matches := licenseRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.License = strings.TrimSpace(matches[1])
-		}
-
-		if matches := authorRegex.FindStringSubmatch(trimmed); matches != nil {
-			author := strings.TrimSpace(matches[1])
-			if author != "" {
-				authors = append(authors, author)
+		for _, matcher := range matchers {
+			if matches := matcher.re.FindStringSubmatch(trimmed); matches != nil {
+				matcher.assign(strings.TrimSpace(matches[1]))
 			}
 		}
 
-		if matches := maintainerRegex.FindStringSubmatch(trimmed); matches != nil {
-			maintainer := strings.TrimSpace(matches[1])
-			if maintainer != "" {
-				metadata.LanguageSpecific["maintainer"] = maintainer
-			}
-		}
-
-		if matches := categoryRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.LanguageSpecific["category"] = strings.TrimSpace(matches[1])
-		}
-
-		if matches := testedWithRegex.FindStringSubmatch(trimmed); matches != nil {
-			metadata.LanguageSpecific["tested_with"] = strings.TrimSpace(matches[1])
-		}
-
-		if matches := buildDependsRegex.FindStringSubmatch(trimmed); matches != nil {
-			depLine := strings.TrimSpace(matches[1])
-			deps := parseDependencies(depLine)
-			dependencies = append(dependencies, deps...)
-			inBuildDepends = true
-		} else if inBuildDepends && strings.HasPrefix(line, " ") {
-			// Continuation of build-depends
-			deps := parseDependencies(trimmed)
-			dependencies = append(dependencies, deps...)
-		} else if inBuildDepends && !strings.HasPrefix(line, " ") {
-			inBuildDepends = false
-		}
+		inBuildDepends = appendBuildDepends(line, trimmed, inBuildDepends, &dependencies)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -284,7 +276,6 @@ func (e *Extractor) extractFromPackageYaml(path string, metadata *extractor.Proj
 func parseDependencies(line string) []string {
 	var deps []string
 
-	// Remove trailing comma
 	line = strings.TrimSuffix(line, ",")
 
 	// Split by comma
@@ -341,6 +332,5 @@ func extractGHCVersionFromResolver(resolver string) string {
 
 // generateGHCVersionMatrix generates a matrix of GHC versions
 func generateGHCVersionMatrix(ghcVersion string) []string {
-	// Return common GHC versions for testing
 	return []string{"9.4", "9.6", "9.8"}
 }

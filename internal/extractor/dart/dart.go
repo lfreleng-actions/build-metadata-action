@@ -128,7 +128,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 		return fmt.Errorf("failed to parse pubspec.yaml: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = pubspec.Name
 	metadata.Version = pubspec.Version
 	metadata.Description = pubspec.Description
@@ -136,26 +135,41 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 	metadata.Repository = pubspec.Repository
 	metadata.VersionSource = "pubspec.yaml"
 
-	// Dart/Flutter-specific metadata
 	metadata.LanguageSpecific["package_name"] = pubspec.Name
 	metadata.LanguageSpecific["metadata_source"] = "pubspec.yaml"
 
-	// Detect if this is a Flutter project
-	isFlutter := false
-	if _, hasFlutterDep := pubspec.Dependencies["flutter"]; hasFlutterDep {
-		isFlutter = true
-		metadata.LanguageSpecific["is_flutter"] = true
-		metadata.LanguageSpecific["framework"] = "Flutter"
-	} else {
-		metadata.LanguageSpecific["is_flutter"] = false
-		metadata.LanguageSpecific["framework"] = "Dart"
+	isFlutter := applyFlutterDetection(&pubspec, metadata)
+	applyDartEnvironment(&pubspec, metadata)
+	applyPubspecDependencies(&pubspec, metadata)
+	applyPubspecDevDependencies(&pubspec, metadata)
+	applyPublishInfo(&pubspec, metadata)
+	applyPubspecURLs(&pubspec, metadata)
+
+	if isFlutter {
+		e.extractFlutterMetadata(&pubspec, metadata)
 	}
 
-	// Extract SDK constraints
+	applyPackageType(&pubspec, metadata)
+
+	return nil
+}
+
+// applyFlutterDetection records whether the project targets Flutter and
+// returns true when it does.
+func applyFlutterDetection(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) bool {
+	if _, hasFlutterDep := pubspec.Dependencies["flutter"]; hasFlutterDep {
+		metadata.LanguageSpecific["is_flutter"] = true
+		metadata.LanguageSpecific["framework"] = "Flutter"
+		return true
+	}
+	metadata.LanguageSpecific["is_flutter"] = false
+	metadata.LanguageSpecific["framework"] = "Dart"
+	return false
+}
+
+func applyDartEnvironment(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
 	if pubspec.Environment.SDK != "" {
 		metadata.LanguageSpecific["dart_sdk"] = pubspec.Environment.SDK
-
-		// Generate Dart version matrix
 		matrix := generateDartVersionMatrix(pubspec.Environment.SDK)
 		if len(matrix) > 0 {
 			metadata.LanguageSpecific["dart_version_matrix"] = matrix
@@ -168,127 +182,124 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 	if pubspec.Environment.Flutter != "" {
 		metadata.LanguageSpecific["flutter_sdk"] = pubspec.Environment.Flutter
 	}
+}
 
-	// Extract dependencies
-	if len(pubspec.Dependencies) > 0 {
-		deps := make(map[string]string)
-		for name, constraint := range pubspec.Dependencies {
-			// Skip SDK dependencies
-			if name == "flutter" || name == "flutter_test" {
-				continue
-			}
+func applyPubspecDependencies(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
+	if len(pubspec.Dependencies) == 0 {
+		return
+	}
 
-			// Convert constraint to string
-			constraintStr := ""
-			switch v := constraint.(type) {
-			case string:
-				constraintStr = v
-			case map[string]interface{}:
-				// Handle complex dependency specifications
-				if version, ok := v["version"].(string); ok {
-					constraintStr = version
-				} else if path, ok := v["path"].(string); ok {
-					constraintStr = "path: " + path
-				} else if git, ok := v["git"].(map[string]interface{}); ok {
-					if url, ok := git["url"].(string); ok {
-						constraintStr = "git: " + url
-					}
-				}
-			}
-
-			if constraintStr != "" {
-				deps[name] = constraintStr
-			}
+	deps := make(map[string]string)
+	for name, constraint := range pubspec.Dependencies {
+		if name == "flutter" || name == "flutter_test" {
+			continue
 		}
-
-		if len(deps) > 0 {
-			metadata.LanguageSpecific["dependencies"] = deps
-			metadata.LanguageSpecific["dependency_count"] = len(deps)
+		if constraintStr := dependencyConstraintString(constraint); constraintStr != "" {
+			deps[name] = constraintStr
 		}
 	}
 
-	// Extract dev dependencies
-	if len(pubspec.DevDependencies) > 0 {
-		devDeps := make(map[string]string)
-		for name, constraint := range pubspec.DevDependencies {
-			if name == "flutter_test" {
-				continue
-			}
+	if len(deps) > 0 {
+		metadata.LanguageSpecific["dependencies"] = deps
+		metadata.LanguageSpecific["dependency_count"] = len(deps)
+	}
+}
 
-			constraintStr := ""
-			switch v := constraint.(type) {
-			case string:
-				constraintStr = v
-			case map[string]interface{}:
-				if version, ok := v["version"].(string); ok {
-					constraintStr = version
-				}
-			}
-
-			if constraintStr != "" {
-				devDeps[name] = constraintStr
+// dependencyConstraintString renders a dependency constraint, supporting
+// plain versions plus path and git source references.
+func dependencyConstraintString(constraint interface{}) string {
+	switch v := constraint.(type) {
+	case string:
+		return v
+	case map[string]interface{}:
+		if version, ok := v["version"].(string); ok {
+			return version
+		}
+		if path, ok := v["path"].(string); ok {
+			return "path: " + path
+		}
+		if git, ok := v["git"].(map[string]interface{}); ok {
+			if url, ok := git["url"].(string); ok {
+				return "git: " + url
 			}
 		}
+	}
+	return ""
+}
 
-		if len(devDeps) > 0 {
-			metadata.LanguageSpecific["dev_dependencies"] = devDeps
-			metadata.LanguageSpecific["dev_dependency_count"] = len(devDeps)
+func applyPubspecDevDependencies(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
+	if len(pubspec.DevDependencies) == 0 {
+		return
+	}
+
+	devDeps := make(map[string]string)
+	for name, constraint := range pubspec.DevDependencies {
+		if name == "flutter_test" {
+			continue
+		}
+		if constraintStr := devDependencyConstraintString(constraint); constraintStr != "" {
+			devDeps[name] = constraintStr
 		}
 	}
 
-	// Publishing information
-	if pubspec.Publish != nil {
-		switch v := pubspec.Publish.(type) {
-		case string:
-			metadata.LanguageSpecific["publish_to"] = v
-			if v == "none" {
-				metadata.LanguageSpecific["is_publishable"] = false
-			} else {
-				metadata.LanguageSpecific["is_publishable"] = true
-			}
-		case bool:
-			metadata.LanguageSpecific["is_publishable"] = v
+	if len(devDeps) > 0 {
+		metadata.LanguageSpecific["dev_dependencies"] = devDeps
+		metadata.LanguageSpecific["dev_dependency_count"] = len(devDeps)
+	}
+}
+
+func devDependencyConstraintString(constraint interface{}) string {
+	switch v := constraint.(type) {
+	case string:
+		return v
+	case map[string]interface{}:
+		if version, ok := v["version"].(string); ok {
+			return version
 		}
-	} else {
+	}
+	return ""
+}
+
+func applyPublishInfo(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
+	if pubspec.Publish == nil {
 		metadata.LanguageSpecific["is_publishable"] = true
+		return
 	}
 
-	// URLs
+	switch v := pubspec.Publish.(type) {
+	case string:
+		metadata.LanguageSpecific["publish_to"] = v
+		metadata.LanguageSpecific["is_publishable"] = v != "none"
+	case bool:
+		metadata.LanguageSpecific["is_publishable"] = v
+	}
+}
+
+func applyPubspecURLs(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
 	if pubspec.IssueTracker != "" {
 		metadata.LanguageSpecific["issue_tracker"] = pubspec.IssueTracker
 	}
 	if pubspec.Documentation != "" {
 		metadata.LanguageSpecific["documentation"] = pubspec.Documentation
 	}
-
-	// Topics
 	if len(pubspec.Topics) > 0 {
 		metadata.LanguageSpecific["topics"] = pubspec.Topics
 	}
-
-	// Funding
 	if len(pubspec.Funding) > 0 {
 		metadata.LanguageSpecific["funding"] = pubspec.Funding
 	}
-
-	// Executables
 	if len(pubspec.Executables) > 0 {
 		metadata.LanguageSpecific["executables"] = pubspec.Executables
 		metadata.LanguageSpecific["executable_count"] = len(pubspec.Executables)
 	}
+}
 
-	// Flutter-specific metadata
-	if isFlutter {
-		e.extractFlutterMetadata(&pubspec, metadata)
-	}
-
-	// Determine package type
-	packageType := "library" // Default
+func applyPackageType(pubspec *PubspecYAML, metadata *extractor.ProjectMetadata) {
+	packageType := "library"
 	if len(pubspec.Executables) > 0 {
 		packageType = "application"
 	}
 
-	// Check if it's a Flutter plugin
 	if len(pubspec.Flutter.Plugin.Platforms) > 0 {
 		packageType = "plugin"
 		metadata.LanguageSpecific["is_flutter_plugin"] = true
@@ -297,8 +308,6 @@ func (e *Extractor) extractFromPubspec(path string, metadata *extractor.ProjectM
 	}
 
 	metadata.LanguageSpecific["package_type"] = packageType
-
-	return nil
 }
 
 // extractFlutterMetadata extracts Flutter-specific metadata
@@ -352,7 +361,6 @@ func (e *Extractor) extractFlutterMetadata(pubspec *PubspecYAML, metadata *extra
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for pubspec.yaml
 	pubspecPath := filepath.Join(projectPath, "pubspec.yaml")
 	if _, err := os.Stat(pubspecPath); err == nil {
 		return true
@@ -367,10 +375,8 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generateDartVersionMatrix(sdkConstraint string) []string {
 	versions := []string{}
 
-	// Clean up the constraint
 	sdkConstraint = strings.TrimSpace(sdkConstraint)
 
-	// Extract minimum version
 	minVersion := ""
 
 	// Handle >= constraints

@@ -136,6 +136,47 @@ end
 	assert.Equal(t, 3, metadata.LanguageSpecific["dependency_count"])
 }
 
+// TestExtractInlinePackageBlock guards against the block-state leak that
+// occurred when a package/links block opened and closed on the same line:
+// the state flags stayed set and a later stray line was misread as still
+// being inside the block. Here the inline links entry must win over a
+// look-alike map that appears afterwards outside any links block.
+func TestExtractInlinePackageBlock(t *testing.T) {
+	mixExsContent := `defmodule Inline.MixProject do
+  use Mix.Project
+
+  def project do
+    [
+      app: :inline_app,
+      version: "3.2.1",
+      package: [licenses: ["MIT"], links: %{"GitHub" => "https://github.com/example/inline"}]
+    ]
+  end
+
+  defp other do
+    %{"Homepage" => "https://evil.example.com"}
+  end
+end
+`
+
+	tmpDir := t.TempDir()
+	mixExsPath := filepath.Join(tmpDir, "mix.exs")
+	err := os.WriteFile(mixExsPath, []byte(mixExsContent), 0644)
+	require.NoError(t, err)
+
+	e := NewExtractor()
+	metadata, err := e.Extract(tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, metadata)
+
+	assert.Equal(t, "inline_app", metadata.Name)
+	assert.Equal(t, "3.2.1", metadata.Version)
+	assert.Equal(t, "MIT", metadata.License)
+	// The inline links block must close on the same line, so the later
+	// look-alike map does not override the homepage.
+	assert.Equal(t, "https://github.com/example/inline", metadata.Homepage)
+}
+
 func TestExtractMinimal(t *testing.T) {
 	mixExsContent := `defmodule Minimal.MixProject do
   use Mix.Project

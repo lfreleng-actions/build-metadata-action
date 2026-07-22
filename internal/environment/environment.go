@@ -18,7 +18,6 @@ type Metadata struct {
 	// Runtime Environment
 	Runtime RuntimeEnvironment `json:"runtime"`
 
-	// Setup Actions detected
 	SetupActions map[string]SetupActionInfo `json:"setup_actions,omitempty"`
 
 	// Tool versions
@@ -156,7 +155,6 @@ func collectRuntimeEnvironment() RuntimeEnvironment {
 
 // detectSetupActions detects GitHub setup-* actions that have been run
 func detectSetupActions(metadata *Metadata) {
-	// Check for setup-python
 	if pythonVersion := os.Getenv("pythonLocation"); pythonVersion != "" {
 		metadata.SetupActions["setup-python"] = SetupActionInfo{
 			Name:    "setup-python",
@@ -164,7 +162,6 @@ func detectSetupActions(metadata *Metadata) {
 		}
 	}
 
-	// Check for setup-node
 	if nodeVersion := getToolVersion("node", "--version"); nodeVersion != "" {
 		metadata.SetupActions["setup-node"] = SetupActionInfo{
 			Name:    "setup-node",
@@ -172,7 +169,6 @@ func detectSetupActions(metadata *Metadata) {
 		}
 	}
 
-	// Check for setup-java
 	if javaHome := os.Getenv("JAVA_HOME"); javaHome != "" {
 		metadata.SetupActions["setup-java"] = SetupActionInfo{
 			Name:    "setup-java",
@@ -180,7 +176,6 @@ func detectSetupActions(metadata *Metadata) {
 		}
 	}
 
-	// Check for setup-go
 	if goVersion := getToolVersion("go", "version"); goVersion != "" {
 		metadata.SetupActions["setup-go"] = SetupActionInfo{
 			Name:    "setup-go",
@@ -188,7 +183,6 @@ func detectSetupActions(metadata *Metadata) {
 		}
 	}
 
-	// Check for setup-dotnet
 	if dotnetVersion := getToolVersion("dotnet", "--version"); dotnetVersion != "" {
 		metadata.SetupActions["setup-dotnet"] = SetupActionInfo{
 			Name:    "setup-dotnet",
@@ -196,7 +190,6 @@ func detectSetupActions(metadata *Metadata) {
 		}
 	}
 
-	// Check for setup-ruby
 	if rubyVersion := getToolVersion("ruby", "--version"); rubyVersion != "" {
 		metadata.SetupActions["setup-ruby"] = SetupActionInfo{
 			Name:    "setup-ruby",
@@ -252,10 +245,8 @@ func getToolVersion(tool string, args ...string) string {
 		return ""
 	}
 
-	// Clean up the output
 	version := strings.TrimSpace(string(output))
 
-	// Extract version number from common patterns
 	version = extractVersion(version)
 
 	return version
@@ -291,7 +282,6 @@ func extractVersion(output string) string {
 
 // isVersionLike checks if a string looks like a version number
 func isVersionLike(s string) bool {
-	// Remove common prefixes
 	s = strings.TrimPrefix(s, "v")
 	s = strings.TrimPrefix(s, "V")
 

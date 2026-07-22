@@ -58,7 +58,6 @@ type PackageJSON struct {
 	PackageManager string                 `json:"packageManager"` // e.g., "pnpm@8.0.0"
 	Volta          map[string]interface{} `json:"volta"`
 
-	// Build tool specific
 	Config map[string]interface{} `json:"config"`
 }
 
@@ -82,7 +81,6 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 		LanguageSpecific: make(map[string]interface{}),
 	}
 
-	// Parse package.json
 	packageJSONPath := filepath.Join(projectPath, "package.json")
 	if _, err := os.Stat(packageJSONPath); err != nil {
 		return nil, fmt.Errorf("package.json not found in %s", projectPath)
@@ -95,7 +93,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	return metadata, nil
 }
 
-// extractFromPackageJSON extracts metadata from package.json
+// extractFromPackageJSON parses package.json and populates metadata from it.
 func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *extractor.ProjectMetadata) error {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -107,35 +105,42 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 		return fmt.Errorf("failed to parse package.json: %w", err)
 	}
 
-	// Extract common metadata
+	applyPackageCore(&pkg, metadata)
+	applyPackageManager(projectPath, &pkg, metadata)
+	applyPackageWorkspaces(&pkg, metadata)
+	applyPackageDependencies(&pkg, metadata)
+	applyPackageScripts(&pkg, metadata)
+	applyPackageTooling(&pkg, metadata)
+	applyPackageVersioningType(&pkg, metadata)
+	applyPackageTypeScript(projectPath, &pkg, metadata)
+
+	return nil
+}
+
+// applyPackageCore maps identity fields, license/author/repository, module
+// type, entry points, and Node/npm engine constraints. Module type defaults
+// to commonjs, matching Node's behavior when "type" is absent.
+func applyPackageCore(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	metadata.Name = pkg.Name
 	metadata.Version = pkg.Version
 	metadata.Description = pkg.Description
 	metadata.Homepage = pkg.Homepage
 	metadata.VersionSource = "package.json"
 
-	// Extract license
 	metadata.License = extractLicense(pkg.License)
-
-	// Extract authors
 	metadata.Authors = extractAuthors(pkg.Author, pkg.Contributors)
-
-	// Extract repository
 	metadata.Repository = extractRepository(pkg.Repository)
 
-	// JavaScript-specific metadata
 	metadata.LanguageSpecific["package_name"] = pkg.Name
 	metadata.LanguageSpecific["metadata_source"] = "package.json"
 	metadata.LanguageSpecific["is_private"] = pkg.Private
 
-	// Module type
 	if pkg.Type != "" {
 		metadata.LanguageSpecific["module_type"] = pkg.Type
 	} else {
-		metadata.LanguageSpecific["module_type"] = "commonjs" // default
+		metadata.LanguageSpecific["module_type"] = "commonjs"
 	}
 
-	// Entry points
 	if pkg.Main != "" {
 		metadata.LanguageSpecific["main_entry"] = pkg.Main
 	}
@@ -146,7 +151,6 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 		metadata.LanguageSpecific["types_entry"] = pkg.Types
 	}
 
-	// Engines (Node.js version requirements)
 	if len(pkg.Engines) > 0 {
 		metadata.LanguageSpecific["engines"] = pkg.Engines
 		if nodeVersion, ok := pkg.Engines["node"]; ok {
@@ -156,12 +160,14 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 			metadata.LanguageSpecific["requires_npm"] = npmVersion
 		}
 	}
+}
 
-	// Detect package manager
+// applyPackageManager resolves the package manager and its lock file, recording
+// has_lock_file even when no lock file is present on disk.
+func applyPackageManager(projectPath string, pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	packageManager := detectPackageManager(projectPath, pkg.PackageManager)
 	metadata.LanguageSpecific["package_manager"] = packageManager
 
-	// Lock file information
 	lockFile, lockFileExists := detectLockFile(projectPath, packageManager)
 	if lockFileExists {
 		metadata.LanguageSpecific["lock_file"] = lockFile
@@ -169,70 +175,81 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 	} else {
 		metadata.LanguageSpecific["has_lock_file"] = false
 	}
+}
 
-	// Workspace/monorepo detection
-	if pkg.Workspaces != nil {
-		workspaces := extractWorkspaces(pkg.Workspaces)
-		if len(workspaces) > 0 {
-			metadata.LanguageSpecific["is_workspace"] = true
-			metadata.LanguageSpecific["workspaces"] = workspaces
-			metadata.LanguageSpecific["workspace_count"] = len(workspaces)
-		}
+// applyPackageWorkspaces records monorepo workspace patterns when present.
+func applyPackageWorkspaces(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
+	if pkg.Workspaces == nil {
+		return
 	}
+	workspaces := extractWorkspaces(pkg.Workspaces)
+	if len(workspaces) > 0 {
+		metadata.LanguageSpecific["is_workspace"] = true
+		metadata.LanguageSpecific["workspaces"] = workspaces
+		metadata.LanguageSpecific["workspace_count"] = len(workspaces)
+	}
+}
 
-	// Dependencies
+// applyPackageDependencies records per-kind and total dependency counts, and
+// the runtime dependency map. Counts are only emitted when at least one
+// dependency of any kind exists.
+func applyPackageDependencies(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	totalDeps := len(pkg.Dependencies) + len(pkg.DevDependencies) +
 		len(pkg.PeerDependencies) + len(pkg.OptionalDependencies)
-
-	if totalDeps > 0 {
-		metadata.LanguageSpecific["dependency_count"] = len(pkg.Dependencies)
-		metadata.LanguageSpecific["dev_dependency_count"] = len(pkg.DevDependencies)
-		metadata.LanguageSpecific["peer_dependency_count"] = len(pkg.PeerDependencies)
-		metadata.LanguageSpecific["optional_dependency_count"] = len(pkg.OptionalDependencies)
-		metadata.LanguageSpecific["total_dependency_count"] = totalDeps
-
-		// List top-level dependencies
-		if len(pkg.Dependencies) > 0 {
-			metadata.LanguageSpecific["dependencies"] = pkg.Dependencies
-		}
+	if totalDeps == 0 {
+		return
 	}
+	metadata.LanguageSpecific["dependency_count"] = len(pkg.Dependencies)
+	metadata.LanguageSpecific["dev_dependency_count"] = len(pkg.DevDependencies)
+	metadata.LanguageSpecific["peer_dependency_count"] = len(pkg.PeerDependencies)
+	metadata.LanguageSpecific["optional_dependency_count"] = len(pkg.OptionalDependencies)
+	metadata.LanguageSpecific["total_dependency_count"] = totalDeps
 
-	// Scripts
-	if len(pkg.Scripts) > 0 {
-		metadata.LanguageSpecific["has_scripts"] = true
-		metadata.LanguageSpecific["script_count"] = len(pkg.Scripts)
-
-		// Detect common script patterns
-		scriptPatterns := detectScriptPatterns(pkg.Scripts)
-		if len(scriptPatterns) > 0 {
-			metadata.LanguageSpecific["detected_scripts"] = scriptPatterns
-		}
+	if len(pkg.Dependencies) > 0 {
+		metadata.LanguageSpecific["dependencies"] = pkg.Dependencies
 	}
+}
 
-	// Detect framework/tooling
+// applyPackageScripts records script counts and recognized script patterns.
+func applyPackageScripts(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
+	if len(pkg.Scripts) == 0 {
+		return
+	}
+	metadata.LanguageSpecific["has_scripts"] = true
+	metadata.LanguageSpecific["script_count"] = len(pkg.Scripts)
+
+	scriptPatterns := detectScriptPatterns(pkg.Scripts)
+	if len(scriptPatterns) > 0 {
+		metadata.LanguageSpecific["detected_scripts"] = scriptPatterns
+	}
+}
+
+// applyPackageTooling records frameworks, build tools, testing frameworks, and
+// keywords inferred from the dependency sets.
+func applyPackageTooling(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	frameworks := detectFrameworks(pkg.Dependencies, pkg.DevDependencies)
 	if len(frameworks) > 0 {
 		metadata.LanguageSpecific["frameworks"] = frameworks
 	}
 
-	// Build tools
 	buildTools := detectBuildTools(pkg.Dependencies, pkg.DevDependencies)
 	if len(buildTools) > 0 {
 		metadata.LanguageSpecific["build_tools"] = buildTools
 	}
 
-	// Testing frameworks
 	testingFrameworks := detectTestingFrameworks(pkg.Dependencies, pkg.DevDependencies)
 	if len(testingFrameworks) > 0 {
 		metadata.LanguageSpecific["testing_frameworks"] = testingFrameworks
 	}
 
-	// Keywords
 	if len(pkg.Keywords) > 0 {
 		metadata.LanguageSpecific["keywords"] = pkg.Keywords
 	}
+}
 
-	// Check if version is dynamic (e.g., 0.0.0-development)
+// applyPackageVersioningType marks the version dynamic for semantic-release
+// placeholders and workspace protocol references.
+func applyPackageVersioningType(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	if pkg.Version == "0.0.0-development" ||
 		pkg.Version == "0.0.0-semantic-release" ||
 		strings.Contains(pkg.Version, "workspace:") {
@@ -240,20 +257,20 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 	} else {
 		metadata.LanguageSpecific["versioning_type"] = "static"
 	}
+}
 
-	// TypeScript detection
-	isTypeScript := detectTypeScript(projectPath, pkg.Dependencies, pkg.DevDependencies)
-	if isTypeScript {
-		metadata.LanguageSpecific["has_typescript"] = true
-
-		// Read tsconfig.json if exists
-		tsconfigPath := filepath.Join(projectPath, "tsconfig.json")
-		if tsconfig, err := readTSConfig(tsconfigPath); err == nil {
-			metadata.LanguageSpecific["typescript_config"] = tsconfig
-		}
+// applyPackageTypeScript flags TypeScript usage and attaches the parsed
+// tsconfig.json when one can be read.
+func applyPackageTypeScript(projectPath string, pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
+	if !detectTypeScript(projectPath, pkg.Dependencies, pkg.DevDependencies) {
+		return
 	}
+	metadata.LanguageSpecific["has_typescript"] = true
 
-	return nil
+	tsconfigPath := filepath.Join(projectPath, "tsconfig.json")
+	if tsconfig, err := readTSConfig(tsconfigPath); err == nil {
+		metadata.LanguageSpecific["typescript_config"] = tsconfig
+	}
 }
 
 // Detect checks if this extractor can handle the project
@@ -287,7 +304,6 @@ func extractLicense(license interface{}) string {
 func extractAuthors(author interface{}, contributors []interface{}) []string {
 	authors := make([]string, 0)
 
-	// Extract main author
 	if author != nil {
 		authorStr := formatAuthor(author)
 		if authorStr != "" {
@@ -295,7 +311,6 @@ func extractAuthors(author interface{}, contributors []interface{}) []string {
 		}
 	}
 
-	// Extract contributors
 	for _, contributor := range contributors {
 		contributorStr := formatAuthor(contributor)
 		if contributorStr != "" {
@@ -376,7 +391,6 @@ func extractWorkspaces(workspaces interface{}) []string {
 
 // detectPackageManager detects which package manager is being used
 func detectPackageManager(projectPath, packageManagerField string) string {
-	// Check packageManager field first
 	if packageManagerField != "" {
 		// Format: "pnpm@8.0.0" or "yarn@3.0.0"
 		if strings.Contains(packageManagerField, "@") {
@@ -386,7 +400,6 @@ func detectPackageManager(projectPath, packageManagerField string) string {
 		return packageManagerField
 	}
 
-	// Check for lock files
 	if _, err := os.Stat(filepath.Join(projectPath, "pnpm-lock.yaml")); err == nil {
 		return "pnpm"
 	}
@@ -547,7 +560,6 @@ func detectTestingFrameworks(deps, devDeps map[string]string) []string {
 
 // detectTypeScript checks if the project uses TypeScript
 func detectTypeScript(projectPath string, deps, devDeps map[string]string) bool {
-	// Check for typescript dependency
 	if _, exists := deps["typescript"]; exists {
 		return true
 	}
@@ -555,7 +567,6 @@ func detectTypeScript(projectPath string, deps, devDeps map[string]string) bool 
 		return true
 	}
 
-	// Check for tsconfig.json
 	tsconfigPath := filepath.Join(projectPath, "tsconfig.json")
 	if _, err := os.Stat(tsconfigPath); err == nil {
 		return true
@@ -578,7 +589,6 @@ func readTSConfig(path string) (map[string]interface{}, error) {
 	// Parse JSON (tsconfig.json allows comments, but we'll do basic parsing)
 	var config map[string]interface{}
 
-	// Remove comments using jsonutil package
 	contentStr := string(content)
 	contentStr = jsonutil.RemoveComments(contentStr)
 

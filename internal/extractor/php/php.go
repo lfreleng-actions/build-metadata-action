@@ -121,14 +121,24 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		return fmt.Errorf("failed to parse composer.json: %w", err)
 	}
 
-	// Extract common metadata
+	applyComposerCore(&composer, metadata)
+	applyComposerPackageInfo(&composer, metadata)
+	applyComposerDependencies(&composer, metadata)
+	applyComposerAutoload(&composer, metadata)
+	applyComposerProjectInfo(&composer, metadata)
+
+	return nil
+}
+
+// applyComposerCore maps the top-level fields shared by all project types.
+func applyComposerCore(composer *ComposerJSON, metadata *extractor.ProjectMetadata) {
 	metadata.Name = composer.Name
 	metadata.Version = composer.Version
 	metadata.Description = composer.Description
 	metadata.Homepage = composer.Homepage
 	metadata.VersionSource = "composer.json"
 
-	// Extract license (handle both string and array)
+	// composer.json license may be a single SPDX string or an array of strings.
 	if composer.License != nil {
 		switch v := composer.License.(type) {
 		case string:
@@ -146,7 +156,6 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		}
 	}
 
-	// Extract authors
 	authors := make([]string, 0, len(composer.Authors))
 	for _, author := range composer.Authors {
 		if author.Name != "" {
@@ -159,12 +168,14 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 	}
 	metadata.Authors = authors
 
-	// Extract repository from support
 	if composer.Support.Source != "" {
 		metadata.Repository = composer.Support.Source
 	}
+}
 
-	// PHP-specific metadata
+// applyComposerPackageInfo records package identity, keywords and the PHP
+// version matrix derived from the "php" requirement.
+func applyComposerPackageInfo(composer *ComposerJSON, metadata *extractor.ProjectMetadata) {
 	metadata.LanguageSpecific["package_name"] = composer.Name
 	metadata.LanguageSpecific["package_type"] = composer.Type
 	metadata.LanguageSpecific["metadata_source"] = "composer.json"
@@ -173,11 +184,9 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		metadata.LanguageSpecific["keywords"] = composer.Keywords
 	}
 
-	// Extract PHP version requirement
 	if phpVersion, ok := composer.Require["php"]; ok {
 		metadata.LanguageSpecific["requires_php"] = phpVersion
 
-		// Generate PHP version matrix
 		matrix := generatePHPVersionMatrix(phpVersion)
 		if len(matrix) > 0 {
 			metadata.LanguageSpecific["php_version_matrix"] = matrix
@@ -186,8 +195,11 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 			metadata.LanguageSpecific["matrix_json"] = matrixJSON
 		}
 	}
+}
 
-	// Extract dependencies
+// applyComposerDependencies separates runtime packages, dev packages and the
+// PHP extensions ("ext-*") from the require blocks.
+func applyComposerDependencies(composer *ComposerJSON, metadata *extractor.ProjectMetadata) {
 	if len(composer.Require) > 0 {
 		deps := make(map[string]string)
 		for pkg, version := range composer.Require {
@@ -201,13 +213,11 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		}
 	}
 
-	// Extract dev dependencies
 	if len(composer.RequireDev) > 0 {
 		metadata.LanguageSpecific["dev_dependencies"] = composer.RequireDev
 		metadata.LanguageSpecific["dev_dependency_count"] = len(composer.RequireDev)
 	}
 
-	// Extract PHP extensions
 	extensions := make([]string, 0)
 	for pkg := range composer.Require {
 		if strings.HasPrefix(pkg, "ext-") {
@@ -218,8 +228,10 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		metadata.LanguageSpecific["php_extensions"] = extensions
 		metadata.LanguageSpecific["extension_count"] = len(extensions)
 	}
+}
 
-	// Autoload information
+// applyComposerAutoload records which autoload mechanisms the package declares.
+func applyComposerAutoload(composer *ComposerJSON, metadata *extractor.ProjectMetadata) {
 	hasAutoload := false
 	autoloadTypes := make([]string, 0)
 
@@ -250,15 +262,17 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 	if hasAutoload {
 		metadata.LanguageSpecific["autoload_types"] = autoloadTypes
 	}
+}
 
-	// Stability preferences
+// applyComposerProjectInfo records stability, scripts, binaries, support links,
+// the detected framework and whether the package is a library.
+func applyComposerProjectInfo(composer *ComposerJSON, metadata *extractor.ProjectMetadata) {
 	if composer.MinimumStability != "" {
 		metadata.LanguageSpecific["minimum_stability"] = composer.MinimumStability
 	}
 
 	metadata.LanguageSpecific["prefer_stable"] = composer.PreferStable
 
-	// Scripts
 	if len(composer.Scripts) > 0 {
 		scriptNames := make([]string, 0, len(composer.Scripts))
 		for name := range composer.Scripts {
@@ -268,12 +282,10 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		metadata.LanguageSpecific["script_count"] = len(scriptNames)
 	}
 
-	// Binary files
 	if len(composer.Bin) > 0 {
 		metadata.LanguageSpecific["binaries"] = composer.Bin
 	}
 
-	// Support information
 	if composer.Support.Issues != "" {
 		metadata.LanguageSpecific["issues_url"] = composer.Support.Issues
 	}
@@ -281,25 +293,20 @@ func (e *Extractor) extractFromComposerJSON(path string, metadata *extractor.Pro
 		metadata.LanguageSpecific["docs_url"] = composer.Support.Docs
 	}
 
-	// Detect framework
 	framework := detectPHPFramework(composer.Require)
 	if framework != "" {
 		metadata.LanguageSpecific["framework"] = framework
 	}
 
-	// Detect if this is a library or application
 	packageType := composer.Type
 	if packageType == "" {
-		packageType = "library" // Default type
+		packageType = "library"
 	}
 	metadata.LanguageSpecific["is_library"] = (packageType == "library")
-
-	return nil
 }
 
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for composer.json
 	composerPath := filepath.Join(projectPath, "composer.json")
 	if _, err := os.Stat(composerPath); err == nil {
 		return true
@@ -314,10 +321,8 @@ func (e *Extractor) Detect(projectPath string) bool {
 func generatePHPVersionMatrix(phpVersion string) []string {
 	versions := []string{}
 
-	// Clean up the version string
 	phpVersion = strings.TrimSpace(phpVersion)
 
-	// Extract minimum version
 	minVersion := ""
 
 	// Handle >= constraints

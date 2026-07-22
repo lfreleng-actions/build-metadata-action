@@ -94,104 +94,121 @@ func (e *Extractor) extractFromChartYAML(path string, metadata *extractor.Projec
 		return fmt.Errorf("failed to parse Chart.yaml: %w", err)
 	}
 
-	// Extract common metadata
 	metadata.Name = chart.Name
 	metadata.Version = chart.Version
 	metadata.Description = chart.Description
 	metadata.Homepage = chart.Home
 	metadata.VersionSource = "Chart.yaml"
-
-	// Extract maintainers as authors
-	authors := make([]string, 0, len(chart.Maintainers))
-	for _, maintainer := range chart.Maintainers {
-		if maintainer.Name != "" {
-			if maintainer.Email != "" {
-				authors = append(authors, fmt.Sprintf("%s <%s>", maintainer.Name, maintainer.Email))
-			} else {
-				authors = append(authors, maintainer.Name)
-			}
-		}
-	}
-	metadata.Authors = authors
+	metadata.Authors = chartAuthors(chart)
 
 	// Use first source as repository if available
 	if len(chart.Sources) > 0 {
 		metadata.Repository = chart.Sources[0]
 	}
 
-	// Helm-specific metadata
-	metadata.LanguageSpecific["chart_name"] = chart.Name
-	metadata.LanguageSpecific["api_version"] = chart.APIVersion
-	metadata.LanguageSpecific["app_version"] = chart.AppVersion
-	metadata.LanguageSpecific["chart_type"] = chart.Type
-	metadata.LanguageSpecific["kube_version"] = chart.KubeVersion
-	metadata.LanguageSpecific["deprecated"] = chart.Deprecated
-	metadata.LanguageSpecific["metadata_source"] = "Chart.yaml"
-
-	if chart.Icon != "" {
-		metadata.LanguageSpecific["icon"] = chart.Icon
-	}
-
-	if len(chart.Keywords) > 0 {
-		metadata.LanguageSpecific["keywords"] = chart.Keywords
-	}
-
-	if len(chart.Sources) > 0 {
-		metadata.LanguageSpecific["sources"] = chart.Sources
-	}
-
-	if len(chart.Annotations) > 0 {
-		metadata.LanguageSpecific["annotations"] = chart.Annotations
-	}
-
-	// Extract dependencies
-	if len(chart.Dependencies) > 0 {
-		deps := make([]map[string]interface{}, 0, len(chart.Dependencies))
-		for _, dep := range chart.Dependencies {
-			depMap := map[string]interface{}{
-				"name":       dep.Name,
-				"version":    dep.Version,
-				"repository": dep.Repository,
-			}
-			if dep.Alias != "" {
-				depMap["alias"] = dep.Alias
-			}
-			if dep.Condition != "" {
-				depMap["condition"] = dep.Condition
-			}
-			if len(dep.Tags) > 0 {
-				depMap["tags"] = dep.Tags
-			}
-			deps = append(deps, depMap)
-		}
-		metadata.LanguageSpecific["dependencies"] = deps
-		metadata.LanguageSpecific["dependency_count"] = len(deps)
-	}
-
-	// Generate Kubernetes version matrix if specified
-	if chart.KubeVersion != "" {
-		matrix := generateKubernetesVersionMatrix(chart.KubeVersion)
-		if len(matrix) > 0 {
-			metadata.LanguageSpecific["kubernetes_version_matrix"] = matrix
-			matrixJSON := fmt.Sprintf(`{"kubernetes-version": [%s]}`,
-				strings.Join(quoteStrings(matrix), ", "))
-			metadata.LanguageSpecific["matrix_json"] = matrixJSON
-		}
-	}
-
-	// Determine chart type
-	chartType := chart.Type
-	if chartType == "" {
-		chartType = "application" // Default type
-	}
-	metadata.LanguageSpecific["is_library_chart"] = (chartType == "library")
+	applyChartLanguageSpecific(chart, metadata)
 
 	return nil
 }
 
+// chartAuthors formats maintainers as "Name <email>" (or just "Name").
+func chartAuthors(chart ChartYAML) []string {
+	authors := make([]string, 0, len(chart.Maintainers))
+	for _, maintainer := range chart.Maintainers {
+		if maintainer.Name == "" {
+			continue
+		}
+		if maintainer.Email != "" {
+			authors = append(authors, fmt.Sprintf("%s <%s>", maintainer.Name, maintainer.Email))
+		} else {
+			authors = append(authors, maintainer.Name)
+		}
+	}
+	return authors
+}
+
+// applyChartLanguageSpecific populates the Helm-specific metadata fields.
+func applyChartLanguageSpecific(chart ChartYAML, metadata *extractor.ProjectMetadata) {
+	ls := metadata.LanguageSpecific
+	ls["chart_name"] = chart.Name
+	ls["api_version"] = chart.APIVersion
+	ls["app_version"] = chart.AppVersion
+	ls["chart_type"] = chart.Type
+	ls["kube_version"] = chart.KubeVersion
+	ls["deprecated"] = chart.Deprecated
+	ls["metadata_source"] = "Chart.yaml"
+
+	if chart.Icon != "" {
+		ls["icon"] = chart.Icon
+	}
+	if len(chart.Keywords) > 0 {
+		ls["keywords"] = chart.Keywords
+	}
+	if len(chart.Sources) > 0 {
+		ls["sources"] = chart.Sources
+	}
+	if len(chart.Annotations) > 0 {
+		ls["annotations"] = chart.Annotations
+	}
+
+	if deps := chartDependencies(chart); len(deps) > 0 {
+		ls["dependencies"] = deps
+		ls["dependency_count"] = len(deps)
+	}
+
+	applyKubernetesVersionMatrix(chart, metadata)
+
+	chartType := chart.Type
+	if chartType == "" {
+		chartType = "application"
+	}
+	ls["is_library_chart"] = (chartType == "library")
+}
+
+// chartDependencies converts chart dependencies to serializable maps.
+func chartDependencies(chart ChartYAML) []map[string]interface{} {
+	if len(chart.Dependencies) == 0 {
+		return nil
+	}
+	deps := make([]map[string]interface{}, 0, len(chart.Dependencies))
+	for _, dep := range chart.Dependencies {
+		depMap := map[string]interface{}{
+			"name":       dep.Name,
+			"version":    dep.Version,
+			"repository": dep.Repository,
+		}
+		if dep.Alias != "" {
+			depMap["alias"] = dep.Alias
+		}
+		if dep.Condition != "" {
+			depMap["condition"] = dep.Condition
+		}
+		if len(dep.Tags) > 0 {
+			depMap["tags"] = dep.Tags
+		}
+		deps = append(deps, depMap)
+	}
+	return deps
+}
+
+// applyKubernetesVersionMatrix derives a supported Kubernetes version matrix
+// from the chart's kubeVersion constraint.
+func applyKubernetesVersionMatrix(chart ChartYAML, metadata *extractor.ProjectMetadata) {
+	if chart.KubeVersion == "" {
+		return
+	}
+	matrix := generateKubernetesVersionMatrix(chart.KubeVersion)
+	if len(matrix) == 0 {
+		return
+	}
+	metadata.LanguageSpecific["kubernetes_version_matrix"] = matrix
+	matrixJSON := fmt.Sprintf(`{"kubernetes-version": [%s]}`,
+		strings.Join(quoteStrings(matrix), ", "))
+	metadata.LanguageSpecific["matrix_json"] = matrixJSON
+}
+
 // Detect checks if this extractor can handle the project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for Chart.yaml
 	chartPath := filepath.Join(projectPath, "Chart.yaml")
 	if _, err := os.Stat(chartPath); err == nil {
 		return true
@@ -209,18 +226,15 @@ func generateKubernetesVersionMatrix(kubeVersion string) []string {
 	// Parse common version constraints
 	// Examples: ">=1.19.0", ">=1.20.0-0", "^1.20.0", "~1.20.0"
 
-	// Extract minimum version
 	minVersion := ""
 	if strings.Contains(kubeVersion, ">=") {
 		// Extract version after >=
 		parts := strings.Split(kubeVersion, ">=")
 		if len(parts) > 1 {
 			version := strings.TrimSpace(parts[1])
-			// Remove any trailing conditions
 			if idx := strings.IndexAny(version, " ,<"); idx != -1 {
 				version = version[:idx]
 			}
-			// Extract major.minor
 			versionParts := strings.Split(version, ".")
 			if len(versionParts) >= 2 {
 				minVersion = versionParts[0] + "." + versionParts[1]

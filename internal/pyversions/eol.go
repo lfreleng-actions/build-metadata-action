@@ -8,17 +8,53 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 )
 
 const (
-	// EndOfLifeAPIURL is the API endpoint for Python EOL data
-	EndOfLifeAPIURL = "https://endoflife.date/api/python.json"
+	// endOfLifeAPIURLEnv overrides the default endoflife.date endpoint
+	// (for mirrors, proxies, or tests) when set to a non-empty value.
+	endOfLifeAPIURLEnv = "BUILD_METADATA_PYTHON_EOL_API_URL"
+	// endOfLifeAPIHost is the endoflife.date host serving public release
+	// data; combined with the per-language path to form the endpoint.
+	endOfLifeAPIHost = "endoflife.date"
+	// defaultEndOfLifeAPIURL is the public endoflife.date endpoint for
+	// Python release data, used when endOfLifeAPIURLEnv is unset.
+	defaultEndOfLifeAPIURL = "https://" + endOfLifeAPIHost + "/api/python.json"
 	// DefaultTimeout is the default HTTP timeout for API calls
 	DefaultTimeout = 6 * time.Second
 	// DefaultMaxRetries is the default number of retry attempts
 	DefaultMaxRetries = 2
 )
+
+// endOfLifeAPIURL returns the endoflife.date endpoint to query, honoring
+// the endOfLifeAPIURLEnv override and falling back to the public default.
+// The override is only used when it parses as a well-formed http/https
+// URL; a malformed value is rejected in favour of the default. Note this
+// validates only the URL shape, not the target host.
+func endOfLifeAPIURL() string {
+	override := os.Getenv(endOfLifeAPIURLEnv)
+	if override == "" {
+		return defaultEndOfLifeAPIURL
+	}
+	if isValidHTTPURL(override) {
+		return override
+	}
+	return defaultEndOfLifeAPIURL
+}
+
+// isValidHTTPURL reports whether raw parses as an absolute http/https URL
+// with a host, the minimum shape safe to hand to http.Client.Get. It does
+// not restrict which host may be contacted.
+func isValidHTTPURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
+}
 
 // EOLData represents the end-of-life information for a Python version
 type EOLData struct {
@@ -98,7 +134,7 @@ func (c *EOLClient) FetchEOLData() ([]EOLData, error) {
 
 // fetchOnce performs a single attempt to fetch EOL data
 func (c *EOLClient) fetchOnce() ([]EOLData, error) {
-	resp, err := c.httpClient.Get(EndOfLifeAPIURL)
+	resp, err := c.httpClient.Get(endOfLifeAPIURL())
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -118,7 +154,6 @@ func (c *EOLClient) fetchOnce() ([]EOLData, error) {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
-	// Validate the data structure
 	if len(data) == 0 {
 		return nil, fmt.Errorf("received empty data array")
 	}
@@ -173,7 +208,6 @@ func (c *EOLClient) IsVersionEOL(version string, data []EOLData) (bool, string) 
 			continue
 		}
 
-		// Handle different EOL field types
 		switch eol := entry.EOL.(type) {
 		case string:
 			// Parse the date string (format: YYYY-MM-DD)

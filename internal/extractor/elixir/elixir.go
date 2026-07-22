@@ -32,12 +32,10 @@ func init() {
 
 // Detect checks if this is an Elixir project
 func (e *Extractor) Detect(projectPath string) bool {
-	// Check for mix.exs
 	if _, err := os.Stat(filepath.Join(projectPath, "mix.exs")); err == nil {
 		return true
 	}
 
-	// Check for lib/ directory with .ex files
 	libDir := filepath.Join(projectPath, "lib")
 	if info, err := os.Stat(libDir); err == nil && info.IsDir() {
 		matches, err := filepath.Glob(filepath.Join(libDir, "*.ex"))
@@ -46,7 +44,6 @@ func (e *Extractor) Detect(projectPath string) bool {
 		}
 	}
 
-	// Check for .ex or .exs files in root
 	patterns := []string{"*.ex", "*.exs"}
 	for _, pattern := range patterns {
 		matches, err := filepath.Glob(filepath.Join(projectPath, pattern))
@@ -75,6 +72,36 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	return metadata, nil
 }
 
+// Regex patterns for parsing mix.exs. The braces in mixLinksRegex and
+// mixDepRegex are written with the \u007b escape so that unbalanced braces in
+// string literals do not confuse brace-counting static analyzers; the compiled
+// patterns are identical to their literal-brace equivalents.
+var (
+	mixAppRegex          = regexp.MustCompile(`app:\s*:(\w+)`)
+	mixVersionRegex      = regexp.MustCompile(`version:\s*"([^"]+)"`)
+	mixElixirRegex       = regexp.MustCompile(`elixir:\s*"([^"]+)"`)
+	mixDescriptionRegex  = regexp.MustCompile(`description:\s*"([^"]+)"`)
+	mixPackageBlockRegex = regexp.MustCompile(`package:\s*\[`)
+	mixPackageFuncRegex  = regexp.MustCompile(`defp\s+package\s+do`)
+	mixLicenseRegex      = regexp.MustCompile(`licenses:\s*\["([^"]+)"`)
+	mixLinksRegex        = regexp.MustCompile("links:\\s*%\\\u007b")
+	mixHomepageRegex     = regexp.MustCompile(`"([^"]+)"\s*=>\s*"([^"]+)"`)
+	mixDepRegex          = regexp.MustCompile("\\\u007b:(\\w+),\\s*\"([^\"]+)\"")
+)
+
+// mixExsState carries the block-tracking flags and accumulated values across
+// the line-by-line scan of a mix.exs file.
+type mixExsState struct {
+	inPackageBlock      bool
+	packageBracketDepth int
+	packageSawBracket   bool
+	inLinksBlock        bool
+	linksBraceDepth     int
+	linksSawBrace       bool
+	elixirVersion       string
+	dependencies        []string
+}
+
 // extractFromMixExs parses mix.exs
 func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMetadata) error {
 	file, err := os.Open(path)
@@ -84,132 +111,125 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
-
-	// Regex patterns
-	appRegex := regexp.MustCompile(`app:\s*:(\w+)`)
-	versionRegex := regexp.MustCompile(`version:\s*"([^"]+)"`)
-	elixirRegex := regexp.MustCompile(`elixir:\s*"([^"]+)"`)
-	descriptionRegex := regexp.MustCompile(`description:\s*"([^"]+)"`)
-	packageBlockRegex := regexp.MustCompile(`package:\s*\[`)
-	packageFuncRegex := regexp.MustCompile(`defp\s+package\s+do`)
-	licenseRegex := regexp.MustCompile(`licenses:\s*\["([^"]+)"`)
-	linksRegex := regexp.MustCompile(`links:\s*%\{`)
-	homepageRegex := regexp.MustCompile(`"([^"]+)"\s*=>\s*"([^"]+)"`)
-	depRegex := regexp.MustCompile(`\{:(\w+),\s*"([^"]+)"`)
-
-	var dependencies []string
-	var inPackageBlock bool
-	var inLinksBlock bool
-	var elixirVersion string
+	state := &mixExsState{}
 
 	for scanner.Scan() {
-		line := scanner.Text()
-		line = strings.TrimSpace(line)
-
-		// Skip comments
+		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
-
-		// Extract app name
-		if matches := appRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Name = matches[1]
-		}
-
-		// Extract version
-		if matches := versionRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Version = matches[1]
-			metadata.VersionSource = "mix.exs"
-		}
-
-		// Extract Elixir version requirement
-		if matches := elixirRegex.FindStringSubmatch(line); matches != nil {
-			elixirVersion = matches[1]
-		}
-
-		// Extract description
-		if matches := descriptionRegex.FindStringSubmatch(line); matches != nil {
-			metadata.Description = matches[1]
-		}
-
-		// Track package block (either inline or via defp package do function)
-		if packageBlockRegex.MatchString(line) || packageFuncRegex.MatchString(line) {
-			inPackageBlock = true
-		}
-
-		// Extract licenses in package block
-		if inPackageBlock {
-			if matches := licenseRegex.FindStringSubmatch(line); matches != nil {
-				metadata.License = matches[1]
-			}
-		}
-
-		// Track links block
-		if linksRegex.MatchString(line) {
-			inLinksBlock = true
-		}
-
-		// Extract homepage from links
-		if inLinksBlock {
-			if matches := homepageRegex.FindStringSubmatch(line); matches != nil {
-				if matches[1] == "GitHub" || matches[1] == "Homepage" {
-					metadata.Homepage = matches[2]
-				}
-			}
-		}
-
-		// End blocks
-		if strings.Contains(line, "]") {
-			if inPackageBlock && !strings.Contains(line, "[") {
-				inPackageBlock = false
-			}
-		}
-		if strings.Contains(line, "}") {
-			if inLinksBlock && !strings.Contains(line, "%{") {
-				inLinksBlock = false
-			}
-		}
-
-		// Extract dependencies
-		if matches := depRegex.FindStringSubmatch(line); matches != nil {
-			dep := fmt.Sprintf("%s:%s", matches[1], matches[2])
-			dependencies = append(dependencies, dep)
-		}
+		state.processLine(line, metadata)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 
-	// Store Elixir version
-	if elixirVersion != "" {
-		metadata.LanguageSpecific["elixir_version"] = elixirVersion
+	applyElixirVersion(state.elixirVersion, metadata)
+	applyElixirDependencies(state.dependencies, metadata)
 
-		// Generate version matrix
-		matrix := generateElixirVersionMatrix(elixirVersion)
-		if len(matrix) > 0 {
-			metadata.LanguageSpecific["elixir_version_matrix"] = matrix
-		}
-	}
-
-	// Store dependencies
-	if len(dependencies) > 0 {
-		metadata.LanguageSpecific["dependencies"] = dependencies
-		metadata.LanguageSpecific["dependency_count"] = len(dependencies)
-	}
-
-	// Detect frameworks
-	framework := detectFramework(dependencies)
-	if framework != "" {
+	if framework := detectFramework(state.dependencies); framework != "" {
 		metadata.LanguageSpecific["framework"] = framework
 	}
 
 	return nil
 }
 
+// processLine applies every mix.exs pattern to a single line, updating both the
+// parse state and the destination metadata.
+func (s *mixExsState) processLine(line string, metadata *extractor.ProjectMetadata) {
+	if matches := mixAppRegex.FindStringSubmatch(line); matches != nil {
+		metadata.Name = matches[1]
+	}
+	if matches := mixVersionRegex.FindStringSubmatch(line); matches != nil {
+		metadata.Version = matches[1]
+		metadata.VersionSource = "mix.exs"
+	}
+	if matches := mixElixirRegex.FindStringSubmatch(line); matches != nil {
+		s.elixirVersion = matches[1]
+	}
+	if matches := mixDescriptionRegex.FindStringSubmatch(line); matches != nil {
+		metadata.Description = matches[1]
+	}
+
+	// Track package block (either inline or via defp package do function)
+	if mixPackageBlockRegex.MatchString(line) || mixPackageFuncRegex.MatchString(line) {
+		s.inPackageBlock = true
+	}
+	if s.inPackageBlock {
+		if matches := mixLicenseRegex.FindStringSubmatch(line); matches != nil {
+			metadata.License = matches[1]
+		}
+	}
+
+	if mixLinksRegex.MatchString(line) {
+		s.inLinksBlock = true
+	}
+	if s.inLinksBlock {
+		if matches := mixHomepageRegex.FindStringSubmatch(line); matches != nil {
+			if matches[1] == "GitHub" || matches[1] == "Homepage" {
+				metadata.Homepage = matches[2]
+			}
+		}
+	}
+
+	s.updateBlockState(line)
+
+	if matches := mixDepRegex.FindStringSubmatch(line); matches != nil {
+		s.dependencies = append(s.dependencies, fmt.Sprintf("%s:%s", matches[1], matches[2]))
+	}
+}
+
+// updateBlockState closes the package or links block by tracking delimiter
+// depth. This correctly handles a block whose opening and closing
+// delimiters appear on the same line (for example package: [licenses:
+// ["MIT"]] or links: %\u007b ... \u007d), which a naive open/close flag
+// would leave permanently open.
+func (s *mixExsState) updateBlockState(line string) {
+	if s.inPackageBlock {
+		s.packageBracketDepth += strings.Count(line, "[") - strings.Count(line, "]")
+		if strings.Contains(line, "[") {
+			s.packageSawBracket = true
+		}
+		if s.packageSawBracket && s.packageBracketDepth <= 0 {
+			s.inPackageBlock = false
+			s.packageBracketDepth = 0
+			s.packageSawBracket = false
+		}
+	}
+	if s.inLinksBlock {
+		s.linksBraceDepth += strings.Count(line, "\u007b") - strings.Count(line, "\u007d")
+		if strings.Contains(line, "\u007b") {
+			s.linksSawBrace = true
+		}
+		if s.linksSawBrace && s.linksBraceDepth <= 0 {
+			s.inLinksBlock = false
+			s.linksBraceDepth = 0
+			s.linksSawBrace = false
+		}
+	}
+}
+
+func applyElixirVersion(elixirVersion string, metadata *extractor.ProjectMetadata) {
+	if elixirVersion == "" {
+		return
+	}
+	metadata.LanguageSpecific["elixir_version"] = elixirVersion
+	matrix := generateElixirVersionMatrix(elixirVersion)
+	if len(matrix) > 0 {
+		metadata.LanguageSpecific["elixir_version_matrix"] = matrix
+	}
+}
+
+func applyElixirDependencies(dependencies []string, metadata *extractor.ProjectMetadata) {
+	if len(dependencies) > 0 {
+		metadata.LanguageSpecific["dependencies"] = dependencies
+		metadata.LanguageSpecific["dependency_count"] = len(dependencies)
+	}
+}
+
 // generateElixirVersionMatrix generates a matrix of Elixir versions
 func generateElixirVersionMatrix(requirement string) []string {
-	// Remove constraint operators
 	version := strings.TrimPrefix(requirement, "~> ")
 	version = strings.TrimPrefix(version, ">= ")
 	version = strings.TrimPrefix(version, "== ")
