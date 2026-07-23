@@ -539,7 +539,7 @@ app.name=MyApp
 		t.Errorf("java.version property = %v, want 17", props["java.version"])
 	}
 
-	if javaVersion, ok := metadata.LanguageSpecific["java_version"].(string); !ok || javaVersion != "17" {
+	if javaVersion, ok := metadata.LanguageSpecific["version"].(string); !ok || javaVersion != "17" {
 		t.Errorf("java_version = %v, want 17", javaVersion)
 	}
 }
@@ -828,5 +828,110 @@ version = '1.0.0'
 
 	if !hasJavaLibrary {
 		t.Errorf("Java Library framework not detected in %v", frameworks)
+	}
+}
+
+// TestGradleExtractJavaVersion verifies Java-level detection from the build
+// file toolchain and compatibility declarations, and the gradle.properties
+// fallback.
+func TestGradleExtractJavaVersion(t *testing.T) {
+	tests := []struct {
+		name           string
+		buildContent   string
+		expectedJava   string
+		expectedSource string
+	}{
+		{
+			name: "toolchain languageVersion",
+			buildContent: `
+plugins { id 'java' }
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+`,
+			expectedJava:   "21",
+			expectedSource: "toolchain",
+		},
+		{
+			name: "sourceCompatibility JavaVersion enum",
+			buildContent: `
+sourceCompatibility = JavaVersion.VERSION_17
+`,
+			expectedJava:   "17",
+			expectedSource: "sourceCompatibility",
+		},
+		{
+			name: "sourceCompatibility legacy enum",
+			buildContent: `
+sourceCompatibility = JavaVersion.VERSION_1_8
+`,
+			expectedJava:   "1.8",
+			expectedSource: "sourceCompatibility",
+		},
+		{
+			name: "sourceCompatibility quoted literal",
+			buildContent: `
+sourceCompatibility = '11'
+`,
+			expectedJava:   "11",
+			expectedSource: "sourceCompatibility",
+		},
+		{
+			name: "targetCompatibility only reports target source",
+			buildContent: `
+targetCompatibility = '11'
+`,
+			expectedJava:   "11",
+			expectedSource: "targetCompatibility",
+		},
+		{
+			name: "targetCompatibility JavaVersion enum reports target",
+			buildContent: `
+targetCompatibility = JavaVersion.VERSION_17
+`,
+			expectedJava:   "17",
+			expectedSource: "targetCompatibility",
+		},
+		{
+			name: "target preferred over source when both literals differ",
+			buildContent: `
+sourceCompatibility = '11'
+targetCompatibility = '17'
+`,
+			expectedJava:   "17",
+			expectedSource: "targetCompatibility",
+		},
+		{
+			name: "target preferred over source when both enums differ",
+			buildContent: `
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_17
+`,
+			expectedJava:   "17",
+			expectedSource: "targetCompatibility",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(tmpDir, "build.gradle"), []byte(tt.buildContent), 0644); err != nil {
+				t.Fatalf("Failed to write build.gradle: %v", err)
+			}
+
+			metadata, err := NewGradleExtractor().Extract(tmpDir)
+			if err != nil {
+				t.Fatalf("Extract() error = %v", err)
+			}
+
+			if javaVersion, _ := metadata.LanguageSpecific["version"].(string); javaVersion != tt.expectedJava {
+				t.Errorf("java_version = %q, want %q", javaVersion, tt.expectedJava)
+			}
+			if source, _ := metadata.LanguageSpecific["version_source"].(string); source != tt.expectedSource {
+				t.Errorf("java_version_source = %q, want %q", source, tt.expectedSource)
+			}
+		})
 	}
 }

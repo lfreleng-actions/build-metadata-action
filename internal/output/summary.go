@@ -98,6 +98,8 @@ func writeCommonProjectRows(sb *strings.Builder, common map[string]interface{}, 
 		fmt.Fprintf(sb, "| Snapshot Version | %s |\n", snapshotVersion)
 	}
 
+	writeReleaseRows(sb, common)
+
 	writeBuildTimestampRow(sb, common)
 
 	if gitBranch, ok := common["git_branch"].(string); ok && gitBranch != "" {
@@ -124,6 +126,29 @@ func writeVersionPropertiesRows(sb *strings.Builder, common map[string]interface
 			matchStatus = "false ❌"
 		}
 		fmt.Fprintf(sb, "| Version Match | %s |\n", matchStatus)
+	}
+}
+
+// writeReleaseRows renders release request details (the global-jjb / LF
+// release convention) when a release file is present under releases/ and the
+// request is ready, so a promote/tag lane can surface that it is ready to run
+// along with the version and ref. It renders nothing when the request is not
+// ready. Values arrive from a JSON round-trip, so the count is a float64.
+func writeReleaseRows(sb *strings.Builder, common map[string]interface{}) {
+	ready, ok := common["is_release_ready"].(bool)
+	if !ok || !ready {
+		return
+	}
+	if count, ok := common["release_file_count"].(float64); ok && count > 0 {
+		fmt.Fprintf(sb, "| Release Ready | ✅ (%d file(s)) |\n", int(count))
+	} else {
+		sb.WriteString("| Release Ready | ✅ |\n")
+	}
+	if version, ok := common["release_version"].(string); ok && version != "" {
+		fmt.Fprintf(sb, "| Release Version | %s |\n", version)
+	}
+	if ref, ok := common["release_ref"].(string); ok && ref != "" {
+		fmt.Fprintf(sb, "| Release Ref | `%s` |\n", ref)
 	}
 }
 

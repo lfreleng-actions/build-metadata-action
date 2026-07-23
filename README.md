@@ -38,24 +38,24 @@ outputs and rich CI/CD integration.
 
 <!-- markdownlint-disable MD013 -->
 
-| Language | Build Systems | Version Files |
-| -------- | ------------- | ------------- |
-| Python | setuptools, poetry, flit, hatch | `pyproject.toml`, `setup.py`, `setup.cfg` |
-| JavaScript/TypeScript | npm, yarn, pnpm | `package.json`, `tsconfig.json` |
-| Java | Maven, Gradle (Groovy/Kotlin) | `pom.xml`, `build.gradle`, `build.gradle.kts` |
-| .NET/C# | MSBuild, dotnet CLI | `*.csproj`, `*.sln`, `*.props` |
-| Go | Go modules | `go.mod` |
-| Rust | Cargo | `Cargo.toml` |
-| Ruby | Bundler, RubyGems | `*.gemspec`, `Gemfile` |
-| PHP | Composer | `composer.json` |
-| Swift | Swift Package Manager | `Package.swift` |
-| Dart/Flutter | pub | `pubspec.yaml` |
-| Terraform/OpenTofu | Terraform, OpenTofu | `*.tf`, `versions.tf` |
-| C/C++ | CMake, Autoconf, Meson | `CMakeLists.txt`, `configure.ac` |
-| Scala | SBT | `build.sbt` |
-| Elixir | Mix | `mix.exs` |
-| Haskell | Cabal | `*.cabal` |
-| Julia | Pkg | `Project.toml` |
+| Language              | Build Systems                   | Version Files                                 |
+| --------------------- | ------------------------------- | --------------------------------------------- |
+| Python                | setuptools, poetry, flit, hatch | `pyproject.toml`, `setup.py`, `setup.cfg`     |
+| JavaScript/TypeScript | npm, yarn, pnpm                 | `package.json`, `tsconfig.json`               |
+| Java                  | Maven, Gradle (Groovy/Kotlin)   | `pom.xml`, `build.gradle`, `build.gradle.kts` |
+| .NET/C#               | MSBuild, dotnet CLI             | `*.csproj`, `*.sln`, `*.props`                |
+| Go                    | Go modules                      | `go.mod`                                      |
+| Rust                  | Cargo                           | `Cargo.toml`                                  |
+| Ruby                  | Bundler, RubyGems               | `*.gemspec`, `Gemfile`                        |
+| PHP                   | Composer                        | `composer.json`                               |
+| Swift                 | Swift Package Manager           | `Package.swift`                               |
+| Dart/Flutter          | pub                             | `pubspec.yaml`                                |
+| Terraform/OpenTofu    | Terraform, OpenTofu             | `*.tf`, `versions.tf`                         |
+| C/C++                 | CMake, Autoconf, Meson          | `CMakeLists.txt`, `configure.ac`              |
+| Scala                 | SBT                             | `build.sbt`                                   |
+| Elixir                | Mix                             | `mix.exs`                                     |
+| Haskell               | Cabal                           | `*.cabal`                                     |
+| Julia                 | Pkg                             | `Project.toml`                                |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -182,19 +182,19 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 ## Inputs
 
 <!-- markdownlint-disable MD013 -->
-| Name | Required | Default | Description |
-| ---- | -------- | ------- | ----------- |
-| `path_prefix` | No | `.` | Path to the project root |
-| `output_format` | No | `summary` | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
-| `include_environment` | No | `true` | Include environment metadata |
-| `use_version_extract` | No | `true` | Use version-extract-action for version detection |
-| `verbose` | No | `false` | Enable verbose output |
-| `artifact_upload` | No | `true` | Upload gathered metadata as workflow artifacts |
-| `artifact_name_prefix` | No | `build-metadata` | Custom prefix for artifact names |
-| `artifact_formats` | No | `json` | Formats to upload as artifacts. Can be comma-separated, space-separated, or newline-separated (e.g., `json`, `yaml`, or `json,yaml`). |
-| `validate_output` | No | `true` | Check JSON/YAML output before uploading |
-| `strict_validation` | No | `true` | Use strict validation mode (round-trip testing) |
-| `export_env_vars` | No | `false` | Export all outputs as environment variables (uppercase with underscores) for use in later steps |
+| Name                   | Required | Default          | Description                                                                                                                                                            |
+| ---------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path_prefix`          | No       | `.`              | Path to the project root                                                                                                                                               |
+| `output_format`        | No       | `summary`        | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
+| `include_environment`  | No       | `true`           | Include environment metadata                                                                                                                                           |
+| `use_version_extract`  | No       | `true`           | Use version-extract-action for version detection                                                                                                                       |
+| `verbose`              | No       | `false`          | Enable verbose output                                                                                                                                                  |
+| `artifact_upload`      | No       | `true`           | Upload gathered metadata as workflow artifacts                                                                                                                         |
+| `artifact_name_prefix` | No       | `build-metadata` | Custom prefix for artifact names                                                                                                                                       |
+| `artifact_formats`     | No       | `json`           | Formats to upload as artifacts. Can be comma-separated, space-separated, or newline-separated (e.g., `json`, `yaml`, or `json,yaml`).                                  |
+| `validate_output`      | No       | `true`           | Check JSON/YAML output before uploading                                                                                                                                |
+| `strict_validation`    | No       | `true`           | Use strict validation mode (round-trip testing)                                                                                                                        |
+| `export_env_vars`      | No       | `false`          | Export all outputs as environment variables (uppercase with underscores) for use in later steps                                                                        |
 <!-- markdownlint-enable MD013 -->
 
 ## Outputs
@@ -204,107 +204,137 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 All project types provide these standardized outputs:
 
 <!-- markdownlint-disable MD013 -->
-| Output | Description | Example |
-| -------- | ------------ | ---------- |
-| `project_type` | Detected project type | `python-modern` |
-| `project_name` | Project/package name | `myproject` |
-| `project_version` | Current version | `1.2.3` |
-| `project_path` | Absolute project path | `/workspace/myproject` |
-| `version_source` | Source of version info | `pyproject.toml` |
-| `versioning_type` | Versioning type: `static` or `dynamic` | `static` |
-| `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent | `1.1.0` |
-| `version_properties_match` | Whether version.properties matches `project_version` (empty when not comparable) | `true` |
-| `snapshot_version` | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention) | `1.1.0-SNAPSHOT` |
-| `build_timestamp` | ISO 8601 build timestamp | `2025-11-03T12:00:00Z` |
-| `git_sha` | Current git commit SHA | `abc123...` |
-| `git_branch` | Current git branch | `main` |
-| `git_tag` | Current git tag | `v1.2.3` |
-| `ci_platform` | CI platform | `github` |
-| `ci_run_id` | CI run identifier | `12345678` |
-| `ci_run_url` | URL to CI run | `https://github.com/...` |
-| `runner_os` | Runner OS | `Linux` |
-| `runner_arch` | Runner architecture | `X64` |
-| `metadata_json` | Complete metadata as JSON | `{...}` |
-| `success` | Extraction success indicator | `true` |
+| Output                       | Description                                                                                         | Example                  |
+| ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ |
+| `project_type`               | Detected project type                                                                               | `python-modern`          |
+| `project_name`               | Project/package name                                                                                | `myproject`              |
+| `project_version`            | Current version                                                                                     | `1.2.3`                  |
+| `project_path`               | Absolute project path                                                                               | `/workspace/myproject`   |
+| `version_source`             | Source of version info                                                                              | `pyproject.toml`         |
+| `versioning_type`            | Versioning type: `static` or `dynamic`                                                              | `static`                 |
+| `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent                             | `1.1.0`                  |
+| `version_properties_match`   | Whether version.properties matches `project_version` (empty when not comparable)                    | `true`                   |
+| `snapshot_version`           | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention)                               | `1.1.0-SNAPSHOT`         |
+| `release_files`              | Comma-separated release request files under `releases/` (global-jjb/LF convention); empty when none | `releases/3.8.2.yaml`    |
+| `release_file_count`         | Number of release request files found under `releases/`                                             | `1`                      |
+| `is_release_ready`           | True when at least one release request file is present under `releases/`                            | `true`                   |
+| `release_version`            | Version parsed from a lone release file; empty when more than one exists                            | `3.8.2`                  |
+| `release_ref`                | Git ref parsed from a lone release file; empty when more than one exists                            | `abc123...`              |
+| `build_timestamp`            | ISO 8601 build timestamp                                                                            | `2025-11-03T12:00:00Z`   |
+| `git_sha`                    | Current git commit SHA                                                                              | `abc123...`              |
+| `git_branch`                 | Current git branch                                                                                  | `main`                   |
+| `git_tag`                    | Current git tag                                                                                     | `v1.2.3`                 |
+| `ci_platform`                | CI platform                                                                                         | `github`                 |
+| `ci_run_id`                  | CI run identifier                                                                                   | `12345678`               |
+| `ci_run_url`                 | URL to CI run                                                                                       | `https://github.com/...` |
+| `runner_os`                  | Runner OS                                                                                           | `Linux`                  |
+| `runner_arch`                | Runner architecture                                                                                 | `X64`                    |
+| `metadata_json`              | Complete metadata as JSON                                                                           | `{...}`                  |
+| `success`                    | Extraction success indicator                                                                        | `true`                   |
 <!-- markdownlint-enable MD013 -->
 
 ### Language-Specific Outputs
 
 #### Python
 
-| Output | Description |
-| -------- | ------------ |
-| `python_version` | Python interpreter version |
-| `python_package_name` | Distribution package name |
-| `python_requires_python` | Required Python version range |
-| `python_build_backend` | Build backend (setuptools, poetry, etc.) |
-| `python_metadata_source` | Source file (pyproject.toml, etc.) |
-| `python_matrix_json` | CI matrix configuration as JSON |
-| `python_dependencies` | Runtime dependencies |
+| Output                   | Description                              |
+| ------------------------ | ---------------------------------------- |
+| `python_version`         | Python interpreter version               |
+| `python_package_name`    | Distribution package name                |
+| `python_requires_python` | Required Python version range            |
+| `python_build_backend`   | Build backend (setuptools, poetry, etc.) |
+| `python_metadata_source` | Source file (pyproject.toml, etc.)       |
+| `python_matrix_json`     | CI matrix configuration as JSON          |
+| `python_dependencies`    | Runtime dependencies                     |
 
 #### Java (Maven)
 
-| Output | Description |
-| -------- | ------------ |
-| `java_version` | JDK version |
-| `maven_version` | Maven version |
-| `maven_group_id` | Maven groupId |
-| `maven_artifact_id` | Maven artifactId |
-| `maven_packaging` | Packaging type (jar, war, etc.) |
-| `maven_modules` | Multi-module project modules |
+| Output                  | Description                       |
+| ----------------------- | --------------------------------- |
+| `java_version`          | JDK version                       |
+| `java_version_source`   | JDK version source                |
+| `java_group_id`         | Maven groupId                     |
+| `java_artifact_id`      | Maven artifactId                  |
+| `java_packaging`        | Packaging type (jar, war, etc.)   |
+| `java_has_parent`       | Whether the POM declares a parent |
+| `java_is_multi_module`  | Multi-module (reactor) project    |
+| `java_module_count`     | Number of reactor modules         |
+| `java_frameworks`       | Detected frameworks               |
+
+The action resolves the Java level (`java_version`) in Maven's own
+precedence: the POM's `maven.compiler.release`, then
+`maven.compiler.source`/`target`, then `java.version`, then the
+`maven-compiler-plugin` `<configuration>`. When the scanned POM declares
+no level, the action inherits it from on-disk parent POMs (via
+`relativePath`) and, for aggregator roots, from a reactor module — so an
+ONAP-style root whose level lives in a shared `*-parent` module still
+resolves. The `java_version_source` output reports where the value
+came from (e.g. `maven.compiler.release`, `maven-compiler-plugin/release`,
+`module:cps-parent`).
 
 #### Java (Gradle)
 
-| Output | Description |
-| -------- | ------------ |
-| `java_version` | JDK version |
-| `gradle_version` | Gradle version |
-| `gradle_group` | Project group |
-| `gradle_name` | Project name |
-| `gradle_build_file` | Build file type |
+| Output                  | Description                  |
+| ----------------------- | ---------------------------- |
+| `java_version`          | JDK version                  |
+| `java_version_source`   | JDK version source           |
+| `java_group_id`         | Project group                |
+| `java_artifact_id`      | Project name                 |
+| `java_build_dsl`        | Build DSL (groovy or kotlin) |
+| `java_is_multi_project` | Multi-project build          |
+| `java_frameworks`       | Detected frameworks          |
+
+For Gradle the action reads the level from the build file toolchain
+(`JavaLanguageVersion.of(N)`), then `source`/`targetCompatibility`
+(`JavaVersion.VERSION_N` or a bare/quoted literal), then
+`gradle.properties`; `java_version_source` reports the form detected.
 
 #### Node.js/JavaScript
 
-| Output | Description |
-| -------- | ------------ |
-| `node_version` | Node.js version |
-| `npm_version` | npm version |
+| Output                 | Description                                |
+| ---------------------- | ------------------------------------------ |
+| `node_version`         | Node.js version                            |
+| `npm_version`          | npm version                                |
 | `node_package_manager` | Detected package manager (npm, yarn, pnpm) |
-| `node_engines` | Required node/npm versions |
-| `node_workspaces` | Workspace packages (monorepo) |
+| `node_engines`         | Required node/npm versions                 |
+| `node_workspaces`      | Workspace packages (monorepo)              |
 
 #### .NET/C\#
 
-| Output | Description |
-| -------- | ------------ |
-| `dotnet_version` | .NET SDK version |
-| `dotnet_framework` | Target framework(s) |
-| `dotnet_assembly_name` | Assembly name |
-| `dotnet_package_id` | NuGet package ID |
+| Output                 | Description         |
+| ---------------------- | ------------------- |
+| `dotnet_version`       | .NET SDK version    |
+| `dotnet_framework`     | Target framework(s) |
+| `dotnet_assembly_name` | Assembly name       |
+| `dotnet_package_id`    | NuGet package ID    |
 
 #### Go
 
-| Output | Description |
-| -------- | ------------ |
-| `go_base_name` | Friendly name from the module path (`/vN` suffix stripped) |
-| `go_module_path` | Go module path declared in `go.mod` |
-| `go_go_version` | Go version from the `go` directive in `go.mod` |
-| `go_metadata_source` | Source of Go metadata (`go.mod`) |
-| `go_toolchain` | Toolchain directive from `go.mod` (when present) |
-| `go_dependencies` | Direct dependencies as `module@version` |
-| `go_indirect_dependencies` | Indirect dependencies as `module@version` |
-| `go_dependency_count` | Number of direct dependencies |
-| `go_total_dependency_count` | Total dependencies (direct plus indirect) |
-| `go_dependency_map` | JSON object mapping modules to versions |
-| `go_replace_directives` | Replace directives as JSON array of `{old, new}` |
-| `go_replace_count` | Number of replace directives |
-| `go_exclude_directives` | Exclude directives (comma-separated) |
-| `go_exclude_count` | Number of exclude directives |
-| `go_retract_directives` | Retract directives (comma-separated) |
-| `go_retract_count` | Number of retract directives |
-| `go_frameworks` | Detected Go frameworks/tools (comma-separated) |
-| `go_go_version_matrix` | Supported (non-EOL) Go versions for testing |
-| `go_matrix_json` | Go version test matrix as JSON |
+<!-- markdownlint-disable MD013 -->
+
+| Output                      | Description                                                |
+| --------------------------- | ---------------------------------------------------------- |
+| `go_base_name`              | Friendly name from the module path (`/vN` suffix stripped) |
+| `go_module_path`            | Go module path declared in `go.mod`                        |
+| `go_go_version`             | Go version from the `go` directive in `go.mod`             |
+| `go_metadata_source`        | Source of Go metadata (`go.mod`)                           |
+| `go_toolchain`              | Toolchain directive from `go.mod` (when present)           |
+| `go_dependencies`           | Direct dependencies as `module@version`                    |
+| `go_indirect_dependencies`  | Indirect dependencies as `module@version`                  |
+| `go_dependency_count`       | Number of direct dependencies                              |
+| `go_total_dependency_count` | Total dependencies (direct plus indirect)                  |
+| `go_dependency_map`         | JSON object mapping modules to versions                    |
+| `go_replace_directives`     | Replace directives as JSON array of `{old, new}`           |
+| `go_replace_count`          | Number of replace directives                               |
+| `go_exclude_directives`     | Exclude directives (comma-separated)                       |
+| `go_exclude_count`          | Number of exclude directives                               |
+| `go_retract_directives`     | Retract directives (comma-separated)                       |
+| `go_retract_count`          | Number of retract directives                               |
+| `go_frameworks`             | Detected Go frameworks/tools (comma-separated)             |
+| `go_go_version_matrix`      | Supported (non-EOL) Go versions for testing                |
+| `go_matrix_json`            | Go version test matrix as JSON                             |
+
+<!-- markdownlint-enable MD013 -->
 
 The action derives the Go version matrix from live
 [endoflife.date](https://endoflife.date/go) data: it selects the
@@ -314,12 +344,12 @@ supported releases applies instead.
 
 #### Rust
 
-| Output | Description |
-| -------- | ------------ |
-| `rust_version` | Rust compiler version |
-| `cargo_version` | Cargo version |
-| `rust_edition` | Rust edition |
-| `rust_workspace_members` | Workspace members |
+| Output                   | Description           |
+| ------------------------ | --------------------- |
+| `rust_version`           | Rust compiler version |
+| `cargo_version`          | Cargo version         |
+| `rust_edition`           | Rust edition          |
+| `rust_workspace_members` | Workspace members     |
 
 ## Example Output
 
@@ -330,44 +360,44 @@ When used in a GitHub Actions workflow, the action generates a rich step summary
 
 ## Project Information
 
-| Key | Value |
-|-----|-------|
-| Project Type | Python (Modern) |
-| Project Name | dependamerge |
-| Project Version | 1.2.3 |
-| Version Source | pyproject.toml |
-| Dynamic Versioning | No |
-| Build Timestamp | 2025-11-03T12:00:00Z |
-| Git SHA | `abc1234` |
-| Git Branch | `main` |
+| Key                | Value                |
+| ------------------ | -------------------- |
+| Project Type       | Python (Modern)      |
+| Project Name       | dependamerge         |
+| Project Version    | 1.2.3                |
+| Version Source     | pyproject.toml       |
+| Dynamic Versioning | No                   |
+| Build Timestamp    | 2025-11-03T12:00:00Z |
+| Git SHA            | `abc1234`            |
+| Git Branch         | `main`               |
 
 ## CI Environment
 
-| Component | Value |
-|-----------|-------|
-| Platform | github |
-| Runner OS | Linux |
-| Runner Arch | X64 |
-| Workflow | Build and Test |
-| Run Number | 42 |
+| Component   | Value          |
+| ----------- | -------------- |
+| Platform    | github         |
+| Runner OS   | Linux          |
+| Runner Arch | X64            |
+| Workflow    | Build and Test |
+| Run Number  | 42             |
 
 ## Tool Versions
 
-| Tool | Version |
-|------|---------|
-| python | 3.13.0 |
-| pip | 24.0 |
-| setuptools | 75.0.0 |
+| Tool       | Version |
+| ---------- | ------- |
+| python     | 3.13.0  |
+| pip        | 24.0    |
+| setuptools | 75.0.0  |
 
 ## Language-Specific Metadata
 
 ### Python Project Details
 
-| Key | Value |
-|-----|-------|
-| Package Name | `dependamerge` |
-| Requires Python | >=3.10 |
-| Build Backend | setuptools |
+| Key             | Value          |
+| --------------- | -------------- |
+| Package Name    | `dependamerge` |
+| Requires Python | >=3.10         |
+| Build Backend   | setuptools     |
 | Metadata Source | pyproject.toml |
 
 ### Build Matrix

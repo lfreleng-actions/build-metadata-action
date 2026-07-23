@@ -160,6 +160,33 @@ outputs:
     description: "Synthesized interim version (X.Y.Z-SNAPSHOT convention)"
     value: ${{ steps.extract.outputs.snapshot_version }}
 
+  release_files:
+    description: >-
+      Comma-separated release request files under releases/ (global-jjb /
+      LF release convention); empty when none are present
+    value: ${{ steps.extract.outputs.release_files }}
+
+  release_file_count:
+    description: "Number of release request files found under releases/"
+    value: ${{ steps.extract.outputs.release_file_count }}
+
+  is_release_ready:
+    description: >-
+      Returns true when at least one release request file is present under
+      releases/ (drives the promote/tag lane)
+    value: ${{ steps.extract.outputs.is_release_ready }}
+
+  release_version:
+    description: >-
+      Version parsed from a lone release file; empty when several exist
+      (the caller disambiguates via changed files)
+    value: ${{ steps.extract.outputs.release_version }}
+
+  release_ref:
+    description: >-
+      Git ref parsed from a lone release file; empty when several exist
+    value: ${{ steps.extract.outputs.release_ref }}
+
   versioning_type:
     description: "Versioning type: 'static' or 'dynamic'"
     value: ${{ steps.extract.outputs.versioning_type }}
@@ -386,9 +413,15 @@ outputs:
     description: "Whether Gradle project is multi-project"
     value: ${{ steps.extract.outputs.java_is_multi_project }}
 
-  java_java_version:
+  java_version:
     description: "Required Java version"
-    value: ${{ steps.extract.outputs.java_java_version }}
+    value: ${{ steps.extract.outputs.java_version }}
+
+  java_version_source:
+    description: >-
+      Where the Java version was detected (e.g. maven.compiler.release,
+      maven-compiler-plugin/release, module:<name>, toolchain)
+    value: ${{ steps.extract.outputs.java_version_source }}
 
   java_frameworks:
     description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"

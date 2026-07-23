@@ -120,6 +120,68 @@ func TestGenerateSummary_VersionPropertiesMismatch(t *testing.T) {
 	}
 }
 
+// TestGenerateSummary_ReleaseRows verifies the release-request rows render
+// when is_release_ready is true (with file count, version, and ref) and are
+// omitted entirely when the request is not ready.
+func TestGenerateSummary_ReleaseRows(t *testing.T) {
+	ready := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":     "java-maven",
+			"project_name":     "cps",
+			"project_version":  "3.5.0",
+			"is_release_ready": true,
+			// Values arrive from a JSON round-trip, so the count is a float64.
+			"release_file_count": float64(2),
+			"release_version":    "3.5.0",
+			"release_ref":        "refs/heads/main",
+		},
+	}
+
+	summary := GenerateSummary(ready)
+	if !strings.Contains(summary, "| Release Ready | ✅ (2 file(s)) |") {
+		t.Error("Summary should render the Release Ready row with file count")
+	}
+	if !strings.Contains(summary, "| Release Version | 3.5.0 |") {
+		t.Error("Summary should render the Release Version row")
+	}
+	if !strings.Contains(summary, "| Release Ref | `refs/heads/main` |") {
+		t.Error("Summary should render the Release Ref row")
+	}
+
+	// A ready request without a file count still renders a plain Ready row.
+	readyNoCount := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":     "java-maven",
+			"project_name":     "cps",
+			"project_version":  "3.5.0",
+			"is_release_ready": true,
+		},
+	}
+	summary = GenerateSummary(readyNoCount)
+	if !strings.Contains(summary, "| Release Ready | ✅ |") {
+		t.Error("Summary should render a plain Release Ready row when no file count is present")
+	}
+
+	// A not-ready request renders no release rows at all.
+	notReady := map[string]interface{}{
+		"common": map[string]interface{}{
+			"project_type":       "java-maven",
+			"project_name":       "cps",
+			"project_version":    "3.5.0",
+			"is_release_ready":   false,
+			"release_file_count": float64(0),
+			"release_version":    "3.5.0",
+			"release_ref":        "refs/heads/main",
+		},
+	}
+	summary = GenerateSummary(notReady)
+	if strings.Contains(summary, "Release Ready") ||
+		strings.Contains(summary, "Release Version") ||
+		strings.Contains(summary, "Release Ref") {
+		t.Error("Summary should omit all release rows when the request is not ready")
+	}
+}
+
 // TestGenerateSummary_CompleteMetadata tests summary with all fields
 func TestGenerateSummary_CompleteMetadata(t *testing.T) {
 	buildTime := time.Date(2025, 1, 3, 12, 0, 0, 0, time.UTC)

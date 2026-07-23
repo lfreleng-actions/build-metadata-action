@@ -55,6 +55,20 @@ type CommonMetadata struct {
 	// VersionPropertiesVersion when available, else ProjectVersion.
 	SnapshotVersion  string `json:"snapshot_version,omitempty"`
 	ProjectMatchRepo bool   `json:"project_match_repo,omitempty"`
+	// ReleaseFiles lists release request files (repo-relative) found under
+	// releases/, the global-jjb / Linux Foundation release convention.
+	// Merging one of these files is the trigger for the promote/tag lane.
+	ReleaseFiles []string `json:"release_files,omitempty"`
+	// ReleaseFileCount is the number of release request files found.
+	ReleaseFileCount int `json:"release_file_count,omitempty"`
+	// IsReleaseReady reports whether at least one release request file is
+	// present under releases/.
+	IsReleaseReady bool `json:"is_release_ready,omitempty"`
+	// ReleaseVersion and ReleaseRef carry the version and git ref parsed
+	// from a lone release file. They stay empty when several release files
+	// exist, since the caller then disambiguates via the changed files.
+	ReleaseVersion string `json:"release_version,omitempty"`
+	ReleaseRef     string `json:"release_ref,omitempty"`
 }
 
 // BuildMetadata contains build-specific metadata

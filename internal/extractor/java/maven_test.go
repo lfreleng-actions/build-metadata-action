@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestMavenDetect tests Maven project detection
@@ -280,7 +281,7 @@ func TestMavenExtractProperties(t *testing.T) {
 		t.Errorf("maven.compiler.source = %v, want 17", props["maven.compiler.source"])
 	}
 
-	if javaVersion, ok := metadata.LanguageSpecific["java_version"].(string); !ok || javaVersion != "17" {
+	if javaVersion, ok := metadata.LanguageSpecific["version"].(string); !ok || javaVersion != "17" {
 		t.Errorf("java_version = %v, want 17", javaVersion)
 	}
 
@@ -781,6 +782,30 @@ func TestMavenExtractWithJavaVersion(t *testing.T) {
 			expectedJava: "21",
 		},
 		{
+			name: "maven.compiler.release preferred over source",
+			properties: `<properties>
+                <maven.compiler.release>21</maven.compiler.release>
+                <maven.compiler.source>17</maven.compiler.source>
+            </properties>`,
+			expectedJava: "21",
+		},
+		{
+			name: "maven.compiler.target preferred over source when differing",
+			properties: `<properties>
+                <maven.compiler.source>11</maven.compiler.source>
+                <maven.compiler.target>17</maven.compiler.target>
+            </properties>`,
+			expectedJava: "17",
+		},
+		{
+			name: "maven.compiler.release with placeholder",
+			properties: `<properties>
+                <java.version>21</java.version>
+                <maven.compiler.release>${java.version}</maven.compiler.release>
+            </properties>`,
+			expectedJava: "21",
+		},
+		{
 			name: "java.version",
 			properties: `<properties>
                 <java.version>17</java.version>
@@ -812,7 +837,7 @@ func TestMavenExtractWithJavaVersion(t *testing.T) {
 				t.Fatalf("Extract() error = %v", err)
 			}
 
-			if javaVersion, ok := metadata.LanguageSpecific["java_version"].(string); !ok || javaVersion != tt.expectedJava {
+			if javaVersion, ok := metadata.LanguageSpecific["version"].(string); !ok || javaVersion != tt.expectedJava {
 				t.Errorf("java_version = %v, want %v", javaVersion, tt.expectedJava)
 			}
 		})
@@ -867,5 +892,573 @@ func TestMavenExtractNoPOM(t *testing.T) {
 
 	if err == nil {
 		t.Error("Extract() should return error when pom.xml is missing")
+	}
+}
+
+// mavenJavaVersionOf extracts and returns the resolved java_version and its
+// source for the pom.xml written into dir.
+func mavenJavaVersionOf(t *testing.T, dir string) (string, string) {
+	t.Helper()
+	metadata, err := NewMavenExtractor().Extract(dir)
+	if err != nil {
+		t.Fatalf("Extract() error = %v", err)
+	}
+	version, _ := metadata.LanguageSpecific["version"].(string)
+	source, _ := metadata.LanguageSpecific["version_source"].(string)
+	return version, source
+}
+
+// TestMavenExtractJavaVersionFromCompilerPlugin verifies the Java level is
+// read from maven-compiler-plugin <configuration> when no property declares
+// it.
+func TestMavenExtractJavaVersionFromCompilerPlugin(t *testing.T) {
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>plugin-configured</artifactId>
+    <version>1.0.0</version>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>21</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>`
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write pom.xml: %v", err)
+	}
+
+	version, source := mavenJavaVersionOf(t, tmpDir)
+	if version != "21" {
+		t.Errorf("java_version = %q, want 21", version)
+	}
+	if source != "maven-compiler-plugin/release" {
+		t.Errorf("java_version_source = %q, want maven-compiler-plugin/release", source)
+	}
+}
+
+// TestMavenExtractJavaVersionPluginTargetPreferred verifies that when the
+// maven-compiler-plugin <configuration> declares both <source> and <target>
+// with different levels, the stricter <target> (bytecode) level wins.
+func TestMavenExtractJavaVersionPluginTargetPreferred(t *testing.T) {
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>plugin-source-target</artifactId>
+    <version>1.0.0</version>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>11</source>
+                    <target>17</target>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>`
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write pom.xml: %v", err)
+	}
+
+	version, source := mavenJavaVersionOf(t, tmpDir)
+	if version != "17" {
+		t.Errorf("java_version = %q, want 17 (target preferred over source)", version)
+	}
+	if source != "maven-compiler-plugin/target" {
+		t.Errorf("java_version_source = %q, want maven-compiler-plugin/target", source)
+	}
+}
+
+// TestMavenExtractJavaVersionFromPluginManagement verifies the Java level is
+// read from maven-compiler-plugin <configuration> declared under
+// <build><pluginManagement>, the common location for managed defaults.
+func TestMavenExtractJavaVersionFromPluginManagement(t *testing.T) {
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>managed-compiler</artifactId>
+    <version>1.0.0</version>
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <release>17</release>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>`
+
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write pom.xml: %v", err)
+	}
+
+	version, source := mavenJavaVersionOf(t, tmpDir)
+	if version != "17" {
+		t.Errorf("java_version = %q, want 17", version)
+	}
+	if source != "maven-compiler-plugin/release" {
+		t.Errorf("java_version_source = %q, want maven-compiler-plugin/release", source)
+	}
+}
+
+// TestMavenExtractJavaVersionFromParent verifies a module inherits the Java
+// level from an on-disk parent POM referenced via relativePath.
+func TestMavenExtractJavaVersionFromParent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	parentPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>parent</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(parentPOM), 0644); err != nil {
+		t.Fatalf("Failed to write parent pom.xml: %v", err)
+	}
+
+	childDir := filepath.Join(tmpDir, "child")
+	if err := os.Mkdir(childDir, 0755); err != nil {
+		t.Fatalf("Failed to create child dir: %v", err)
+	}
+	childPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>child</artifactId>
+</project>`
+	if err := os.WriteFile(filepath.Join(childDir, "pom.xml"), []byte(childPOM), 0644); err != nil {
+		t.Fatalf("Failed to write child pom.xml: %v", err)
+	}
+
+	version, source := mavenJavaVersionOf(t, childDir)
+	if version != "21" {
+		t.Errorf("java_version = %q, want 21 (inherited from parent)", version)
+	}
+	if source != "maven.compiler.release" {
+		t.Errorf("java_version_source = %q, want maven.compiler.release", source)
+	}
+}
+
+// TestMavenExtractJavaVersionFromModule verifies an aggregator root that
+// declares no compiler level itself resolves it from a reactor module (the
+// ONAP layout, where a shared *-parent module carries the level).
+func TestMavenExtractJavaVersionFromModule(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	rootPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.onap.cps</groupId>
+    <artifactId>cps</artifactId>
+    <version>3.8.2-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>cps-parent</module>
+    </modules>
+</project>`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(rootPOM), 0644); err != nil {
+		t.Fatalf("Failed to write root pom.xml: %v", err)
+	}
+
+	moduleDir := filepath.Join(tmpDir, "cps-parent")
+	if err := os.Mkdir(moduleDir, 0755); err != nil {
+		t.Fatalf("Failed to create module dir: %v", err)
+	}
+	modulePOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.onap.cps</groupId>
+    <artifactId>cps-parent</artifactId>
+    <version>3.8.2-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(moduleDir, "pom.xml"), []byte(modulePOM), 0644); err != nil {
+		t.Fatalf("Failed to write module pom.xml: %v", err)
+	}
+
+	version, source := mavenJavaVersionOf(t, tmpDir)
+	if version != "21" {
+		t.Errorf("java_version = %q, want 21 (from reactor module)", version)
+	}
+	if source != "module:cps-parent" {
+		t.Errorf("java_version_source = %q, want module:cps-parent", source)
+	}
+}
+
+// TestWithinWorkspace verifies the workspace boundary check: it confines
+// paths to GITHUB_WORKSPACE when set and disables bounding when unset.
+func TestWithinWorkspace(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator)+"srv", "work", "repo")
+
+	t.Run("unset disables bounding", func(t *testing.T) {
+		t.Setenv("GITHUB_WORKSPACE", "")
+		if !withinWorkspace(filepath.Join(root, "..", "escape")) {
+			t.Error("withinWorkspace should return true when GITHUB_WORKSPACE is unset")
+		}
+	})
+
+	t.Run("bounded to workspace", func(t *testing.T) {
+		t.Setenv("GITHUB_WORKSPACE", root)
+		cases := []struct {
+			name string
+			path string
+			want bool
+		}{
+			{"root itself", root, true},
+			{"descendant", filepath.Join(root, "cps-parent"), true},
+			{"nested descendant", filepath.Join(root, "a", "b", "pom.xml"), true},
+			{"parent traversal", filepath.Join(root, "..", "escape"), false},
+			{"double traversal", filepath.Join(root, "..", "..", "tmp"), false},
+			{"prefix sibling", root + "-other", false},
+		}
+		for _, tc := range cases {
+			if got := withinWorkspace(tc.path); got != tc.want {
+				t.Errorf("withinWorkspace(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		}
+	})
+}
+
+// TestMavenParentTraversalBoundedToWorkspace verifies a parent relativePath
+// whose "../" segments escape GITHUB_WORKSPACE is rejected, so a crafted POM
+// cannot read files outside the checkout on a CI runner.
+func TestMavenParentTraversalBoundedToWorkspace(t *testing.T) {
+	base := t.TempDir()
+	workspace := filepath.Join(base, "workspace")
+	outside := filepath.Join(base, "outside")
+	childDir := filepath.Join(workspace, "child")
+	for _, dir := range []string{workspace, outside, childDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create %s: %v", dir, err)
+		}
+	}
+
+	outsidePOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>parent</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(outside, "pom.xml"), []byte(outsidePOM), 0644); err != nil {
+		t.Fatalf("Failed to write outside pom.xml: %v", err)
+	}
+
+	childPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../../outside/pom.xml</relativePath>
+    </parent>
+    <artifactId>child</artifactId>
+</project>`
+	if err := os.WriteFile(filepath.Join(childDir, "pom.xml"), []byte(childPOM), 0644); err != nil {
+		t.Fatalf("Failed to write child pom.xml: %v", err)
+	}
+
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+	version, _ := mavenJavaVersionOf(t, childDir)
+	if version != "" {
+		t.Errorf("java_version = %q, want empty (parent outside workspace must be rejected)", version)
+	}
+}
+
+// TestMavenModuleTraversalBoundedToWorkspace verifies a reactor <module>
+// whose "../" segments escape GITHUB_WORKSPACE is skipped rather than read.
+func TestMavenModuleTraversalBoundedToWorkspace(t *testing.T) {
+	base := t.TempDir()
+	workspace := filepath.Join(base, "workspace")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{workspace, outside} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create %s: %v", dir, err)
+		}
+	}
+
+	rootPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>aggregator</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <modules>
+        <module>../outside</module>
+    </modules>
+</project>`
+	if err := os.WriteFile(filepath.Join(workspace, "pom.xml"), []byte(rootPOM), 0644); err != nil {
+		t.Fatalf("Failed to write root pom.xml: %v", err)
+	}
+
+	outsidePOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>outside</artifactId>
+    <version>1.0.0</version>
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(outside, "pom.xml"), []byte(outsidePOM), 0644); err != nil {
+		t.Fatalf("Failed to write outside pom.xml: %v", err)
+	}
+
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+	version, _ := mavenJavaVersionOf(t, workspace)
+	if version != "" {
+		t.Errorf("java_version = %q, want empty (module outside workspace must be skipped)", version)
+	}
+}
+
+// TestReadPOMRejectsSymlink verifies that, when a workspace boundary is
+// active, readPOM refuses a symlinked pom.xml that resolves outside the
+// workspace (and a symlinked parent directory), while still reading a regular
+// in-workspace POM. This guards against symlink escapes that the callers'
+// lexical withinWorkspace prefix check cannot detect.
+func TestReadPOMRejectsSymlink(t *testing.T) {
+	base := t.TempDir()
+	workspace := filepath.Join(base, "workspace")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{workspace, outside} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create %s: %v", dir, err)
+		}
+	}
+
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>secret</artifactId>
+    <version>1.0.0</version>
+</project>`
+	outsidePOM := filepath.Join(outside, "pom.xml")
+	if err := os.WriteFile(outsidePOM, []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write outside pom.xml: %v", err)
+	}
+
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+
+	t.Run("symlinked file resolving outside is rejected", func(t *testing.T) {
+		link := filepath.Join(workspace, "pom.xml")
+		if err := os.Symlink(outsidePOM, link); err != nil {
+			t.Fatalf("Failed to create symlink: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(link) })
+		if _, ok := readPOM(link); ok {
+			t.Error("readPOM should reject a symlinked pom.xml resolving outside the workspace")
+		}
+	})
+
+	t.Run("symlinked parent directory is rejected", func(t *testing.T) {
+		linkDir := filepath.Join(workspace, "linkdir")
+		if err := os.Symlink(outside, linkDir); err != nil {
+			t.Fatalf("Failed to create dir symlink: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(linkDir) })
+		if _, ok := readPOM(filepath.Join(linkDir, "pom.xml")); ok {
+			t.Error("readPOM should reject a pom.xml reached through a symlinked parent directory")
+		}
+	})
+
+	t.Run("regular in-workspace file is read", func(t *testing.T) {
+		reg := filepath.Join(workspace, "real-pom.xml")
+		if err := os.WriteFile(reg, []byte(pomXML), 0644); err != nil {
+			t.Fatalf("Failed to write regular pom.xml: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(reg) })
+		if _, ok := readPOM(reg); !ok {
+			t.Error("readPOM should read a regular pom.xml inside the workspace")
+		}
+	})
+}
+
+// TestLoadParentPOMRejectsSymlinkedParent verifies that a <parent>
+// <relativePath> resolving through an in-workspace symlink that points
+// outside GITHUB_WORKSPACE is rejected, so os.Stat never follows the link to
+// leak filesystem structure outside the checkout on a CI runner.
+func TestLoadParentPOMRejectsSymlinkedParent(t *testing.T) {
+	base := t.TempDir()
+	workspace := filepath.Join(base, "workspace")
+	outside := filepath.Join(base, "outside")
+	childDir := filepath.Join(workspace, "child")
+	for _, dir := range []string{workspace, outside, childDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("Failed to create %s: %v", dir, err)
+		}
+	}
+
+	outsidePOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>parent</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(outside, "pom.xml"), []byte(outsidePOM), 0644); err != nil {
+		t.Fatalf("Failed to write outside pom.xml: %v", err)
+	}
+
+	// A symlink inside the workspace that points at the out-of-workspace
+	// directory holding the parent POM.
+	linkDir := filepath.Join(workspace, "link-parent")
+	if err := os.Symlink(outside, linkDir); err != nil {
+		t.Fatalf("Failed to create dir symlink: %v", err)
+	}
+
+	childPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../link-parent/pom.xml</relativePath>
+    </parent>
+    <artifactId>child</artifactId>
+</project>`
+	if err := os.WriteFile(filepath.Join(childDir, "pom.xml"), []byte(childPOM), 0644); err != nil {
+		t.Fatalf("Failed to write child pom.xml: %v", err)
+	}
+
+	t.Setenv("GITHUB_WORKSPACE", workspace)
+	version, _ := mavenJavaVersionOf(t, childDir)
+	if version != "" {
+		t.Errorf("java_version = %q, want empty (symlinked parent escaping workspace must be rejected)", version)
+	}
+}
+
+// TestResolvePropertyNestedPlaceholders verifies that a value which expands
+// to another placeholder resolves fully and deterministically, regardless of
+// Go's randomised map iteration order. A single-pass resolver would
+// intermittently leave ${...} unresolved depending on iteration order.
+func TestResolvePropertyNestedPlaceholders(t *testing.T) {
+	props := map[string]string{
+		"maven.compiler.release": "${java.level}",
+		"java.level":             "${java.version}",
+		"java.version":           "21",
+	}
+	for i := 0; i < 100; i++ {
+		if got := resolveProperty(props["maven.compiler.release"], props); got != "21" {
+			t.Fatalf("resolveProperty nested = %q, want 21", got)
+		}
+	}
+}
+
+// TestResolvePropertyStopsOnCycle verifies the resolver terminates on a
+// cyclic reference rather than looping forever.
+func TestResolvePropertyStopsOnCycle(t *testing.T) {
+	props := map[string]string{"a": "${b}", "b": "${a}"}
+	done := make(chan struct{})
+	go func() {
+		_ = resolveProperty("${a}", props)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("resolveProperty did not terminate on a cyclic reference")
+	}
+}
+
+// TestMavenExtractJavaVersionNestedProperty verifies end-to-end that a
+// maven.compiler.release declared as a nested placeholder resolves to the
+// underlying literal Java level.
+func TestMavenExtractJavaVersionNestedProperty(t *testing.T) {
+	tmpDir := t.TempDir()
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>nested</artifactId>
+    <version>1.0.0</version>
+    <properties>
+        <maven.compiler.release>${java.level}</maven.compiler.release>
+        <java.level>${java.version}</java.level>
+        <java.version>21</java.version>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write pom.xml: %v", err)
+	}
+	version, _ := mavenJavaVersionOf(t, tmpDir)
+	if version != "21" {
+		t.Errorf("java_version = %q, want 21 (nested placeholder resolution)", version)
+	}
+}
+
+// TestMavenExtractJavaVersionSkipsUnresolvedPlaceholder verifies that a
+// Java-version property whose value stays an unresolved ${...} placeholder
+// (an undefined reference) is skipped, so detection falls through to the next
+// candidate instead of emitting an invalid version like "${missing}".
+func TestMavenExtractJavaVersionSkipsUnresolvedPlaceholder(t *testing.T) {
+	tmpDir := t.TempDir()
+	pomXML := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>unresolved</artifactId>
+    <version>1.0.0</version>
+    <properties>
+        <maven.compiler.release>${missing.property}</maven.compiler.release>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
+</project>`
+	if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(pomXML), 0644); err != nil {
+		t.Fatalf("Failed to write pom.xml: %v", err)
+	}
+	version, source := mavenJavaVersionOf(t, tmpDir)
+	if version != "17" {
+		t.Errorf("java_version = %q, want 17 (unresolved release placeholder must be skipped)", version)
+	}
+	if source != "maven.compiler.target" {
+		t.Errorf("java_version_source = %q, want maven.compiler.target", source)
 	}
 }
