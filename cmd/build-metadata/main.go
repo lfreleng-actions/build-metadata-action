@@ -38,6 +38,7 @@ func main() {
 	extractVersionInfo(ctx, cfg, metadata, projectType)
 	extractProjectMetadata(ctx, metadata, projectType, cfg.absPath)
 	applyVersionProperties(metadata, cfg.absPath)
+	applyReleaseFiles(metadata, cfg.absPath)
 	collectEnvironmentMetadata(ctx, cfg, metadata)
 
 	emitCommonOutputs(ctx, metadata)

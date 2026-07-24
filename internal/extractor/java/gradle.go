@@ -40,6 +40,11 @@ type GradleProject struct {
 	IsKotlinDSL bool
 	BuildFile   string
 
+	// Java language level and where it was detected (build-file toolchain,
+	// sourceCompatibility, or gradle.properties).
+	JavaVersion       string
+	JavaVersionSource string
+
 	// Multi-project
 	IsMultiProject bool
 	Subprojects    []string
@@ -158,7 +163,8 @@ func (e *GradleExtractor) applyGradlePlugins(project *GradleProject, metadata *e
 }
 
 // applyGradleStructure records multi-project layout and gradle.properties data,
-// surfacing the Java version from either java.version or sourceCompatibility.
+// surfacing the Java version from the build-file toolchain / compatibility
+// declaration, then gradle.properties java.version or sourceCompatibility.
 func applyGradleStructure(project *GradleProject, metadata *extractor.ProjectMetadata) {
 	if project.IsMultiProject {
 		metadata.LanguageSpecific["is_multi_project"] = true
@@ -168,11 +174,17 @@ func applyGradleStructure(project *GradleProject, metadata *extractor.ProjectMet
 
 	if len(project.Properties) > 0 {
 		metadata.LanguageSpecific["properties"] = project.Properties
-		if javaVersion, ok := project.Properties["java.version"]; ok {
-			metadata.LanguageSpecific["java_version"] = javaVersion
-		} else if sourceCompat, ok := project.Properties["sourceCompatibility"]; ok {
-			metadata.LanguageSpecific["java_version"] = sourceCompat
-		}
+	}
+
+	if project.JavaVersion != "" {
+		metadata.LanguageSpecific["version"] = project.JavaVersion
+		metadata.LanguageSpecific["version_source"] = project.JavaVersionSource
+	} else if javaVersion, ok := project.Properties["java.version"]; ok {
+		metadata.LanguageSpecific["version"] = javaVersion
+		metadata.LanguageSpecific["version_source"] = "gradle.properties/java.version"
+	} else if sourceCompat, ok := project.Properties["sourceCompatibility"]; ok {
+		metadata.LanguageSpecific["version"] = sourceCompat
+		metadata.LanguageSpecific["version_source"] = "gradle.properties/sourceCompatibility"
 	}
 }
 
@@ -232,7 +244,57 @@ func (e *GradleExtractor) parseGradleBuild(buildFile string, isKotlin bool) (*Gr
 
 	project.Dependencies = e.extractDependencies(text, isKotlin)
 
+	project.JavaVersion, project.JavaVersionSource = extractGradleJavaVersion(text)
+
 	return project, nil
+}
+
+// javaLanguageVersionPattern matches a Java toolchain declaration, e.g.
+// languageVersion = JavaLanguageVersion.of(21) or JavaLanguageVersion.of(17).
+var javaLanguageVersionPattern = regexp.MustCompile(`JavaLanguageVersion\.of\((\d+)\)`)
+
+// javaCompatibilityEnumPattern matches source/targetCompatibility set from
+// the JavaVersion enum, e.g. sourceCompatibility = JavaVersion.VERSION_21 or
+// VERSION_1_8. The first capture group records which keyword matched.
+var javaCompatibilityEnumPattern = regexp.MustCompile(`(source|target)Compatibility\s*=?\s*JavaVersion\.VERSION_(\d+(?:_\d+)?)`)
+
+// javaCompatibilityLiteralPattern matches source/targetCompatibility set to a
+// bare or quoted literal, e.g. sourceCompatibility = '21' or = 17 or = "1.8".
+// The first capture group records which keyword matched.
+var javaCompatibilityLiteralPattern = regexp.MustCompile(`(source|target)Compatibility\s*=?\s*['"]?(\d+(?:\.\d+)?)['"]?`)
+
+// preferTargetCompatibility returns the match whose keyword (capture group 1)
+// is "target" when present, otherwise the first match. The bytecode target is
+// the stricter constraint on the JDK, so it wins over source when a build file
+// declares both source and target compatibility.
+func preferTargetCompatibility(matches [][]string) []string {
+	for _, m := range matches {
+		if len(m) > 1 && m[1] == "target" {
+			return m
+		}
+	}
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return nil
+}
+
+// extractGradleJavaVersion reads the Java language level from a Gradle build
+// file, preferring the modern toolchain declaration, then the JavaVersion
+// enum form, then a bare/quoted compatibility literal. When both source and
+// target compatibility are declared, target wins (the stricter JDK
+// constraint). It returns the value and the source form it was detected from.
+func extractGradleJavaVersion(content string) (string, string) {
+	if match := javaLanguageVersionPattern.FindStringSubmatch(content); len(match) > 1 {
+		return match[1], "toolchain"
+	}
+	if m := preferTargetCompatibility(javaCompatibilityEnumPattern.FindAllStringSubmatch(content, -1)); len(m) > 2 {
+		return strings.ReplaceAll(m[2], "_", "."), m[1] + "Compatibility"
+	}
+	if m := preferTargetCompatibility(javaCompatibilityLiteralPattern.FindAllStringSubmatch(content, -1)); len(m) > 2 {
+		return m[2], m[1] + "Compatibility"
+	}
+	return "", ""
 }
 
 // extractGradleProperty extracts a property value from Gradle build file
