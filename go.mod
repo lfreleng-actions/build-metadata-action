@@ -3,12 +3,12 @@
 
 module github.com/lfreleng-actions/build-metadata-action
 
-go 1.24
+go 1.25
 
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/sethvargo/go-githubactions v1.3.2
+	github.com/sethvargo/go-githubactions v1.4.0
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 )
