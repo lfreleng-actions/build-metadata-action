@@ -93,10 +93,11 @@ type Dependency struct {
 
 // Build represents the build configuration
 type Build struct {
-	SourceDirectory  string            `xml:"sourceDirectory"`
-	FinalName        string            `xml:"finalName"`
-	Plugins          *Plugins          `xml:"plugins"`
-	PluginManagement *PluginManagement `xml:"pluginManagement"`
+	SourceDirectory     string            `xml:"sourceDirectory"`
+	TestSourceDirectory string            `xml:"testSourceDirectory"`
+	FinalName           string            `xml:"finalName"`
+	Plugins             *Plugins          `xml:"plugins"`
+	PluginManagement    *PluginManagement `xml:"pluginManagement"`
 }
 
 // PluginManagement represents the <build><pluginManagement> block, which

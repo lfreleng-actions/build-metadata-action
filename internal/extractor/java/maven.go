@@ -72,6 +72,7 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	applyPOMDependencies(resolvedPOM, metadata)
 	applyPOMBuildPlugins(resolvedPOM, metadata)
 	applyPOMStructure(resolvedPOM, metadata)
+	applyPOMLayout(projectPath, resolvedPOM, metadata)
 	e.applyPOMJavaVersion(projectPath, resolvedPOM, metadata)
 	applyPOMVersioningType(metadata)
 
@@ -384,4 +385,116 @@ func (e *MavenExtractor) Detect(projectPath string) bool {
 // init registers the Maven extractor
 func init() {
 	extractor.RegisterExtractor(NewMavenExtractor())
+}
+
+// jacocoArtifactID is the Maven coordinate of the JaCoCo plugin. Its
+// presence is what makes a coverage report path meaningful; without it
+// the conventional location simply never appears.
+const jacocoArtifactID = "jacoco-maven-plugin"
+
+// defaultCoverageReport is JaCoCo's own default output for the report
+// goal, relative to a module's build directory.
+const defaultCoverageReport = "target/site/jacoco/jacoco.xml"
+
+// applyPOMLayout records where a Maven project keeps its sources, its
+// tests, and (when JaCoCo is configured) its coverage report.
+//
+// Scanners need all three and cannot infer them safely. A tool that
+// guesses by walking the workspace picks up target/generated-sources and
+// reports findings against generated code, which is how a SonarCloud
+// analysis of a project with zero known bugs came to report 1157.
+//
+// Reported as convention-relative paths rather than absolutes, so a
+// consumer can apply them per module in a reactor.
+func applyPOMLayout(projectPath string, pom *POM, metadata *extractor.ProjectMetadata) {
+	sourceDir := "src/main/java"
+	testSourceDir := "src/test/java"
+
+	// An explicit <build> entry overrides the convention. Maven itself
+	// resolves these relative to the module, so they are reported as
+	// given rather than joined to a path here.
+	if pom.Build != nil {
+		if pom.Build.SourceDirectory != "" {
+			sourceDir = pom.Build.SourceDirectory
+		}
+		if pom.Build.TestSourceDirectory != "" {
+			testSourceDir = pom.Build.TestSourceDirectory
+		}
+	}
+
+	metadata.LanguageSpecific["source_dirs"] = []string{sourceDir}
+	metadata.LanguageSpecific["test_source_dirs"] = []string{testSourceDir}
+
+	if hasJacocoPlugin(pom) || jacocoInModules(projectPath, pom) {
+		metadata.LanguageSpecific["coverage_tool"] = "jacoco"
+		metadata.LanguageSpecific["coverage_report_paths"] =
+			[]string{defaultCoverageReport}
+	}
+}
+
+// jacocoInModules reports whether any declared module configures JaCoCo.
+//
+// A reactor root frequently declares nothing itself and delegates the
+// build configuration to a dedicated parent module: ONAP cps keeps
+// JaCoCo in cps-parent/pom.xml, so inspecting only the aggregator finds
+// no coverage on a project that has 99% of it. Mirrors the traversal and
+// the path guards of javaVersionFromModules.
+func jacocoInModules(projectPath string, pom *POM) bool {
+	if pom.Modules == nil {
+		return false
+	}
+	for _, module := range pom.Modules.Module {
+		// Reject absolute module paths: filepath.Join would discard
+		// projectPath and read a POM from outside the workspace.
+		if module == "" || filepath.IsAbs(module) {
+			continue
+		}
+		moduleDir := filepath.Join(projectPath, module)
+		// Reject modules whose "../" segments resolve outside the trusted
+		// workspace root, so a crafted module cannot read a POM elsewhere
+		// on the runner.
+		if !withinWorkspace(moduleDir) {
+			continue
+		}
+		modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
+		if !ok {
+			continue
+		}
+		if hasJacocoPlugin(modulePOM) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasJacocoPlugin reports whether the POM configures JaCoCo, in either
+// <build><plugins> or <build><pluginManagement>. A parent commonly
+// declares it under pluginManagement for submodules to inherit, so
+// checking only the active plugin list misses the aggregator of a
+// multi-module project.
+func hasJacocoPlugin(pom *POM) bool {
+	if pom.Build == nil {
+		return false
+	}
+	if pluginsContain(pom.Build.Plugins, jacocoArtifactID) {
+		return true
+	}
+	if pom.Build.PluginManagement != nil &&
+		pluginsContain(pom.Build.PluginManagement.Plugins, jacocoArtifactID) {
+		return true
+	}
+	return false
+}
+
+// pluginsContain reports whether a plugin list declares artifactID.
+func pluginsContain(plugins *Plugins, artifactID string) bool {
+	if plugins == nil {
+		return false
+	}
+	for _, plugin := range plugins.Plugin {
+		if plugin.ArtifactID == artifactID {
+			return true
+		}
+	}
+	return false
 }

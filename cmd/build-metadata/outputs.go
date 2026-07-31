@@ -48,6 +48,7 @@ func (c *appContext) setOutput(name, value string) {
 
 func emitCommonOutputs(ctx *appContext, metadata *Metadata) {
 	ctx.setOutput("project_type", metadata.Common.ProjectType)
+	ctx.setOutput("build_tool", metadata.Common.BuildTool)
 	ctx.setOutput("project_name", metadata.Common.ProjectName)
 	ctx.setOutput("project_version", metadata.Common.ProjectVersion)
 	ctx.setOutput("project_path", metadata.Common.ProjectPath)

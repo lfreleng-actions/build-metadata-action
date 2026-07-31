@@ -207,6 +207,7 @@ All project types provide these standardized outputs:
 | Output                       | Description                                                                                         | Example                  |
 | ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ |
 | `project_type`               | Detected project type                                                                               | `python-modern`          |
+| `build_tool`                 | Build tool the project type implies; empty when not identified                                      | `maven`                  |
 | `project_name`               | Project/package name                                                                                | `myproject`              |
 | `project_version`            | Current version                                                                                     | `1.2.3`                  |
 | `project_path`               | Absolute project path                                                                               | `/workspace/myproject`   |
@@ -249,17 +250,35 @@ All project types provide these standardized outputs:
 
 #### Java (Maven)
 
-| Output                  | Description                       |
-| ----------------------- | --------------------------------- |
-| `java_version`          | JDK version                       |
-| `java_version_source`   | JDK version source                |
-| `java_group_id`         | Maven groupId                     |
-| `java_artifact_id`      | Maven artifactId                  |
-| `java_packaging`        | Packaging type (jar, war, etc.)   |
-| `java_has_parent`       | Whether the POM declares a parent |
-| `java_is_multi_module`  | Multi-module (reactor) project    |
-| `java_module_count`     | Number of reactor modules         |
-| `java_frameworks`       | Detected frameworks               |
+| Output                       | Description                       |
+| ---------------------------- | --------------------------------- |
+| `java_version`               | JDK version                       |
+| `java_version_source`        | JDK version source                |
+| `java_group_id`              | Maven groupId                     |
+| `java_artifact_id`           | Maven artifactId                  |
+| `java_packaging`             | Packaging type (jar, war, etc.)   |
+| `java_has_parent`            | Whether the POM declares a parent |
+| `java_is_multi_module`       | Multi-module (reactor) project    |
+| `java_module_count`          | Number of reactor modules         |
+| `java_frameworks`            | Detected frameworks               |
+| `java_source_dirs`           | Main source directories           |
+| `java_test_source_dirs`      | Test source directories           |
+| `java_coverage_tool`         | Coverage tool, when configured    |
+| `java_coverage_report_paths` | Coverage report locations         |
+
+The layout outputs describe where a scanner should look. They are
+module-relative, so a consumer applies them per module across a reactor,
+and they fall back to Maven's conventions (`src/main/java`,
+`src/test/java`) when `<build>` is silent, because that is what the build
+itself uses.
+
+`java_coverage_tool` and `java_coverage_report_paths` appear when the
+build configures coverage, and are absent otherwise. Absence is a
+deliberate answer: pointing a scanner at a report that is never produced
+is worse than telling it there is none. The action finds JaCoCo in
+`<build><plugins>`, in `<build><pluginManagement>`, and in declared
+modules — a reactor root often configures nothing itself and delegates to
+a parent module, as ONAP cps does with `cps-parent/pom.xml`.
 
 The action resolves the Java level (`java_version`) in Maven's own
 precedence: the POM's `maven.compiler.release`, then

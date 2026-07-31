@@ -130,6 +130,17 @@ outputs:
     description: "Detected project type (e.g., python-modern, javascript-npm)"
     value: ${{ steps.extract.outputs.project_type }}
 
+  build_tool:
+    # Empty where the project type does not name a tool unambiguously,
+    # so a consumer can distinguish "not identified" from a wrong guess.
+    # Python is deliberately absent: its tool is a build backend, already
+    # reported as python_build_backend.
+    description: >-
+      Build tool implied by the project type (maven, gradle, npm, yarn,
+      pnpm, go, cargo, bundler, composer, swiftpm, helm, docker,
+      terraform, opentofu, cmake, autoconf); empty when not identified
+    value: ${{ steps.extract.outputs.build_tool }}
+
   project_name:
     description: "Project name"
     value: ${{ steps.extract.outputs.project_name }}
@@ -426,6 +437,36 @@ outputs:
   java_frameworks:
     description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"
     value: ${{ steps.extract.outputs.java_frameworks }}
+
+  java_source_dirs:
+    # Module-relative, so a consumer can apply them per module across a
+    # reactor. Falls back to Maven's convention when <build> is silent,
+    # because that is what the build itself will use.
+    description: >-
+      Comma-separated main source directories, module-relative
+      (default src/main/java)
+    value: ${{ steps.extract.outputs.java_source_dirs }}
+
+  java_test_source_dirs:
+    description: >-
+      Comma-separated test source directories, module-relative
+      (default src/test/java)
+    value: ${{ steps.extract.outputs.java_test_source_dirs }}
+
+  java_coverage_tool:
+    description: >-
+      Coverage tool configured in the build ('jacoco'); empty when none
+      is configured
+    value: ${{ steps.extract.outputs.java_coverage_tool }}
+
+  java_coverage_report_paths:
+    # Emitted only when a coverage tool is configured. Absent is a
+    # meaningful answer: pointing a scanner at a report that is never
+    # produced is worse than telling it there is none.
+    description: >-
+      Comma-separated coverage report locations, module-relative; empty
+      when the build configures no coverage tool
+    value: ${{ steps.extract.outputs.java_coverage_report_paths }}
 
   # Language-Specific Outputs (Go)
   go_base_name:

@@ -28,7 +28,11 @@ type Metadata struct {
 
 // CommonMetadata contains metadata common to all project types
 type CommonMetadata struct {
-	ProjectType    string    `json:"project_type"`
+	ProjectType string `json:"project_type"`
+	// BuildTool names the build tool the project type implies (maven,
+	// gradle, npm, cargo, ...), or is empty where the type does not name
+	// one unambiguously.
+	BuildTool      string    `json:"build_tool,omitempty"`
 	ProjectName    string    `json:"project_name"`
 	ProjectVersion string    `json:"project_version"`
 	ProjectPath    string    `json:"project_path"`
@@ -197,4 +201,44 @@ func normalizeProjectTypeToLanguage(projectType string) string {
 
 	// Return as-is if no mapping found
 	return strings.ToLower(projectType)
+}
+
+// buildToolForProjectType names the build tool a project type implies.
+//
+// Consumers routinely need this and today derive it by string-matching
+// project_type prefixes, which is brittle: "java-gradle-kts" and
+// "java-gradle" are the same tool, "typescript-npm" is a JavaScript tool,
+// and a new project type silently breaks every consumer's match. Naming
+// the tool once, here, keeps that knowledge in one place.
+//
+// The map is deliberately partial. It answers only where the project
+// type names a build tool unambiguously, and returns "" otherwise, so a
+// consumer can tell "no build tool identified" from a wrong guess. In
+// particular Python is absent: its tool is a build backend already
+// reported as python_build_backend, and inventing a second answer here
+// would put two sources of truth in the same output set.
+func buildToolForProjectType(projectType string) string {
+	toolMap := map[string]string{
+		"java-maven":         "maven",
+		"java-gradle":        "gradle",
+		"java-gradle-kts":    "gradle",
+		"javascript-npm":     "npm",
+		"javascript-yarn":    "yarn",
+		"javascript-pnpm":    "pnpm",
+		"typescript-npm":     "npm",
+		"go-module":          "go",
+		"rust-cargo":         "cargo",
+		"ruby-bundler":       "bundler",
+		"php-composer":       "composer",
+		"swift-package":      "swiftpm",
+		"helm-chart":         "helm",
+		"docker":             "docker",
+		"terraform":          "terraform",
+		"terraform-module":   "terraform",
+		"terraform-opentofu": "opentofu",
+		"c-cmake":            "cmake",
+		"c-autoconf":         "autoconf",
+	}
+
+	return toolMap[projectType]
 }
