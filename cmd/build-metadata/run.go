@@ -48,6 +48,7 @@ func detectProjectType(ctx *appContext, metadata *Metadata, absPath string) stri
 	}
 
 	metadata.Common.ProjectType = projectType
+	metadata.Common.BuildTool = buildToolForProjectType(projectType)
 	if ctx.isCI {
 		ctx.action.Infof("Detected project type: %s", projectType)
 	} else {
