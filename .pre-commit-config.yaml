@@ -57,7 +57,7 @@ repos:
         types: [yaml]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 65dbdb59d2f2d9c3bdc343c566821ad3319ddaa3  # frozen: v0.16.3
+    rev: aab412d509121cb5f7533134b7e67f9fab59c682  # frozen: v0.16.4
     hooks:
       - id: ruff
         files: ^(scripts|tests|custom_components)/.+\.py$
@@ -77,7 +77,7 @@ repos:
         files: "\\.(rst|md|markdown|mdown|mkdn)$"
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: 745eface02aef23e168a8afb6b5737818efbea95  # frozen: v0.11.0.1
+    rev: a6564f5d57444e123433a5c9af733e3975c77229  # frozen: v0.11.0.1-1
     hooks:
       - id: shellcheck
 
@@ -107,7 +107,7 @@ repos:
 
   # Go-specific linting and formatting
   - repo: https://github.com/golangci/golangci-lint
-    rev: c0d3ddc9cf3faa61a4e378e879ece580256d76e5  # frozen: v2.12.2
+    rev: 9c5dd448ac26caa35e3faee1e8e94476ae885b0f  # frozen: v2.13.1
     hooks:
       - id: golangci-lint
         args: [--fix, --timeout=5m]
@@ -145,7 +145,7 @@ repos:
         always_run: true
 
   - repo: https://github.com/modeseven-lfit/gha-workflow-linter
-    rev: 7f11ad46be1cd2b3d778428d40fcb09309bb3be5  # frozen: v1.4.1
+    rev: 42aa4db931ab4c9da0930ae5ca2259ab08da79cb  # frozen: v1.5.2
     hooks:
       - id: gha-workflow-linter
         args: [lint, ., --verbose]
