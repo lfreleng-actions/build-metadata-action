@@ -4,11 +4,15 @@
 
 ci:
   autofix_prs: false
+  # pre-commit.ci ships a Go toolchain but blocks the network, so hooks
+  # that resolve the module graph (golangci-lint, go build, go vet, go
+  # mod tidy) cannot run there. gofmt needs neither and is not skipped:
+  # it is the one Go check pre-commit.ci performs on every pull request.
   skip:
     - golangci-lint
-    - go-imports
     - go-build
     - go-vet
+    - go-mod-tidy
     - gha-workflow-linter
   autofix_commit_msg: |
     Chore: pre-commit autofixes
@@ -105,7 +109,10 @@ repos:
     hooks:
       - id: codespell
 
-  # Go-specific linting and formatting
+  # Go-specific linting and formatting. goimports runs as a golangci-lint
+  # formatter (see .golangci.yml) rather than as a hook from a separate,
+  # now archived, repository; gofmt runs there too and as the local hook
+  # below, which is the form pre-commit.ci can run.
   - repo: https://github.com/golangci/golangci-lint
     rev: c0d3ddc9cf3faa61a4e378e879ece580256d76e5  # frozen: v2.12.2
     hooks:
@@ -113,29 +120,17 @@ repos:
         args: [--fix, --timeout=5m]
         pass_filenames: false
 
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: fb24a639f7c938759fe56eeebbb7713b69d60494  # frozen: v0.5.1
-    hooks:
-      - id: go-fmt
-        args: [-w]
-        files: \.go$
-      - id: go-imports
-        args: [-w]
-        files: \.go$
-      # Temporarily disabled due to pre-existing test failures
-      # TODO: Fix failing tests and re-enable
-      # - id: go-unit-tests
-      #   args: [-v, ./...]
-      #   pass_filenames: false
-      - id: go-build
-        args: [./cmd/build-metadata]
-        pass_filenames: false
-      - id: go-mod-tidy
-        pass_filenames: false
-
-  # Local hooks for custom Go tooling
+  # Local hooks for the Go toolchain. go-build and go-mod-tidy came from
+  # dnephin/pre-commit-golang alongside the formatters; that repository
+  # is archived, and each of these is one toolchain command, so they run
+  # from here against the go on PATH, as go-vet already did.
   - repo: local
     hooks:
+      - id: go-fmt
+        name: gofmt
+        entry: .pre-commit-hooks/run-go-fmt.sh
+        language: script
+        files: \.go$
       - id: go-vet
         name: go vet
         entry: .pre-commit-hooks/run-go-vet.sh
@@ -143,6 +138,21 @@ repos:
         language: script
         pass_filenames: false
         always_run: true
+      - id: go-build
+        name: go build
+        entry: go build
+        # Every package, not only the command's dependency graph: a
+        # package nothing imports yet still has to compile.
+        args: [./...]
+        language: system
+        types: [go]
+        pass_filenames: false
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: .pre-commit-hooks/run-go-mod-tidy.sh
+        language: script
+        files: ^(go\.mod|go\.sum|.*\.go)$
+        pass_filenames: false
 
   - repo: https://github.com/modeseven-lfit/gha-workflow-linter
     rev: cec679e88cd818179079f52925ba80b9e6cb705c  # frozen: v1.2.3

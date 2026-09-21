@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+#
+# golangci-lint v2 configuration.
+#
+# Only the formatters section departs from the defaults. gofmt and
+# goimports ran as separate pre-commit hooks from dnephin/pre-commit-golang,
+# a repository that is now archived and so pinned to a version that will
+# never see another release (zizmor archived-uses). golangci-lint v2 ships
+# both formatters and applies them under the same `--fix` the linting hook
+# already passes, so one hook does the work of three with no third-party
+# dependency to retire.
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
