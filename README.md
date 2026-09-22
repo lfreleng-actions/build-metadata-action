@@ -185,6 +185,7 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 | Name                   | Required | Default          | Description                                                                                                                                                            |
 | ---------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `path_prefix`          | No       | `.`              | Path to the project root                                                                                                                                               |
+| `project_type`         | No       | `""`             | Declare the project type instead of detecting it (e.g. `java-maven`, `java-gradle`). See [Declaring the project type](#declaring-the-project-type).                    |
 | `output_format`        | No       | `summary`        | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
 | `include_environment`  | No       | `true`           | Include environment metadata                                                                                                                                           |
 | `use_version_extract`  | No       | `true`           | Use version-extract-action for version detection                                                                                                                       |
@@ -196,6 +197,41 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 | `strict_validation`    | No       | `true`           | Use strict validation mode (round-trip testing)                                                                                                                        |
 | `export_env_vars`      | No       | `false`          | Export all outputs as environment variables (uppercase with underscores) for use in later steps                                                                        |
 <!-- markdownlint-enable MD013 -->
+
+### Declaring the project type
+
+Detection resolves the **first** rule that matches in priority order, and
+those priorities are global rather than per language. A repository
+carrying more than one marker file resolves to whichever ranks highest,
+which is not always the thing the workflow builds.
+
+The common case is a Maven project that also has a `package.json`, the
+shape `frontend-maven-plugin` produces. `javascript-npm` outranks
+`java-maven`, so:
+
+| Output         | Plain Maven  | Maven plus `package.json` |
+| -------------- | ------------ | ------------------------- |
+| `project_type` | `java-maven` | `javascript-npm`          |
+| `build_tool`   | `maven`      | `npm`                     |
+| `java_version` | `17`         | *(empty)*                 |
+
+A consumer reading `java_version` gets nothing and falls back to its own
+default, choosing a JDK the project never asked for.
+
+Where the caller already knows, say so:
+
+```yaml
+- uses: lfreleng-actions/build-metadata-action@<sha>
+  with:
+    project_type: java-maven
+```
+
+A reusable workflow dedicated to one build tool always has better
+information than a detector, because the caller chose that workflow.
+
+The action reports an unrecognised value and discards it, running
+detection instead: detection still produces a real answer, whereas a type
+matching no extractor produces none at all.
 
 ## Outputs
 

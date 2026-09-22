@@ -30,29 +30,74 @@ import (
 	"github.com/lfreleng-actions/build-metadata-action/internal/version"
 )
 
-func detectProjectType(ctx *appContext, metadata *Metadata, absPath string) string {
-	if ctx.isCI {
-		ctx.action.Infof("Detecting project type in: %s", absPath)
-	} else {
-		fmt.Printf("Detecting project type in: %s\n", absPath)
+// detectProjectType resolves the project type, preferring an explicit
+// caller-supplied value over detection.
+//
+// Detection returns the first rule that matches in priority order, so a
+// polyglot repository resolves to whichever marker file happens to rank
+// highest rather than to the thing being built. A Maven project carrying
+// a package.json for frontend-maven-plugin resolves as javascript-npm,
+// and every java_* output is then absent. A reusable workflow dedicated
+// to one build tool already knows better, so it can say so.
+//
+// An override naming no extractor this action knows is reported and
+// discarded rather than honoured: detection still yields a real answer,
+// whereas an unrecognised type yields none at all.
+func detectProjectType(ctx *appContext, metadata *Metadata, cfg runConfig) string {
+	projectType := ""
+	usedOverride := false
+
+	if override := cfg.projectTypeOverride; override != "" {
+		if _, err := extractor.GetExtractor(override); err != nil {
+			msg := fmt.Sprintf(
+				"Supplied project_type %q matches no known extractor; detecting instead",
+				override)
+			if ctx.isCI {
+				ctx.action.Warningf("%s", msg)
+			} else {
+				fmt.Printf("Warning: %s\n", msg)
+			}
+		} else {
+			projectType = override
+			usedOverride = true
+		}
 	}
 
-	projectType, err := detector.DetectProjectType(absPath)
-	if err != nil {
+	if projectType == "" {
 		if ctx.isCI {
-			ctx.action.Warningf("Failed to detect project type: %v", err)
+			ctx.action.Infof("Detecting project type in: %s", cfg.absPath)
 		} else {
-			fmt.Printf("Warning: Failed to detect project type: %v\n", err)
+			fmt.Printf("Detecting project type in: %s\n", cfg.absPath)
 		}
-		projectType = "unknown"
+
+		detected, err := detector.DetectProjectType(cfg.absPath)
+		if err != nil {
+			if ctx.isCI {
+				ctx.action.Warningf("Failed to detect project type: %v", err)
+			} else {
+				fmt.Printf("Warning: Failed to detect project type: %v\n", err)
+			}
+			detected = "unknown"
+		}
+		projectType = detected
 	}
 
 	metadata.Common.ProjectType = projectType
 	metadata.Common.BuildTool = buildToolForProjectType(projectType)
+
+	// Provenance comes from whether the override passed validation, not
+	// from comparing the values. A rejected override can still equal what
+	// detection returns -- supplying "unknown" where detection also fails
+	// is the plain case -- and reporting that as caller-supplied would
+	// contradict the warning issued moments earlier.
+	source := "Detected"
+	if usedOverride {
+		source = "Caller supplied"
+	}
 	if ctx.isCI {
-		ctx.action.Infof("Detected project type: %s", projectType)
+		ctx.action.Infof("%s project type: %s", source, projectType)
 	} else {
-		fmt.Printf("Detected project type: %s\n", projectType)
+		fmt.Printf("%s project type: %s\n", source, projectType)
 	}
 	return projectType
 }

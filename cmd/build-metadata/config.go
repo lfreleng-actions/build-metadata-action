@@ -16,19 +16,20 @@ import (
 
 // runConfig holds the resolved action inputs for a single invocation.
 type runConfig struct {
-	verboseOutput      bool
-	absPath            string
-	outputFormats      []string
-	includeEnvironment bool
-	useVersionExtract  bool
-	artifactUpload     bool
-	artifactNamePrefix string
-	artifactFormats    []string
-	validateOutput     bool
-	exportEnvVars      bool
-	pythonOffline      bool
-	pythonTimeout      time.Duration
-	pythonRetries      int
+	verboseOutput       bool
+	absPath             string
+	projectTypeOverride string
+	outputFormats       []string
+	includeEnvironment  bool
+	useVersionExtract   bool
+	artifactUpload      bool
+	artifactNamePrefix  string
+	artifactFormats     []string
+	validateOutput      bool
+	exportEnvVars       bool
+	pythonOffline       bool
+	pythonTimeout       time.Duration
+	pythonRetries       int
 }
 
 // parseFlags resolves every action input. Failure to resolve the
@@ -68,6 +69,14 @@ func parseFlags(action *githubactions.Action, isCI bool) runConfig {
 	return runConfig{
 		verboseOutput: verboseOutput,
 		absPath:       absPath,
+		// Lets a caller that already knows what it is bypass
+		// priority-ordered detection. A reusable workflow dedicated to
+		// one build tool has better information than any detector: the
+		// caller chose that workflow. Detection resolves the first rule
+		// that matches, so a Maven project carrying a package.json for
+		// frontend-maven-plugin resolves as javascript-npm and reports
+		// no java_version at all.
+		projectTypeOverride: action.GetInput("project_type"),
 		// Output formats can be comma, space, or newline separated. An
 		// explicit empty string disables output; when unset the
 		// action.yaml default ("summary") is already applied upstream.

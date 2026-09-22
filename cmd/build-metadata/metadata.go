@@ -160,15 +160,30 @@ func synthesizeSnapshotVersion(propsVersion, projectVersion string) string {
 func normalizeProjectTypeToLanguage(projectType string) string {
 	// Map project types to their base language
 	typeMap := map[string]string{
-		"python-modern":      "python",
-		"python-legacy":      "python",
-		"javascript-npm":     "javascript",
-		"javascript-yarn":    "javascript",
-		"javascript-pnpm":    "javascript",
-		"typescript-npm":     "javascript",
-		"java-maven":         "java",
-		"java-gradle":        "java",
-		"java-gradle-kts":    "java",
+		"python-modern":   "python",
+		"python-legacy":   "python",
+		"javascript-npm":  "javascript",
+		"javascript-yarn": "javascript",
+		"javascript-pnpm": "javascript",
+		"typescript-npm":  "javascript",
+		"java-maven":      "java",
+		"java-gradle":     "java",
+		"java-gradle-kts": "java",
+		// The detector emits kotlin-gradle, not java-gradle-kts, for a
+		// build.gradle.kts root: both rules match that one file and the
+		// Kotlin rule carries the higher precedence, so java-gradle-kts
+		// above is unreachable from DetectProjectType. Without this entry
+		// the fallback below splits on the hyphen and yields "kotlin",
+		// which prefixes every extracted value as kotlin_* while
+		// action.yaml declares java_*. java_version then reads empty and
+		// consumers silently fall back to their own default.
+		//
+		// "java" is the honest answer here. The Kotlin DSL describes the
+		// build script, not the source language, and GetExtractor already
+		// routes kotlin-gradle to the java-gradle extractor, which emits
+		// Java-shaped keys. This aligns the prefix with the extractor that
+		// produces the values.
+		"kotlin-gradle":      "java",
 		"csharp-project":     "csharp",
 		"csharp-solution":    "csharp",
 		"csharp-props":       "csharp",
@@ -219,9 +234,13 @@ func normalizeProjectTypeToLanguage(projectType string) string {
 // would put two sources of truth in the same output set.
 func buildToolForProjectType(projectType string) string {
 	toolMap := map[string]string{
-		"java-maven":         "maven",
-		"java-gradle":        "gradle",
-		"java-gradle-kts":    "gradle",
+		"java-maven":      "maven",
+		"java-gradle":     "gradle",
+		"java-gradle-kts": "gradle",
+		// Reachable where java-gradle-kts is not; see the note in
+		// normalizeProjectTypeToLanguage. Gradle is not a guess for this
+		// type, so reporting empty would mislead rather than protect.
+		"kotlin-gradle":      "gradle",
 		"javascript-npm":     "npm",
 		"javascript-yarn":    "yarn",
 		"javascript-pnpm":    "pnpm",

@@ -18,6 +18,13 @@ inputs:
     required: false
     default: "."
 
+  project_type:
+    description: >-
+      Declare the project type instead of detecting it (for example
+      java-maven or java-gradle). Empty auto-detects.
+    required: false
+    default: ""
+
   output_format:
     # Can be provided comma-separated, space-separated or newline-separated
     # Set to an empty string to disable output
@@ -581,6 +588,7 @@ runs:
       shell: bash
       env:
         INPUT_PATH_PREFIX: ${{ inputs.path_prefix }}
+        INPUT_PROJECT_TYPE: ${{ inputs.project_type }}
         INPUT_OUTPUT_FORMAT: ${{ inputs.output_format }}
         INPUT_INCLUDE_ENVIRONMENT: ${{ inputs.include_environment }}
         INPUT_USE_VERSION_EXTRACT: ${{ inputs.use_version_extract }}

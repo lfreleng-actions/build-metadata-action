@@ -33,7 +33,7 @@ func main() {
 	metadata := newMetadata(cfg.absPath)
 	populateCIMetadata(metadata)
 
-	projectType := detectProjectType(ctx, metadata, cfg.absPath)
+	projectType := detectProjectType(ctx, metadata, cfg)
 	configureExtractorPolicies(projectType, cfg)
 	extractVersionInfo(ctx, cfg, metadata, projectType)
 	extractProjectMetadata(ctx, metadata, projectType, cfg.absPath)

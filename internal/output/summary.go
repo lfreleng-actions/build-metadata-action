@@ -270,6 +270,7 @@ func formatProjectType(projectType string) string {
 		"java-maven":         "Java (Maven)",
 		"java-gradle":        "Java (Gradle)",
 		"java-gradle-kts":    "Java (Gradle Kotlin DSL)",
+		"kotlin-gradle":      "Java (Gradle Kotlin DSL)",
 		"csharp-project":     "C# (.NET Project)",
 		"csharp-solution":    "C# (.NET Solution)",
 		"dotnet-project":     ".NET Project",
