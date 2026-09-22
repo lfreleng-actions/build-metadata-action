@@ -91,6 +91,7 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	applyGradleDependencies(gradleProject, metadata)
 	e.applyGradlePlugins(gradleProject, metadata)
 	applyGradleStructure(gradleProject, metadata)
+	applyGradleWrapper(projectPath, metadata)
 	applyGradleVersioningType(metadata)
 
 	return metadata, nil

@@ -18,6 +18,13 @@ inputs:
     required: false
     default: "."
 
+  project_type:
+    description: >-
+      Declare the project type instead of detecting it (for example
+      java-maven or java-gradle). Empty auto-detects.
+    required: false
+    default: ""
+
   output_format:
     # Can be provided comma-separated, space-separated or newline-separated
     # Set to an empty string to disable output
@@ -127,7 +134,9 @@ outputs:
 
   # Common Project Metadata
   project_type:
-    description: "Detected project type (e.g., python-modern, javascript-npm)"
+    description: >-
+      Resolved project type, either detected or supplied through the
+      project_type input (e.g. python-modern, javascript-npm)
     value: ${{ steps.extract.outputs.project_type }}
 
   build_tool:
@@ -424,6 +433,18 @@ outputs:
     description: "Whether Gradle project is multi-project"
     value: ${{ steps.extract.outputs.java_is_multi_project }}
 
+  java_gradle_version:
+    description: >-
+      Gradle version the wrapper declares. Empty when the project has no
+      wrapper, or when distributionUrl names no recognisable version.
+      This is what the project asks to build with, which differs from the
+      version a CI step provisioned.
+    value: ${{ steps.extract.outputs.java_gradle_version }}
+
+  java_gradle_version_source:
+    description: "Where the Gradle version was detected; empty when absent"
+    value: ${{ steps.extract.outputs.java_gradle_version_source }}
+
   java_version:
     description: "Required Java version"
     value: ${{ steps.extract.outputs.java_version }}
@@ -581,6 +602,7 @@ runs:
       shell: bash
       env:
         INPUT_PATH_PREFIX: ${{ inputs.path_prefix }}
+        INPUT_PROJECT_TYPE: ${{ inputs.project_type }}
         INPUT_OUTPUT_FORMAT: ${{ inputs.output_format }}
         INPUT_INCLUDE_ENVIRONMENT: ${{ inputs.include_environment }}
         INPUT_USE_VERSION_EXTRACT: ${{ inputs.use_version_extract }}

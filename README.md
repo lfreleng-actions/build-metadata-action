@@ -185,6 +185,7 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 | Name                   | Required | Default          | Description                                                                                                                                                            |
 | ---------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `path_prefix`          | No       | `.`              | Path to the project root                                                                                                                                               |
+| `project_type`         | No       | `""`             | Declare the project type instead of detecting it (e.g. `java-maven`, `java-gradle`). See [Declaring the project type](#declaring-the-project-type).                    |
 | `output_format`        | No       | `summary`        | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
 | `include_environment`  | No       | `true`           | Include environment metadata                                                                                                                                           |
 | `use_version_extract`  | No       | `true`           | Use version-extract-action for version detection                                                                                                                       |
@@ -197,6 +198,41 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 | `export_env_vars`      | No       | `false`          | Export all outputs as environment variables (uppercase with underscores) for use in later steps                                                                        |
 <!-- markdownlint-enable MD013 -->
 
+### Declaring the project type
+
+Detection resolves the **first** rule that matches in priority order, and
+those priorities are global rather than per language. A repository
+carrying more than one marker file resolves to whichever ranks highest,
+which is not always the thing the workflow builds.
+
+The common case is a Maven project that also has a `package.json`, the
+shape `frontend-maven-plugin` produces. `javascript-npm` outranks
+`java-maven`, so:
+
+| Output         | Plain Maven  | Maven plus `package.json` |
+| -------------- | ------------ | ------------------------- |
+| `project_type` | `java-maven` | `javascript-npm`          |
+| `build_tool`   | `maven`      | `npm`                     |
+| `java_version` | `17`         | *(empty)*                 |
+
+A consumer reading `java_version` gets nothing and falls back to its own
+default, choosing a JDK the project never asked for.
+
+Where the caller already knows, say so:
+
+```yaml
+- uses: lfreleng-actions/build-metadata-action@<sha>
+  with:
+    project_type: java-maven
+```
+
+A reusable workflow dedicated to one build tool always has better
+information than a detector, because the caller chose that workflow.
+
+The action reports an unrecognised value and discards it, running
+detection instead: detection still produces a real answer, whereas a type
+matching no extractor produces none at all.
+
 ## Outputs
 
 ### Common Outputs
@@ -206,7 +242,7 @@ All project types provide these standardized outputs:
 <!-- markdownlint-disable MD013 -->
 | Output                       | Description                                                                                         | Example                  |
 | ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ |
-| `project_type`               | Detected project type                                                                               | `python-modern`          |
+| `project_type`               | Resolved project type, detected or supplied via the `project_type` input                            | `python-modern`          |
 | `build_tool`                 | Build tool the project type implies; empty when not identified                                      | `maven`                  |
 | `project_name`               | Project/package name                                                                                | `myproject`              |
 | `project_version`            | Current version                                                                                     | `1.2.3`                  |
@@ -293,20 +329,33 @@ came from (e.g. `maven.compiler.release`, `maven-compiler-plugin/release`,
 
 #### Java (Gradle)
 
-| Output                  | Description                  |
-| ----------------------- | ---------------------------- |
-| `java_version`          | JDK version                  |
-| `java_version_source`   | JDK version source           |
-| `java_group_id`         | Project group                |
-| `java_artifact_id`      | Project name                 |
-| `java_build_dsl`        | Build DSL (groovy or kotlin) |
-| `java_is_multi_project` | Multi-project build          |
-| `java_frameworks`       | Detected frameworks          |
+| Output                       | Description                         |
+| ---------------------------- | ----------------------------------- |
+| `java_version`               | JDK version                         |
+| `java_version_source`        | JDK version source                  |
+| `java_group_id`              | Project group                       |
+| `java_artifact_id`           | Project name                        |
+| `java_build_dsl`             | Build DSL (groovy or kotlin)        |
+| `java_is_multi_project`      | Multi-project build                 |
+| `java_frameworks`            | Detected frameworks                 |
+| `java_gradle_version`        | Gradle version the wrapper declares |
+| `java_gradle_version_source` | Source of that version              |
 
 For Gradle the action reads the level from the build file toolchain
 (`JavaLanguageVersion.of(N)`), then `source`/`targetCompatibility`
 (`JavaVersion.VERSION_N` or a bare/quoted literal), then
 `gradle.properties`; `java_version_source` reports the form detected.
+
+`java_gradle_version` comes from the wrapper's `distributionUrl`. This is
+the version the project asks to build with, which is a different fact
+from the version a CI step provisioned: `gradle/actions/setup-gradle`
+reports what it set up itself, and sets up nothing when a build defers
+to the wrapper, so that output is empty for wrapper-driven projects.
+
+The output stays empty when the project has no wrapper, or when
+`distributionUrl` names no recognisable version. A consumer comparing it
+against a tool's floor needs to tell "too old" from "unknown", so the
+action reports nothing rather than guessing.
 
 #### Node.js/JavaScript
 
