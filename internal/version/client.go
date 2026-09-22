@@ -63,7 +63,7 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 		return extractPythonVersion(projectPath)
 	case strings.HasPrefix(projectType, "javascript"), strings.HasPrefix(projectType, "typescript"):
 		return extractJavaScriptVersion(projectPath)
-	case strings.HasPrefix(projectType, "java"):
+	case strings.HasPrefix(projectType, "java"), projectType == "kotlin-gradle":
 		return extractJavaVersion(projectPath, projectType)
 	case strings.HasPrefix(projectType, "go"):
 		return extractGoVersion(projectPath)
@@ -330,8 +330,14 @@ func isMavenDynamicVersion(version string) bool {
 
 // extractGradleVersion extracts version from Gradle build files
 func extractGradleVersion(projectPath string) (*VersionInfo, error) {
-	// Try build.gradle first, then build.gradle.kts
-	buildFiles := []string{"build.gradle", "build.gradle.kts"}
+	// Kotlin DSL first, matching GradleExtractor.detectBuildFile and the
+	// detector itself, which ranks kotlin-gradle above java-gradle when
+	// both scripts are present. The order is only observable during a DSL
+	// migration, when a project carries both -- and that is exactly when
+	// disagreeing would be worst: the common project_version would come
+	// from the Groovy script while every java_* value came from the Kotlin
+	// one, describing two different files as one project.
+	buildFiles := []string{"build.gradle.kts", "build.gradle"}
 
 	for _, buildFile := range buildFiles {
 		buildPath := filepath.Join(projectPath, buildFile)

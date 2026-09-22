@@ -308,13 +308,18 @@ func formatProjectType(projectType string) string {
 // their language-specific rows. The slice is ordered so that more specific
 // prefixes (e.g. "javascript") are matched before overlapping shorter ones
 // (e.g. "java").
+//
+// kotlin-gradle is listed alongside java because it is the type the detector
+// returns for a build.gradle.kts root, and it carries Java metadata: the
+// java-gradle extractor produces its values. Matching on the "java" prefix
+// alone would skip it, since its name does not start with one.
 var languageTableWriters = []struct {
 	prefixes []string
 	write    func(sb *strings.Builder, metadata map[string]interface{})
 }{
 	{[]string{"python"}, writePythonRows},
 	{[]string{"javascript", "typescript"}, writeJSRows},
-	{[]string{"java"}, writeJavaRows},
+	{[]string{"java", "kotlin-gradle"}, writeJavaRows},
 	{[]string{"go"}, writeGoRows},
 	{[]string{"rust"}, writeRustRows},
 	{[]string{"csharp", "dotnet"}, writeDotnetRows},
@@ -450,7 +455,8 @@ var toolsByProjectPrefix = []struct {
 	// which would be misleading. Only pip is relevant for dependency install.
 	{[]string{"python"}, []string{"pip"}},
 	{[]string{"javascript", "typescript"}, []string{"node", "npm", "yarn"}},
-	{[]string{"java"}, []string{"java", "javac", "mvn", "gradle"}},
+	// kotlin-gradle builds with the same toolchain; see languageTableWriters.
+	{[]string{"java", "kotlin-gradle"}, []string{"java", "javac", "mvn", "gradle"}},
 	{[]string{"go"}, []string{"go"}},
 	{[]string{"rust"}, []string{"rustc", "cargo"}},
 	{[]string{"csharp", "dotnet"}, []string{"dotnet"}},
