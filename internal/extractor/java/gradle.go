@@ -91,9 +91,57 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	applyGradleDependencies(gradleProject, metadata)
 	e.applyGradlePlugins(gradleProject, metadata)
 	applyGradleStructure(gradleProject, metadata)
+	applyGradleWrapper(projectPath, metadata)
 	applyGradleVersioningType(metadata)
 
 	return metadata, nil
+}
+
+// wrapperDistributionPattern matches the Gradle version inside a wrapper
+// distributionUrl, for example
+// https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip.
+// Versions carry suffixes such as 8.5-rc-3 and 9.0-milestone-1, so the
+// tail is permissive; the -bin/-all qualifier anchors where it ends.
+var wrapperDistributionPattern = regexp.MustCompile(
+	`gradle-([0-9][0-9A-Za-z.\-]*)-(?:bin|all)\.zip`)
+
+// applyGradleWrapper reports the Gradle version the project declares in
+// its wrapper.
+//
+// This is the version the project asks to build with, which is not the
+// same fact as the version a CI step provisioned: gradle/actions
+// setup-gradle reports only what it set up itself, and sets up nothing
+// when a build defers to the wrapper. For wrapper-driven projects, which
+// are the majority, that output is empty and this is the only statement
+// of intent available before a build runs.
+//
+// Absent when there is no wrapper, or when distributionUrl names no
+// recognisable version. Emitting a guess would be worse than staying
+// quiet: a consumer comparing against a plugin's minimum needs to tell
+// "too old" from "unknown".
+func applyGradleWrapper(projectPath string, metadata *extractor.ProjectMetadata) {
+	propertiesPath := filepath.Join(
+		projectPath, "gradle", "wrapper", "gradle-wrapper.properties")
+
+	content, err := os.ReadFile(filepath.Clean(propertiesPath))
+	if err != nil {
+		return
+	}
+
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "distributionUrl") {
+			continue
+		}
+		match := wrapperDistributionPattern.FindStringSubmatch(line)
+		if match == nil {
+			return
+		}
+		metadata.LanguageSpecific["gradle_version"] = match[1]
+		metadata.LanguageSpecific["gradle_version_source"] =
+			"gradle/wrapper/gradle-wrapper.properties"
+		return
+	}
 }
 
 // applyGradleCore maps identity fields and records the build system and DSL

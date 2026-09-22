@@ -329,20 +329,33 @@ came from (e.g. `maven.compiler.release`, `maven-compiler-plugin/release`,
 
 #### Java (Gradle)
 
-| Output                  | Description                  |
-| ----------------------- | ---------------------------- |
-| `java_version`          | JDK version                  |
-| `java_version_source`   | JDK version source           |
-| `java_group_id`         | Project group                |
-| `java_artifact_id`      | Project name                 |
-| `java_build_dsl`        | Build DSL (groovy or kotlin) |
-| `java_is_multi_project` | Multi-project build          |
-| `java_frameworks`       | Detected frameworks          |
+| Output                       | Description                         |
+| ---------------------------- | ----------------------------------- |
+| `java_version`               | JDK version                         |
+| `java_version_source`        | JDK version source                  |
+| `java_group_id`              | Project group                       |
+| `java_artifact_id`           | Project name                        |
+| `java_build_dsl`             | Build DSL (groovy or kotlin)        |
+| `java_is_multi_project`      | Multi-project build                 |
+| `java_frameworks`            | Detected frameworks                 |
+| `java_gradle_version`        | Gradle version the wrapper declares |
+| `java_gradle_version_source` | Source of that version              |
 
 For Gradle the action reads the level from the build file toolchain
 (`JavaLanguageVersion.of(N)`), then `source`/`targetCompatibility`
 (`JavaVersion.VERSION_N` or a bare/quoted literal), then
 `gradle.properties`; `java_version_source` reports the form detected.
+
+`java_gradle_version` comes from the wrapper's `distributionUrl`. This is
+the version the project asks to build with, which is a different fact
+from the version a CI step provisioned: `gradle/actions/setup-gradle`
+reports what it set up itself, and sets up nothing when a build defers
+to the wrapper, so that output is empty for wrapper-driven projects.
+
+The output stays empty when the project has no wrapper, or when
+`distributionUrl` names no recognisable version. A consumer comparing it
+against a tool's floor needs to tell "too old" from "unknown", so the
+action reports nothing rather than guessing.
 
 #### Node.js/JavaScript
 
