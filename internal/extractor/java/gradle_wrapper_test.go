@@ -133,6 +133,20 @@ func TestWrapperVersionAbsentWhenUnknowable(t *testing.T) {
 			name: "qualifier without a version",
 			body: properties(`distributionUrl=https\://example.com/gradle-snapshot-bin.zip`),
 		},
+		{
+			// The archive has to end the URL. Anything after it names a
+			// different file, which Gradle cannot download.
+			name: "trailing text after the archive",
+			body: properties(`distributionUrl=https\://example.com/gradle-9.7.1-bin.zip.backup`),
+		},
+		{
+			name: "archive suffix extended",
+			body: properties(`distributionUrl=https\://example.com/gradle-9.7.1-bin.zipx`),
+		},
+		{
+			name: "path continues past the archive",
+			body: properties(`distributionUrl=https\://example.com/gradle-9.7.1-bin.zip/extra`),
+		},
 	}
 
 	for _, tc := range cases {

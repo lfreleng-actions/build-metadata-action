@@ -23,23 +23,13 @@ import (
 // report them as versions, which breaks a consumer comparing against a
 // tool's floor and contradicts the promise to stay empty when the
 // version is unrecognisable.
+//
+// Anchored at the end for the same reason. Without it the match may sit
+// anywhere in the value, so gradle-9.7.1-bin.zip.backup would report
+// 9.7.1 for a URL naming no distribution Gradle can download.
 var wrapperDistributionPattern = regexp.MustCompile(
-	`gradle-([0-9]+(?:\.[0-9]+)*(?:-[A-Za-z][A-Za-z0-9]*(?:-[0-9]+)?)?)-(?:bin|all)\.zip`)
+	`gradle-([0-9]+(?:\.[0-9]+)*(?:-[A-Za-z][A-Za-z0-9]*(?:-[0-9]+)?)?)-(?:bin|all)\.zip$`)
 
-// applyGradleWrapper reports the Gradle version the project declares in
-// its wrapper.
-//
-// This is the version the project asks to build with, which is not the
-// same fact as the version a CI step provisioned: gradle/actions
-// setup-gradle reports only what it set up itself, and sets up nothing
-// when a build defers to the wrapper. For wrapper-driven projects, which
-// are the majority, that output is empty and this is the only statement
-// of intent available before a build runs.
-//
-// Absent when there is no wrapper, or when distributionUrl names no
-// recognisable version. Emitting a guess would be worse than staying
-// quiet: a consumer comparing against a plugin's minimum needs to tell
-// "too old" from "unknown".
 // splitProperty splits a Java properties line into its key and value.
 //
 // The format permits '=', ':' or plain whitespace as the separator, and
@@ -82,6 +72,20 @@ func splitProperty(line string) (string, string, bool) {
 	return key, "", key != ""
 }
 
+// applyGradleWrapper reports the Gradle version the project declares in
+// its wrapper.
+//
+// This is the version the project asks to build with, which is not the
+// same fact as the version a CI step provisioned: gradle/actions
+// setup-gradle reports what it set up itself, and sets up nothing when a
+// build defers to the wrapper. For wrapper-driven projects, which are
+// the majority, that output is empty and this is the only statement of
+// intent available before a build runs.
+//
+// Absent when there is no wrapper, or when distributionUrl names no
+// recognisable version. Emitting a guess would be worse than staying
+// quiet: a consumer comparing against a tool's floor needs to tell
+// "too old" from "unknown".
 func applyGradleWrapper(projectPath string, metadata *extractor.ProjectMetadata) {
 	propertiesPath := filepath.Join(
 		projectPath, "gradle", "wrapper", "gradle-wrapper.properties")
@@ -121,6 +125,3 @@ func applyGradleWrapper(projectPath string, metadata *extractor.ProjectMetadata)
 	metadata.LanguageSpecific["gradle_version_source"] =
 		"gradle/wrapper/gradle-wrapper.properties"
 }
-
-// applyGradleCore maps identity fields and records the build system and DSL
-// flavor (Kotlin vs Groovy) inferred from the build file extension.

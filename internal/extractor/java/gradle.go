@@ -97,6 +97,8 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	return metadata, nil
 }
 
+// applyGradleCore maps identity fields and records the build system and DSL
+// flavor (Kotlin vs Groovy) inferred from the build file extension.
 func (e *GradleExtractor) applyGradleCore(project *GradleProject, metadata *extractor.ProjectMetadata, isKotlin bool) {
 	metadata.Name = project.Name
 	metadata.Version = project.Version
