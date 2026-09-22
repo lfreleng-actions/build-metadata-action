@@ -85,6 +85,17 @@ func TestWrapperVersionIsReported(t *testing.T) {
 			line: `distributionUrl=https\://mirror.example.com/gradle/gradle-9.0-bin.zip`,
 			want: "9.0",
 		},
+		{
+			// A signed mirror appends credentials, and Gradle downloads it.
+			name: "signed url with a query string",
+			line: `distributionUrl=https\://mirror.example.com/gradle-9.7.1-bin.zip?token=abc123&expires=1`,
+			want: "9.7.1",
+		},
+		{
+			name: "url with a fragment",
+			line: `distributionUrl=https\://mirror.example.com/gradle-8.4-all.zip#sha256=deadbeef`,
+			want: "8.4",
+		},
 	}
 
 	for _, tc := range cases {
@@ -281,5 +292,45 @@ func TestWrapperIgnoresSimilarKeysWithAnySeparator(t *testing.T) {
 	got, _ := metadata.LanguageSpecific["gradle_version"].(string)
 	if got != "9.7.1" {
 		t.Errorf("gradle_version = %q, want 9.7.1 from distributionUrl", got)
+	}
+}
+
+// The unit tests above call applyGradleWrapper directly, which leaves
+// the call site in Extract uncovered: deleting it would keep every one
+// of them green while the public extractor emitted no Gradle version at
+// all. That is the same shape of gap as an action input declared but
+// never wired, so this drives the exported entry point instead.
+func TestExtractReportsWrapperFields(t *testing.T) {
+	dir := t.TempDir()
+
+	write := func(name, body string) {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatalf("creating %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+	}
+
+	write("build.gradle", "group = 'org.example'\nversion = '1.2.3'\n")
+	write(filepath.Join("gradle", "wrapper", "gradle-wrapper.properties"),
+		properties(`distributionUrl=https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip`))
+
+	metadata, err := NewGradleExtractor().Extract(dir)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	got, ok := metadata.LanguageSpecific["gradle_version"].(string)
+	if !ok {
+		t.Fatal("Extract emitted no gradle_version; is applyGradleWrapper still called?")
+	}
+	if got != "9.7.1" {
+		t.Errorf("gradle_version = %q, want 9.7.1", got)
+	}
+	if metadata.LanguageSpecific["gradle_version_source"] == nil {
+		t.Error("Extract emitted gradle_version with no source")
 	}
 }

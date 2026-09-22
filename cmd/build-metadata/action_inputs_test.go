@@ -28,6 +28,10 @@ type compositeAction struct {
 	} `yaml:"runs"`
 }
 
+// extractStepID names the step that runs the binary. Only its env block
+// reaches the process, so that is the one the checks below inspect.
+const extractStepID = "extract"
+
 func loadAction(t *testing.T) compositeAction {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Clean(actionYAML))
@@ -39,6 +43,36 @@ func loadAction(t *testing.T) compositeAction {
 		t.Fatalf("parsing %s: %v", actionYAML, err)
 	}
 	return action
+}
+
+// forwardedByExtractStep collects the INPUT_* names the binary's own step
+// exports.
+//
+// Scoped to that step deliberately. Gathering them from every step would
+// accept a mapping placed on Setup Go, or on some step added later, even
+// though the process never sees it -- the test would pass while the
+// input stayed inert, which is the failure it exists to catch.
+func forwardedByExtractStep(t *testing.T, action compositeAction) map[string]bool {
+	t.Helper()
+
+	for _, step := range action.Runs.Steps {
+		if step.ID != extractStepID {
+			continue
+		}
+		forwarded := map[string]bool{}
+		for name := range step.Env {
+			if strings.HasPrefix(name, "INPUT_") {
+				forwarded[name] = true
+			}
+		}
+		if len(forwarded) == 0 {
+			t.Fatalf("step %q exports no INPUT_* variables", extractStepID)
+		}
+		return forwarded
+	}
+
+	t.Fatalf("no step with id %q found", extractStepID)
+	return nil
 }
 
 // Every declared input must reach the Go process.
@@ -62,24 +96,13 @@ func TestEveryInputReachesTheBinary(t *testing.T) {
 		t.Fatal("no inputs parsed; the action definition or this test is wrong")
 	}
 
-	forwarded := map[string]bool{}
-	for _, step := range action.Runs.Steps {
-		for name := range step.Env {
-			if strings.HasPrefix(name, "INPUT_") {
-				forwarded[name] = true
-			}
-		}
-	}
-
-	if len(forwarded) == 0 {
-		t.Fatal("no INPUT_* environment mappings found in any step")
-	}
+	forwarded := forwardedByExtractStep(t, action)
 
 	for input := range action.Inputs {
 		want := "INPUT_" + strings.ToUpper(input)
 		if !forwarded[want] {
-			t.Errorf("input %q is declared but never forwarded; add %s to the step env",
-				input, want)
+			t.Errorf("input %q is declared but never forwarded; add %s to the %s step env",
+				input, want, extractStepID)
 		}
 	}
 }
@@ -94,14 +117,9 @@ func TestForwardedInputsAreDeclared(t *testing.T) {
 		declared["INPUT_"+strings.ToUpper(input)] = true
 	}
 
-	for _, step := range action.Runs.Steps {
-		for name := range step.Env {
-			if !strings.HasPrefix(name, "INPUT_") {
-				continue
-			}
-			if !declared[name] {
-				t.Errorf("%s is forwarded but names no declared input", name)
-			}
+	for name := range forwardedByExtractStep(t, action) {
+		if !declared[name] {
+			t.Errorf("%s is forwarded but names no declared input", name)
 		}
 	}
 }

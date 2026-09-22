@@ -27,8 +27,13 @@ import (
 // Anchored at the end for the same reason. Without it the match may sit
 // anywhere in the value, so gradle-9.7.1-bin.zip.backup would report
 // 9.7.1 for a URL naming no distribution Gradle can download.
+//
+// A query or fragment may follow the archive, because a signed mirror
+// URL ends in something like gradle-9.7.1-bin.zip?token=... and Gradle
+// downloads it happily. Only those two may follow: a bare '.' or '/'
+// after the suffix names a different file.
 var wrapperDistributionPattern = regexp.MustCompile(
-	`gradle-([0-9]+(?:\.[0-9]+)*(?:-[A-Za-z][A-Za-z0-9]*(?:-[0-9]+)?)?)-(?:bin|all)\.zip$`)
+	`gradle-([0-9]+(?:\.[0-9]+)*(?:-[A-Za-z][A-Za-z0-9]*(?:-[0-9]+)?)?)-(?:bin|all)\.zip(?:[?#]\S*)?$`)
 
 // splitProperty splits a Java properties line into its key and value.
 //
