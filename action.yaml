@@ -134,7 +134,9 @@ outputs:
 
   # Common Project Metadata
   project_type:
-    description: "Detected project type (e.g., python-modern, javascript-npm)"
+    description: >-
+      Resolved project type, either detected or supplied through the
+      project_type input (e.g. python-modern, javascript-npm)
     value: ${{ steps.extract.outputs.project_type }}
 
   build_tool:

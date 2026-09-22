@@ -178,6 +178,21 @@ func TestWrapperTakesTheLastDistributionUrl(t *testing.T) {
 	}
 }
 
+// A key with no separator is a property with an empty value, so a bare
+// distributionUrl after a populated one clears it. Gradle would find no
+// distribution to download, and reporting the earlier URL would describe
+// a wrapper that does not work.
+func TestWrapperBareKeyClearsAnEarlierValue(t *testing.T) {
+	body := "distributionUrl=https\\://services.gradle.org/distributions/gradle-7.6-bin.zip\n" +
+		"distributionUrl\n"
+
+	metadata := wrapperMetadata(t, body)
+
+	if got, present := metadata.LanguageSpecific["gradle_version"]; present {
+		t.Errorf("gradle_version = %v, want absent after the value was cleared", got)
+	}
+}
+
 // A commented-out entry is not a value.
 func TestWrapperIgnoresComments(t *testing.T) {
 	body := "# distributionUrl=https\\://example.com/gradle-7.6-bin.zip\n" +

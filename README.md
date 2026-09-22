@@ -242,7 +242,7 @@ All project types provide these standardized outputs:
 <!-- markdownlint-disable MD013 -->
 | Output                       | Description                                                                                         | Example                  |
 | ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ |
-| `project_type`               | Detected project type                                                                               | `python-modern`          |
+| `project_type`               | Resolved project type, detected or supplied via the `project_type` input                            | `python-modern`          |
 | `build_tool`                 | Build tool the project type implies; empty when not identified                                      | `maven`                  |
 | `project_name`               | Project/package name                                                                                | `myproject`              |
 | `project_version`            | Current version                                                                                     | `1.2.3`                  |

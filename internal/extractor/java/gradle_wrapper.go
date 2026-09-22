@@ -54,6 +54,12 @@ var wrapperDistributionPattern = regexp.MustCompile(
 // Line continuations are not handled. A wrapper URL split across lines
 // is vanishingly rare, and the failure is to report nothing, which is
 // the safe direction.
+//
+// A line carrying no separator at all is a key with an empty value,
+// which the format allows. Reporting it as a property rather than as
+// unparsable matters for duplicates: a bare 'distributionUrl' following
+// a populated one clears the value for Gradle, so treating the line as
+// absent here would leave the earlier, stale URL standing.
 func splitProperty(line string) (string, string, bool) {
 	for i := 0; i < len(line); i++ {
 		switch line[i] {
@@ -71,7 +77,9 @@ func splitProperty(line string) (string, string, bool) {
 			return key, strings.TrimSpace(rest), key != ""
 		}
 	}
-	return "", "", false
+
+	key := strings.TrimSpace(line)
+	return key, "", key != ""
 }
 
 func applyGradleWrapper(projectPath string, metadata *extractor.ProjectMetadata) {
