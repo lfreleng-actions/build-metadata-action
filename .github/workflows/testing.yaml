@@ -46,7 +46,7 @@ jobs:
 
       - name: "Test build-metadata-action on itself (Go project)"
         id: test
-        uses: ./
+        uses: $/
 
       - name: "Validation"
         shell: bash
@@ -511,15 +511,9 @@ jobs:
           path: test-project
           persist-credentials: false
 
-      - name: "Checkout build-metadata-action"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: build-metadata-action
-          persist-credentials: false
-
       - name: "Test build-metadata-action on ${{ matrix.project-type }}"
         id: test
-        uses: ./build-metadata-action
+        uses: $/
         with:
           path_prefix: >-
             ${{ github.workspace }}/test-project/${{
