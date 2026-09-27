@@ -71,8 +71,13 @@ type CommonMetadata struct {
 	// ReleaseVersion and ReleaseRef carry the version and git ref parsed
 	// from a lone release file. They stay empty when several release files
 	// exist, since the caller then disambiguates via the changed files.
+	// For a container release file the version is container_release_tag.
 	ReleaseVersion string `json:"release_version,omitempty"`
 	ReleaseRef     string `json:"release_ref,omitempty"`
+	// ReleaseDistributionType is the lone release file's
+	// distribution_type, lowercased (maven, container, artifact, pypi);
+	// empty when it declares none or several release files exist.
+	ReleaseDistributionType string `json:"release_distribution_type,omitempty"`
 }
 
 // BuildMetadata contains build-specific metadata

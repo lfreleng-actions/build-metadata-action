@@ -193,19 +193,28 @@ outputs:
   is_release_ready:
     description: >-
       Returns true when at least one release request file is present under
-      releases/ (drives the promote/tag lane)
+      releases/. This describes the tree, not the commit: a repository that
+      has ever released keeps its release files, so it stays true. Whether a
+      given commit adds a release file needs the commit's diff.
     value: ${{ steps.extract.outputs.is_release_ready }}
 
   release_version:
     description: >-
       Version parsed from a lone release file; empty when several exist
-      (the caller disambiguates via changed files)
+      (the caller disambiguates via changed files). Container release files
+      carry it as container_release_tag, other types as version.
     value: ${{ steps.extract.outputs.release_version }}
 
   release_ref:
     description: >-
       Git ref parsed from a lone release file; empty when several exist
     value: ${{ steps.extract.outputs.release_ref }}
+
+  release_distribution_type:
+    description: >-
+      distribution_type of a lone release file, lowercased (maven, container,
+      artifact, pypi); empty when it declares none or several files exist
+    value: ${{ steps.extract.outputs.release_distribution_type }}
 
   versioning_type:
     description: "Versioning type: 'static' or 'dynamic'"

@@ -62,6 +62,7 @@ func emitCommonOutputs(ctx *appContext, metadata *Metadata) {
 	ctx.setOutput("is_release_ready", fmt.Sprintf("%t", metadata.Common.IsReleaseReady))
 	ctx.setOutput("release_version", metadata.Common.ReleaseVersion)
 	ctx.setOutput("release_ref", metadata.Common.ReleaseRef)
+	ctx.setOutput("release_distribution_type", metadata.Common.ReleaseDistributionType)
 	ctx.setOutput("build_timestamp", metadata.Common.BuildTimestamp.Format(time.RFC3339))
 	ctx.setOutput("git_sha", metadata.Common.GitSHA)
 	ctx.setOutput("git_branch", metadata.Common.GitBranch)

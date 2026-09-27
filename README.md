@@ -240,34 +240,35 @@ matching no extractor produces none at all.
 All project types provide these standardized outputs:
 
 <!-- markdownlint-disable MD013 -->
-| Output                       | Description                                                                                         | Example                  |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------ |
-| `project_type`               | Resolved project type, detected or supplied via the `project_type` input                            | `python-modern`          |
-| `build_tool`                 | Build tool the project type implies; empty when not identified                                      | `maven`                  |
-| `project_name`               | Project/package name                                                                                | `myproject`              |
-| `project_version`            | Current version                                                                                     | `1.2.3`                  |
-| `project_path`               | Absolute project path                                                                               | `/workspace/myproject`   |
-| `version_source`             | Source of version info                                                                              | `pyproject.toml`         |
-| `versioning_type`            | Versioning type: `static` or `dynamic`                                                              | `static`                 |
-| `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent                             | `1.1.0`                  |
-| `version_properties_match`   | Whether version.properties matches `project_version` (empty when not comparable)                    | `true`                   |
-| `snapshot_version`           | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention)                               | `1.1.0-SNAPSHOT`         |
-| `release_files`              | Comma-separated release request files under `releases/` (global-jjb/LF convention); empty when none | `releases/3.8.2.yaml`    |
-| `release_file_count`         | Number of release request files found under `releases/`                                             | `1`                      |
-| `is_release_ready`           | True when at least one release request file is present under `releases/`                            | `true`                   |
-| `release_version`            | Version parsed from a lone release file; empty when more than one exists                            | `3.8.2`                  |
-| `release_ref`                | Git ref parsed from a lone release file; empty when more than one exists                            | `abc123...`              |
-| `build_timestamp`            | ISO 8601 build timestamp                                                                            | `2025-11-03T12:00:00Z`   |
-| `git_sha`                    | Current git commit SHA                                                                              | `abc123...`              |
-| `git_branch`                 | Current git branch                                                                                  | `main`                   |
-| `git_tag`                    | Current git tag                                                                                     | `v1.2.3`                 |
-| `ci_platform`                | CI platform                                                                                         | `github`                 |
-| `ci_run_id`                  | CI run identifier                                                                                   | `12345678`               |
-| `ci_run_url`                 | URL to CI run                                                                                       | `https://github.com/...` |
-| `runner_os`                  | Runner OS                                                                                           | `Linux`                  |
-| `runner_arch`                | Runner architecture                                                                                 | `X64`                    |
-| `metadata_json`              | Complete metadata as JSON                                                                           | `{...}`                  |
-| `success`                    | Extraction success indicator                                                                        | `true`                   |
+| Output                       | Description                                                                                                            | Example                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `project_type`               | Resolved project type, detected or supplied via the `project_type` input                                               | `python-modern`          |
+| `build_tool`                 | Build tool the project type implies; empty when not identified                                                         | `maven`                  |
+| `project_name`               | Project/package name                                                                                                   | `myproject`              |
+| `project_version`            | Current version                                                                                                        | `1.2.3`                  |
+| `project_path`               | Absolute project path                                                                                                  | `/workspace/myproject`   |
+| `version_source`             | Source of version info                                                                                                 | `pyproject.toml`         |
+| `versioning_type`            | Versioning type: `static` or `dynamic`                                                                                 | `static`                 |
+| `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent                                                | `1.1.0`                  |
+| `version_properties_match`   | Whether version.properties matches `project_version` (empty when not comparable)                                       | `true`                   |
+| `snapshot_version`           | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention)                                                  | `1.1.0-SNAPSHOT`         |
+| `release_files`              | Comma-separated release request files under `releases/` (global-jjb/LF convention); empty when none                    | `releases/3.8.2.yaml`    |
+| `release_file_count`         | Number of release request files found under `releases/`                                                                | `1`                      |
+| `is_release_ready`           | True when at least one release request file is present under `releases/` (describes the tree, not the commit)          | `true`                   |
+| `release_version`            | Version parsed from a lone release file (`container_release_tag` for container files); empty when more than one exists | `3.8.2`                  |
+| `release_ref`                | Git ref parsed from a lone release file; empty when more than one exists                                               | `abc123...`              |
+| `release_distribution_type`  | `distribution_type` of a lone release file, lowercased; empty when the file sets none or more than one file exists     | `container`              |
+| `build_timestamp`            | ISO 8601 build timestamp                                                                                               | `2025-11-03T12:00:00Z`   |
+| `git_sha`                    | Current git commit SHA                                                                                                 | `abc123...`              |
+| `git_branch`                 | Current git branch                                                                                                     | `main`                   |
+| `git_tag`                    | Current git tag                                                                                                        | `v1.2.3`                 |
+| `ci_platform`                | CI platform                                                                                                            | `github`                 |
+| `ci_run_id`                  | CI run identifier                                                                                                      | `12345678`               |
+| `ci_run_url`                 | URL to CI run                                                                                                          | `https://github.com/...` |
+| `runner_os`                  | Runner OS                                                                                                              | `Linux`                  |
+| `runner_arch`                | Runner architecture                                                                                                    | `X64`                    |
+| `metadata_json`              | Complete metadata as JSON                                                                                              | `{...}`                  |
+| `success`                    | Extraction success indicator                                                                                           | `true`                   |
 <!-- markdownlint-enable MD013 -->
 
 ### Language-Specific Outputs
