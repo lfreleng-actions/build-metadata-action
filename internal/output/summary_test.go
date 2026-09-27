@@ -131,9 +131,10 @@ func TestGenerateSummary_ReleaseRows(t *testing.T) {
 			"project_version":  "3.5.0",
 			"is_release_ready": true,
 			// Values arrive from a JSON round-trip, so the count is a float64.
-			"release_file_count": float64(2),
-			"release_version":    "3.5.0",
-			"release_ref":        "refs/heads/main",
+			"release_file_count":        float64(2),
+			"release_version":           "3.5.0",
+			"release_ref":               "refs/heads/main",
+			"release_distribution_type": "container",
 		},
 	}
 
@@ -143,6 +144,9 @@ func TestGenerateSummary_ReleaseRows(t *testing.T) {
 	}
 	if !strings.Contains(summary, "| Release Version | 3.5.0 |") {
 		t.Error("Summary should render the Release Version row")
+	}
+	if !strings.Contains(summary, "| Release Type | container |") {
+		t.Error("Summary should render the Release Type row")
 	}
 	if !strings.Contains(summary, "| Release Ref | `refs/heads/main` |") {
 		t.Error("Summary should render the Release Ref row")

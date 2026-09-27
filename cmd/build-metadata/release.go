@@ -28,9 +28,10 @@ func applyReleaseFiles(metadata *Metadata, absPath string) {
 	metadata.Common.IsReleaseReady = true
 
 	if len(files) == 1 {
-		version, ref := parseReleaseFile(filepath.Join(absPath, files[0]))
-		metadata.Common.ReleaseVersion = version
-		metadata.Common.ReleaseRef = ref
+		release := parseReleaseFile(filepath.Join(absPath, files[0]))
+		metadata.Common.ReleaseVersion = release.version
+		metadata.Common.ReleaseRef = release.ref
+		metadata.Common.ReleaseDistributionType = release.distributionType
 	}
 }
 
@@ -76,25 +77,50 @@ func findReleaseFiles(absPath string) []string {
 	return files
 }
 
-// parseReleaseFile extracts the top-level version and ref scalars from a
-// global-jjb release file. It uses a minimal line scan rather than a YAML
-// parser because release files are flat maps of simple scalars, keeping the
-// action dependency-free. Missing keys yield empty strings.
-func parseReleaseFile(path string) (version string, ref string) {
+// releaseFile holds the top-level scalars a release file declares.
+type releaseFile struct {
+	version          string
+	ref              string
+	distributionType string
+}
+
+// parseReleaseFile extracts the release version, ref and distribution type
+// from a global-jjb release file. It uses a minimal line scan rather than a
+// YAML parser because release files keep these as top-level scalars,
+// keeping the action dependency-free. Missing keys yield empty strings.
+//
+// The version key depends on the type, as global-jjb's release-job.sh reads
+// it: container release files carry container_release_tag, and every other
+// schema (maven, artifact, packagecloud, pypi) carries version. A container
+// file never falls back to version, which its schema does not define and
+// whose indented per-image occurrences the scan already ignores.
+func parseReleaseFile(path string) releaseFile {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "", ""
+		return releaseFile{}
 	}
 
+	var release releaseFile
+	var version, containerTag string
 	for _, line := range strings.Split(string(content), "\n") {
 		if value, ok := releaseScalar(line, "version"); ok {
 			version = value
 		}
+		if value, ok := releaseScalar(line, "container_release_tag"); ok {
+			containerTag = value
+		}
 		if value, ok := releaseScalar(line, "ref"); ok {
-			ref = value
+			release.ref = value
+		}
+		if value, ok := releaseScalar(line, "distribution_type"); ok {
+			release.distributionType = strings.ToLower(value)
 		}
 	}
-	return version, ref
+	release.version = version
+	if release.distributionType == "container" {
+		release.version = containerTag
+	}
+	return release
 }
 
 // releaseScalar returns the value of a top-level "key: value" line (no

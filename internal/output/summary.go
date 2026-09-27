@@ -147,6 +147,9 @@ func writeReleaseRows(sb *strings.Builder, common map[string]interface{}) {
 	if version, ok := common["release_version"].(string); ok && version != "" {
 		fmt.Fprintf(sb, "| Release Version | %s |\n", version)
 	}
+	if kind, ok := common["release_distribution_type"].(string); ok && kind != "" {
+		fmt.Fprintf(sb, "| Release Type | %s |\n", kind)
+	}
 	if ref, ok := common["release_ref"].(string); ok && ref != "" {
 		fmt.Fprintf(sb, "| Release Ref | `%s` |\n", ref)
 	}

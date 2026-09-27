@@ -86,6 +86,117 @@ func TestApplyReleaseFilesMultipleLeavesVersionEmpty(t *testing.T) {
 	}
 }
 
+// TestApplyReleaseFilesContainer covers the container release schema,
+// which carries the release version as container_release_tag: global-jjb's
+// release-job.sh reads that key for distribution_type container and the
+// top-level version key for every other type.
+func TestApplyReleaseFilesContainer(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeReleaseFile(t, tmpDir, "1.7.0-container.yaml", `---
+distribution_type: 'container'
+container_release_tag: '1.7.0'
+container_pull_registry: 'nexus3.onap.org:10003'
+container_push_registry: 'nexus3.onap.org:10002'
+project: 'sdc-docker-base'
+ref: 9dbb2f5ed5b4e0b1a2c3d4e5f60718293a4b5c6d
+containers:
+  - name: 'sdc-base-jetty'
+    version: '1.7.0-20200619T121144Z'
+`)
+
+	metadata := newMetadata(tmpDir)
+	applyReleaseFiles(metadata, tmpDir)
+
+	if metadata.Common.ReleaseVersion != "1.7.0" {
+		t.Errorf("ReleaseVersion = %q, want 1.7.0 from container_release_tag", metadata.Common.ReleaseVersion)
+	}
+	if metadata.Common.ReleaseRef != "9dbb2f5ed5b4e0b1a2c3d4e5f60718293a4b5c6d" {
+		t.Errorf("ReleaseRef = %q, want the declared ref", metadata.Common.ReleaseRef)
+	}
+	if metadata.Common.ReleaseDistributionType != "container" {
+		t.Errorf("ReleaseDistributionType = %q, want container", metadata.Common.ReleaseDistributionType)
+	}
+}
+
+// TestApplyReleaseFilesContainerIgnoresNestedVersion guards the line scan:
+// a container file's only version: keys are per-image and indented, and
+// must not stand in for the release version.
+func TestApplyReleaseFilesContainerIgnoresNestedVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeReleaseFile(t, tmpDir, "broken-container.yaml", `distribution_type: container
+ref: abc
+containers:
+  - name: img
+    version: 9.9.9-20200101T000000Z
+`)
+
+	metadata := newMetadata(tmpDir)
+	applyReleaseFiles(metadata, tmpDir)
+
+	if metadata.Common.ReleaseVersion != "" {
+		t.Errorf("ReleaseVersion = %q, want empty without container_release_tag", metadata.Common.ReleaseVersion)
+	}
+}
+
+// TestApplyReleaseFilesContainerDoesNotReadVersionKey pins that a stray
+// top-level version: in a container file is not used: the container schema
+// does not define it, and release-job.sh never reads it for containers.
+func TestApplyReleaseFilesContainerDoesNotReadVersionKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeReleaseFile(t, tmpDir, "c.yaml", "distribution_type: container\nversion: 0.0.1\ncontainer_release_tag: 2.0.0\nref: abc\n")
+
+	metadata := newMetadata(tmpDir)
+	applyReleaseFiles(metadata, tmpDir)
+
+	if metadata.Common.ReleaseVersion != "2.0.0" {
+		t.Errorf("ReleaseVersion = %q, want 2.0.0", metadata.Common.ReleaseVersion)
+	}
+}
+
+// TestApplyReleaseFilesDistributionTypes covers each global-jjb schema's
+// version key, and a file that declares no type.
+func TestApplyReleaseFilesDistributionTypes(t *testing.T) {
+	cases := []struct {
+		name, content, wantType, wantVersion string
+	}{
+		{"maven", "distribution_type: maven\nversion: 1.0.0\n", "maven", "1.0.0"},
+		{"artifact", "distribution_type: artifact\nversion: 2.0.0\n", "artifact", "2.0.0"},
+		{"pypi", "distribution_type: pypi\nversion: 3.0.0\n", "pypi", "3.0.0"},
+		{"packagecloud", "package_name: p\nversion: 4.0.0\n", "", "4.0.0"},
+		{"upper-case type", "distribution_type: Container\ncontainer_release_tag: 5.0.0\n", "container", "5.0.0"},
+		{"quoted type", "distribution_type: \"container\"\ncontainer_release_tag: 6.0.0\n", "container", "6.0.0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			writeReleaseFile(t, tmpDir, "r.yaml", tc.content)
+			metadata := newMetadata(tmpDir)
+			applyReleaseFiles(metadata, tmpDir)
+			if metadata.Common.ReleaseDistributionType != tc.wantType {
+				t.Errorf("ReleaseDistributionType = %q, want %q", metadata.Common.ReleaseDistributionType, tc.wantType)
+			}
+			if metadata.Common.ReleaseVersion != tc.wantVersion {
+				t.Errorf("ReleaseVersion = %q, want %q", metadata.Common.ReleaseVersion, tc.wantVersion)
+			}
+		})
+	}
+}
+
+// TestApplyReleaseFilesMultipleLeavesTypeEmpty keeps the lone-file rule for
+// the new field: with several files, none of them speaks for the release.
+func TestApplyReleaseFilesMultipleLeavesTypeEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeReleaseFile(t, tmpDir, "a.yaml", "distribution_type: container\ncontainer_release_tag: 1.0.0\n")
+	writeReleaseFile(t, tmpDir, "b.yaml", "distribution_type: maven\nversion: 1.0.0\n")
+
+	metadata := newMetadata(tmpDir)
+	applyReleaseFiles(metadata, tmpDir)
+
+	if metadata.Common.ReleaseDistributionType != "" {
+		t.Errorf("ReleaseDistributionType = %q, want empty with multiple files", metadata.Common.ReleaseDistributionType)
+	}
+}
+
 func TestApplyReleaseFilesStripsQuotesFromScalars(t *testing.T) {
 	tmpDir := t.TempDir()
 	writeReleaseFile(t, tmpDir, "release.yaml", "version: \"1.2.3\"\nref: 'deadbeef'\n")
