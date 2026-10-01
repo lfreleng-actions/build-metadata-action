@@ -154,19 +154,7 @@ func javaVersionFromModules(projectPath string, pom *POM) (string, string) {
 		return "", ""
 	}
 	for _, module := range pom.Modules.Module {
-		// Reject absolute module paths: filepath.Join would discard
-		// projectPath and read a POM from outside the workspace.
-		if module == "" || filepath.IsAbs(module) {
-			continue
-		}
-		moduleDir := filepath.Join(projectPath, module)
-		// Reject modules whose "../" segments resolve outside the trusted
-		// workspace root, so a crafted module cannot read a POM elsewhere
-		// on the runner.
-		if !withinWorkspace(moduleDir) {
-			continue
-		}
-		modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
+		moduleDir, modulePOM, ok := loadModulePOM(projectPath, module)
 		if !ok {
 			continue
 		}
@@ -283,6 +271,31 @@ func withinWorkspace(candidate string) bool {
 		return true
 	}
 	return strings.HasPrefix(candidate, root+string(os.PathSeparator))
+}
+
+// loadModulePOM resolves a reactor <module> entry against projectPath and
+// parses its POM, returning the module directory alongside it. ok=false
+// covers a missing or malformed POM as well as a rejected path, so every
+// reactor traversal skips a module the same way and applies the same
+// guards.
+func loadModulePOM(projectPath, module string) (string, *POM, bool) {
+	// Reject absolute module paths: filepath.Join would discard
+	// projectPath and read a POM from outside the workspace.
+	if module == "" || filepath.IsAbs(module) {
+		return "", nil, false
+	}
+	moduleDir := filepath.Join(projectPath, module)
+	// Reject modules whose "../" segments resolve outside the trusted
+	// workspace root, so a crafted module cannot read a POM elsewhere
+	// on the runner.
+	if !withinWorkspace(moduleDir) {
+		return "", nil, false
+	}
+	modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
+	if !ok {
+		return "", nil, false
+	}
+	return moduleDir, modulePOM, true
 }
 
 // readPOM reads and unmarshals a pom.xml, returning ok=false on any error so

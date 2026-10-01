@@ -437,30 +437,15 @@ func applyPOMLayout(projectPath string, pom *POM, metadata *extractor.ProjectMet
 // A reactor root frequently declares nothing itself and delegates the
 // build configuration to a dedicated parent module: ONAP cps keeps
 // JaCoCo in cps-parent/pom.xml, so inspecting only the aggregator finds
-// no coverage on a project that has 99% of it. Mirrors the traversal and
-// the path guards of javaVersionFromModules.
+// coverage on a project that has 99% of it. Module paths pass through
+// loadModulePOM, the guard every reactor traversal shares.
 func jacocoInModules(projectPath string, pom *POM) bool {
 	if pom.Modules == nil {
 		return false
 	}
 	for _, module := range pom.Modules.Module {
-		// Reject absolute module paths: filepath.Join would discard
-		// projectPath and read a POM from outside the workspace.
-		if module == "" || filepath.IsAbs(module) {
-			continue
-		}
-		moduleDir := filepath.Join(projectPath, module)
-		// Reject modules whose "../" segments resolve outside the trusted
-		// workspace root, so a crafted module cannot read a POM elsewhere
-		// on the runner.
-		if !withinWorkspace(moduleDir) {
-			continue
-		}
-		modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
-		if !ok {
-			continue
-		}
-		if hasJacocoPlugin(modulePOM) {
+		_, modulePOM, ok := loadModulePOM(projectPath, module)
+		if ok && hasJacocoPlugin(modulePOM) {
 			return true
 		}
 	}
