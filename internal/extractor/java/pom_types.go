@@ -3,7 +3,10 @@
 
 package java
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"strings"
+)
 
 // POM represents a Maven Project Object Model
 type POM struct {
@@ -93,8 +96,11 @@ type Dependency struct {
 
 // Build represents the build configuration
 type Build struct {
+	Directory           string            `xml:"directory"`
 	SourceDirectory     string            `xml:"sourceDirectory"`
 	TestSourceDirectory string            `xml:"testSourceDirectory"`
+	OutputDirectory     string            `xml:"outputDirectory"`
+	TestOutputDirectory string            `xml:"testOutputDirectory"`
 	FinalName           string            `xml:"finalName"`
 	Plugins             *Plugins          `xml:"plugins"`
 	PluginManagement    *PluginManagement `xml:"pluginManagement"`
@@ -117,16 +123,99 @@ type Plugin struct {
 	GroupID       string               `xml:"groupId"`
 	ArtifactID    string               `xml:"artifactId"`
 	Version       string               `xml:"version"`
+	Inherited     *string              `xml:"inherited"`
+	Configuration *PluginConfiguration `xml:"configuration"`
+	Executions    []Execution          `xml:"executions>execution"`
+}
+
+// Execution represents one <execution> of a plugin. Code generators are
+// usually configured here rather than at plugin level, one execution per
+// generated API or schema.
+type Execution struct {
+	ID            string               `xml:"id"`
+	Phase         string               `xml:"phase"`
+	Inherited     *string              `xml:"inherited"`
+	Goals         []string             `xml:"goals>goal"`
 	Configuration *PluginConfiguration `xml:"configuration"`
 }
 
-// PluginConfiguration captures the subset of maven-compiler-plugin
-// <configuration> that declares the Java language level. Projects that do
-// not set the compiler level via properties often set it here instead.
+// PluginConfiguration captures a plugin's <configuration>. The
+// maven-compiler-plugin language level is decoded into named fields;
+// every other element is kept as a generic tree in Elements, because each
+// plugin defines its own parameters and some nest them (openapi-generator
+// reads configOptions/sourceFolder, jOOQ generator/target/directory).
+// Attributes are kept for Maven's combine.self merge control.
 type PluginConfiguration struct {
-	Release string `xml:"release"`
-	Source  string `xml:"source"`
-	Target  string `xml:"target"`
+	Release  string          `xml:"release"`
+	Source   string          `xml:"source"`
+	Target   string          `xml:"target"`
+	Attrs    []xml.Attr      `xml:",any,attr"`
+	Elements []ConfigElement `xml:",any"`
+}
+
+// ConfigElement is one element of a plugin configuration, with its
+// attributes, its text and any nested elements.
+type ConfigElement struct {
+	XMLName  xml.Name
+	Attrs    []xml.Attr      `xml:",any,attr"`
+	Value    string          `xml:",chardata"`
+	Children []ConfigElement `xml:",any"`
+}
+
+// find returns the element at a slash-separated path, such as
+// "configOptions/sourceFolder", and whether the configuration or an
+// element on the way to it carries combine.self="override". Maven merges
+// nothing from farther up the inheritance chain into an overriding
+// element, so a parameter it omits stays unset rather than inherited.
+func (c *PluginConfiguration) find(elementPath string) (*ConfigElement, bool) {
+	if c == nil {
+		return nil, false
+	}
+	overridden := overridesInherited(c.Attrs)
+	elements := c.Elements
+	var element *ConfigElement
+	for _, name := range strings.Split(elementPath, "/") {
+		if element = findElement(elements, name); element == nil {
+			return nil, overridden
+		}
+		overridden = overridden || overridesInherited(element.Attrs)
+		elements = element.Children
+	}
+	return element, overridden
+}
+
+// isSet reports whether an element carries a value or nested elements.
+// Maven fills an empty element from farther up the inheritance chain.
+func (e *ConfigElement) isSet() bool {
+	return strings.TrimSpace(e.Value) != "" || len(e.Children) > 0
+}
+
+// overridesInherited reports a combine.self="override" attribute.
+func overridesInherited(attrs []xml.Attr) bool {
+	for _, attr := range attrs {
+		if attr.Name.Local == "combine.self" && strings.TrimSpace(attr.Value) == "override" {
+			return true
+		}
+	}
+	return false
+}
+
+// childValue returns the trimmed text of a direct child element.
+func (e ConfigElement) childValue(name string) string {
+	if child := findElement(e.Children, name); child != nil {
+		return strings.TrimSpace(child.Value)
+	}
+	return ""
+}
+
+// findElement returns the first element with the given local name.
+func findElement(elements []ConfigElement, name string) *ConfigElement {
+	for i := range elements {
+		if elements[i].XMLName.Local == name {
+			return &elements[i]
+		}
+	}
+	return nil
 }
 
 // Modules represents Maven modules
@@ -187,14 +276,41 @@ type Profiles struct {
 	Profile []Profile `xml:"profile"`
 }
 
-// Profile represents a single Maven profile
+// Profile represents a single Maven profile. When active, Maven merges it
+// into its POM before inheritance, the profile winning: it can add
+// properties, dependencies, plugins and modules and move the build
+// directory, but cannot set the source directories.
 type Profile struct {
-	ID         string      `xml:"id"`
-	Activation *Activation `xml:"activation"`
+	ID             string          `xml:"id"`
+	Activation     *Activation     `xml:"activation"`
+	Properties     Properties      `xml:"properties"`
+	Dependencies   *Dependencies   `xml:"dependencies"`
+	DependencyMgmt *DependencyMgmt `xml:"dependencyManagement"`
+	Build          *Build          `xml:"build"`
+	Modules        *Modules        `xml:"modules"`
 }
 
-// Activation represents profile activation conditions
+// Activation represents profile activation conditions. ActiveByDefault is
+// kept as text and read as Maven reads it, Boolean.valueOf, so a value
+// such as a property reference does not stop the POM parsing.
 type Activation struct {
-	ActiveByDefault bool   `xml:"activeByDefault"`
-	JDK             string `xml:"jdk"`
+	ActiveByDefault string              `xml:"activeByDefault"`
+	JDK             *string             `xml:"jdk"`
+	OS              *struct{}           `xml:"os"`
+	Property        *ActivationProperty `xml:"property"`
+	File            *ActivationFile     `xml:"file"`
+	Packaging       *string             `xml:"packaging"`
+	Condition       *string             `xml:"condition"`
+}
+
+// ActivationProperty is a property condition on a profile.
+type ActivationProperty struct {
+	Name  string `xml:"name"`
+	Value string `xml:"value"`
+}
+
+// ActivationFile is a file condition on a profile.
+type ActivationFile struct {
+	Exists  string `xml:"exists"`
+	Missing string `xml:"missing"`
 }

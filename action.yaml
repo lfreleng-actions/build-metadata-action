@@ -498,6 +498,26 @@ outputs:
       when the build configures no coverage tool
     value: ${{ steps.extract.outputs.java_coverage_report_paths }}
 
+  java_generated_source_dirs:
+    # Inferred, not observed: the action runs before the build, so these
+    # come from generator plugin declarations and each plugin's documented
+    # default. java_generated_sources records which applied per entry.
+    description: >-
+      Comma-separated directories the build is expected to generate
+      sources into, module-relative and inferred from plugin declarations;
+      leaves out any path that holds or sits inside hand-written sources
+      in some module, so it is safe to apply across the reactor; empty
+      when no recognised generator is configured
+    value: ${{ steps.extract.outputs.java_generated_source_dirs }}
+
+  java_generated_sources:
+    description: >-
+      JSON array describing each inferred generated source directory, as
+      objects with 'module', 'path', 'plugin' and 'derivation' keys;
+      derivation is 'configured' when the POM sets the whole path and
+      'plugin-default' when any part of it is the plugin's default
+    value: ${{ steps.extract.outputs.java_generated_sources }}
+
   # Language-Specific Outputs (Go)
   go_base_name:
     description: >-

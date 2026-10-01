@@ -73,6 +73,7 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	applyPOMBuildPlugins(resolvedPOM, metadata)
 	applyPOMStructure(resolvedPOM, metadata)
 	applyPOMLayout(projectPath, resolvedPOM, metadata)
+	applyPOMGeneratedSources(projectPath, resolvedPOM, metadata)
 	e.applyPOMJavaVersion(projectPath, resolvedPOM, metadata)
 	applyPOMVersioningType(metadata)
 
