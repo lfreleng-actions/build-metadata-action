@@ -1070,6 +1070,61 @@ func TestMavenExtractJavaVersionFromParent(t *testing.T) {
 	}
 }
 
+// TestMavenParentRelativePathPresence verifies an omitted <relativePath>
+// defaults to ../pom.xml while an explicitly empty one stops Maven, and so
+// the extractor, reading any parent from disk.
+func TestMavenParentRelativePathPresence(t *testing.T) {
+	tests := []struct {
+		name         string
+		relativePath string
+		want         string
+	}{
+		{name: "omitted defaults to the directory above", want: "21"},
+		{name: "empty element skips the local parent", relativePath: "<relativePath/>"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			parentPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>parent</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+    </properties>
+</project>`
+			if err := os.WriteFile(filepath.Join(tmpDir, "pom.xml"), []byte(parentPOM), 0644); err != nil {
+				t.Fatalf("Failed to write parent pom.xml: %v", err)
+			}
+			childDir := filepath.Join(tmpDir, "child")
+			if err := os.Mkdir(childDir, 0755); err != nil {
+				t.Fatalf("Failed to create child dir: %v", err)
+			}
+			childPOM := `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.example</groupId>
+        <artifactId>parent</artifactId>
+        <version>1.0.0</version>
+        ` + tc.relativePath + `
+    </parent>
+    <artifactId>child</artifactId>
+</project>`
+			if err := os.WriteFile(filepath.Join(childDir, "pom.xml"), []byte(childPOM), 0644); err != nil {
+				t.Fatalf("Failed to write child pom.xml: %v", err)
+			}
+
+			if version, _ := mavenJavaVersionOf(t, childDir); version != tc.want {
+				t.Errorf("java_version = %q, want %q", version, tc.want)
+			}
+		})
+	}
+}
+
 // TestMavenExtractJavaVersionFromModule verifies an aggregator root that
 // declares no compiler level itself resolves it from a reactor module (the
 // ONAP layout, where a shared *-parent module carries the level).

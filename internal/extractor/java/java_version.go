@@ -198,14 +198,19 @@ func effectiveProperties(projectPath string, pom *POM, depth int) map[string]str
 // (defaulting to "../pom.xml"), returning the parent's directory (for
 // further relativePath resolution) and the parsed POM. It returns ok=false
 // when no local parent file exists, which is the normal case for a bare
-// module checkout or a repository-root aggregator.
+// module checkout or a repository-root aggregator, and for an explicitly
+// empty <relativePath/>, with which a POM tells Maven to take the parent
+// from a repository and never from disk.
 func loadParentPOM(projectPath string, pom *POM) (string, *POM, bool) {
 	if pom.Parent == nil {
 		return "", nil, false
 	}
-	relativePath := pom.Parent.RelativePath
-	if relativePath == "" {
-		relativePath = "../pom.xml"
+	relativePath := "../pom.xml"
+	if pom.Parent.RelativePath != nil {
+		relativePath = strings.TrimSpace(*pom.Parent.RelativePath)
+		if relativePath == "" {
+			return "", nil, false
+		}
 	}
 	// Reject absolute relativePath values: filepath.Join would discard
 	// projectPath and could read an arbitrary file on the runner.

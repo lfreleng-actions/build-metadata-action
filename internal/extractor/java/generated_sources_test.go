@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -1514,6 +1515,19 @@ func TestGeneratedSourcesCheckParentVersion(t *testing.T) {
 			assertSources(t, extractTree(t, filepath.Join(root, "app")), tc.want)
 		})
 	}
+}
+
+// An explicitly empty <relativePath/> tells Maven to take the parent from
+// a repository, so a matching POM sitting at ../pom.xml contributes no
+// generators.
+func TestGeneratedSourcesIgnoreParentForEmptyRelativePath(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"pom.xml": parentPOM("local-parent", "1.0.0", withPlugins(antlrBound)),
+		"app/pom.xml": strings.Replace(childPOM("app", "local-parent", "1.0.0", "", ""),
+			"</version>", "</version><relativePath/>", 1),
+	})
+
+	assertSources(t, extractTree(t, filepath.Join(root, "app")), nil)
 }
 
 // Maven combines the goals of executions that share an id, so a module

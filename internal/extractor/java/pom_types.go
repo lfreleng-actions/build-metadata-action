@@ -35,12 +35,14 @@ type POM struct {
 	Profiles       *Profiles       `xml:"profiles"`
 }
 
-// Parent represents a parent POM reference
+// Parent represents a parent POM reference. RelativePath is nil when the
+// element is absent, which Maven reads as ../pom.xml, and points at an
+// empty string for <relativePath/>, which tells Maven not to look on disk.
 type Parent struct {
-	GroupID      string `xml:"groupId"`
-	ArtifactID   string `xml:"artifactId"`
-	Version      string `xml:"version"`
-	RelativePath string `xml:"relativePath"`
+	GroupID      string  `xml:"groupId"`
+	ArtifactID   string  `xml:"artifactId"`
+	Version      string  `xml:"version"`
+	RelativePath *string `xml:"relativePath"`
 }
 
 // Properties represents Maven properties
