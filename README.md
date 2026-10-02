@@ -302,6 +302,8 @@ All project types provide these standardized outputs:
 | `java_test_source_dirs`      | Test source directories           |
 | `java_coverage_tool`         | Coverage tool, when configured    |
 | `java_coverage_report_paths` | Coverage report locations         |
+| `java_generated_source_dirs` | Inferred generated source dirs    |
+| `java_generated_sources`     | Derivation of each generated dir  |
 
 The layout outputs describe where a scanner should look. They are
 module-relative, so a consumer applies them per module across a reactor,
@@ -316,6 +318,84 @@ is worse than telling it there is none. The action finds JaCoCo in
 `<build><plugins>`, in `<build><pluginManagement>`, and in declared
 modules — a reactor root often configures nothing itself and delegates to
 a parent module, as ONAP cps does with `cps-parent/pom.xml`.
+
+`java_generated_source_dirs` lists where the build will generate
+sources, so a scanner can exclude code nobody wrote. Unlike the other
+layout outputs this one is an inference, not a fact: the action runs
+before the build, so the directories do not exist yet, and the action
+reads generator plugin declarations instead. `java_generated_sources`
+gives each entry as a JSON object with its `module`, `path`, `plugin`
+and `derivation`. A `derivation` of `configured` means the POM sets the
+whole location, in the plugin's `<configuration>` or the properties
+backing it; `plugin-default` means some part of the location comes from
+the plugin's documented default, such as an openapi-generator output
+directory left unset above a configured `sourceFolder`.
+
+The action recognises `openapi-generator-maven-plugin`,
+`swagger-codegen-maven-plugin` (v2 and v3), `protobuf-maven-plugin`
+(xolstice and ascopes), `jaxb2-maven-plugin`, `antlr4-maven-plugin`,
+`jooq-codegen-maven` (every edition) and `jsonschema2pojo-maven-plugin`,
+plus annotation processors that write sources (MapStruct, Dagger,
+AutoValue, Hibernate's metamodel generator, QueryDSL and Immutables)
+whether declared as dependencies, including Maven 4's processor-path
+types, or on `annotationProcessorPaths`, per compiler execution and
+within any `annotationProcessors` allow-list. It reads configuration
+from executions, `<pluginManagement>` and on-disk parent POMs at any
+depth, as Maven merges them: inheritance one level at a time on the POMs
+as written, with `<inherited>` and `combine.self="override"`, then
+plugin coordinates, execution phases and goals interpolated before
+deciding what runs. It resolves inherited dependencies nearest first and
+walks every nested reactor module. A generator needs an execution
+binding its goal to count; one bound to the phase `none` or switched off
+by its `skip` parameter does not.
+
+The action follows the default build, a plain `mvn` with no `-P` and no
+`-D`, and merges in the profiles active there, as Maven does before
+inheritance. A profile counts when its conditions all hold, with file
+conditions checked against each module, and one marked
+`activeByDefault` counts when no other profile of its POM activates. The
+action leaves out a profile whose activation turns on the JDK, the
+operating system or a property the command line may set, along with any
+`activeByDefault` profile it could displace.
+
+The action never reports a directory that could hold hand-written
+sources. It refuses a path that holds or sits inside a source directory
+(a generator pointed at `${project.basedir}`, say), counting as source
+directories the declared ones, as the properties or build directory of
+any profile may set them, and every root `build-helper-maven-plugin`
+adds, in any profile, whichever module of the reactor they belong to. It
+compares where each directory lies on disk, a root a link moves
+included, and refuses a path reached through a link. For a module whose
+source directories it cannot all see, because it inherits from a parent
+it cannot read from disk, a root will not resolve, or a root rests on
+properties two profiles could set together, it reports nothing outside
+the build directory, which holds nothing but build output. The same goes
+for a path anywhere inside such a module, whichever module generates it,
+since a reactor root's unread parent can place a root in any module
+below it: the path must lie in some module's build directory, which
+`mvn clean` empties. It takes the build directory to be Maven's `target`
+unless a POM it can read sets another; if an unread parent moves it, a
+reported path under `target` is never created, so excluding it excludes
+nothing. Beyond that, when in doubt it leaves an entry out rather than
+guess: an unknown plugin, an unresolved property, a path outside the
+module, or a default the plugin version decides when that version is
+unknown. One assumption remains: javac stops searching the classpath for
+annotation processors at JDK 23 unless the build configures processing,
+and the action applies that to compilations targeting Java 23 or later,
+but cannot see which JDK builds an older one and assumes the search. A
+directory reported for a processor that does not run is never created;
+excluding it then excludes nothing.
+
+Since the flat list carries no module, `java_generated_source_dirs` also
+leaves out a path that overlaps hand-written sources in any module,
+modules of every profile included and those a module entry names under
+any profile's properties, a path that reaches through a link in any
+module, and any path that is not build output in every module whose
+source directories it cannot all see. When it cannot read a declared
+module at all, or a module entry rests on properties two profiles could
+set together, it publishes no flat list. `java_generated_sources` still
+records each entry against the module that generates it. Both outputs
+are absent when the build configures no recognised generator.
 
 The action resolves the Java level (`java_version`) in Maven's own
 precedence: the POM's `maven.compiler.release`, then

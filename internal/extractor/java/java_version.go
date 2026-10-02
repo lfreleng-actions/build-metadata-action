@@ -154,19 +154,7 @@ func javaVersionFromModules(projectPath string, pom *POM) (string, string) {
 		return "", ""
 	}
 	for _, module := range pom.Modules.Module {
-		// Reject absolute module paths: filepath.Join would discard
-		// projectPath and read a POM from outside the workspace.
-		if module == "" || filepath.IsAbs(module) {
-			continue
-		}
-		moduleDir := filepath.Join(projectPath, module)
-		// Reject modules whose "../" segments resolve outside the trusted
-		// workspace root, so a crafted module cannot read a POM elsewhere
-		// on the runner.
-		if !withinWorkspace(moduleDir) {
-			continue
-		}
-		modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
+		moduleDir, modulePOM, ok := loadModulePOM(projectPath, module)
 		if !ok {
 			continue
 		}
@@ -210,14 +198,19 @@ func effectiveProperties(projectPath string, pom *POM, depth int) map[string]str
 // (defaulting to "../pom.xml"), returning the parent's directory (for
 // further relativePath resolution) and the parsed POM. It returns ok=false
 // when no local parent file exists, which is the normal case for a bare
-// module checkout or a repository-root aggregator.
+// module checkout or a repository-root aggregator, and for an explicitly
+// empty <relativePath/>, with which a POM tells Maven to take the parent
+// from a repository and never from disk.
 func loadParentPOM(projectPath string, pom *POM) (string, *POM, bool) {
 	if pom.Parent == nil {
 		return "", nil, false
 	}
-	relativePath := pom.Parent.RelativePath
-	if relativePath == "" {
-		relativePath = "../pom.xml"
+	relativePath := "../pom.xml"
+	if pom.Parent.RelativePath != nil {
+		relativePath = strings.TrimSpace(*pom.Parent.RelativePath)
+		if relativePath == "" {
+			return "", nil, false
+		}
 	}
 	// Reject absolute relativePath values: filepath.Join would discard
 	// projectPath and could read an arbitrary file on the runner.
@@ -283,6 +276,31 @@ func withinWorkspace(candidate string) bool {
 		return true
 	}
 	return strings.HasPrefix(candidate, root+string(os.PathSeparator))
+}
+
+// loadModulePOM resolves a reactor <module> entry against projectPath and
+// parses its POM, returning the module directory alongside it. ok=false
+// covers a missing or malformed POM as well as a rejected path, so every
+// reactor traversal skips a module the same way and applies the same
+// guards.
+func loadModulePOM(projectPath, module string) (string, *POM, bool) {
+	// Reject absolute module paths: filepath.Join would discard
+	// projectPath and read a POM from outside the workspace.
+	if module == "" || filepath.IsAbs(module) {
+		return "", nil, false
+	}
+	moduleDir := filepath.Join(projectPath, module)
+	// Reject modules whose "../" segments resolve outside the trusted
+	// workspace root, so a crafted module cannot read a POM elsewhere
+	// on the runner.
+	if !withinWorkspace(moduleDir) {
+		return "", nil, false
+	}
+	modulePOM, ok := readPOM(filepath.Join(moduleDir, "pom.xml"))
+	if !ok {
+		return "", nil, false
+	}
+	return moduleDir, modulePOM, true
 }
 
 // readPOM reads and unmarshals a pom.xml, returning ok=false on any error so
