@@ -633,14 +633,23 @@ To keep pace with fast-evolving language ecosystems, the action uses a
 
 #### Rust Version Detection
 
-- **Primary**: Fetches current stable version from `rust-lang.org`
-  - Generates ~6 recent versions (9 months of releases)
-  - Adapts to Rust's 6-week release cycle automatically
+The Rust matrix (`rust_rust_version_matrix`, `rust_matrix_json`) holds
+the MSRV, the six most recent stable minor releases at or above it, and
+`stable`. With no MSRV it falls back to the first release supporting the
+edition, then `stable`.
+
+- **Primary**: Reads the current stable release from
+  `https://static.rust-lang.org/dist/channel-rust-stable.toml`
   - 5-second timeout prevents workflow delays
-- **Fallback**: Static version list (updated monthly)
+  - Cached for 72 hours within one run
+- **Fallback**: When that fetch fails, estimates the current stable
+  release from Rust's six-week release train, counted from a verified
+  release (1.99.0, 2026-10-01)
   - Ensures CI/CD reliability during network issues or API downtime
-  - Prevents build failures from temporary connectivity problems
-  - Provides reasonable version coverage even offline
+  - Produces the same matrix shape as the live path, without a
+    hand-maintained list going stale
+
+See [Rust version caching](docs/RUST_VERSION_CACHE.md) for details.
 
 #### Why This Approach?
 
