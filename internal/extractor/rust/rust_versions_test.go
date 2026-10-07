@@ -111,6 +111,11 @@ func TestRustVersionMatrixOffline(t *testing.T) {
 			msrv: "1.120",
 			want: []string{"1.120", "stable"},
 		},
+		{
+			name: "MSRV with a patch level appears once",
+			msrv: "1.97.0",
+			want: []string{"1.97.0", "1.98", "1.99", "stable"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -263,7 +263,10 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 
 	result := []string{msrv}
 	for _, v := range numericVersions {
-		if v != msrv {
+		// Skip the MSRV's own minor release: "1.97" duplicates an MSRV
+		// written as "1.97.0", adding a redundant matrix job.
+		major, minor, ok := parseMajorMinor(v)
+		if !ok || major != msrvMajor || minor != msrvMinor {
 			result = append(result, v)
 		}
 	}
