@@ -548,11 +548,186 @@ jobs:
             echo "    This may indicate missing extractor implementation"
           fi
 
+  ### Rust: toolchain file, publishable packages, nothing executed ###
+  test-rust:
+    name: "Test: Rust metadata"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Checkout test-rust-project"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lfreleng-actions/test-rust-project
+          ref: "5db6f8f6624e676d1d76f8db02a0253fee39900c" # v0.0.1
+          path: test-rust-project
+          persist-credentials: false
+
+      - name: "Generate Rust fixtures"
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$GITHUB_WORKSPACE/rust-fixtures"
+          mkdir -p "$root"
+
+          # A project for the path-toolchain check below
+          suffix="$(od -An -N4 -tx4 /dev/urandom | tr -d ' ')"
+          crate="lfreleng-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${suffix}"
+          project="$root/path-toolchain"
+          mkdir -p "$project/src"
+          printf '[package]\nname = "%s"\nversion = "0.1.0"\n' "$crate" \
+            > "$project/Cargo.toml"
+          : > "$project/src/lib.rs"
+
+          # The extractor's workspace fixture, with sources for cargo
+          cp -R internal/extractor/rust/testdata/workspace "$root/workspace"
+          find "$root/workspace" -name Cargo.toml -print0 |
+            while IFS= read -r -d '' manifest; do
+              mkdir -p "${manifest%/Cargo.toml}/src"
+              : > "${manifest%/Cargo.toml}/src/lib.rs"
+            done
+
+          git -C "$root" init -q
+          git -C "$root" add -A
+          git -C "$root" -c user.name=ci -c user.email=ci@example.invalid \
+            commit -q -m "Rust fixtures"
+
+          # cargo itself decides what the workspace fixture publishes
+          cd "$root/workspace"
+          cargo metadata --no-deps --format-version 1 --offline |
+            jq -c '(.workspace_root + "/") as $root
+              | [.packages[] | select(.publish != [])
+                | {name, version,
+                   manifest_path: (.manifest_path | ltrimstr($root))}
+                  + if .publish == null then {}
+                    else {registries: .publish} end]
+              | sort_by(.manifest_path)' \
+            > "$RUNNER_TEMP/workspace-packages.json"
+
+      - name: "Run on test-rust-project"
+        id: project
+        uses: $/
+        with:
+          path_prefix: test-rust-project
+
+      - name: "Run on the workspace fixture"
+        id: workspace
+        uses: $/
+        with:
+          path_prefix: rust-fixtures/workspace
+
+      # The action runs with GITHUB_WORKSPACE as its working directory,
+      # so a toolchain file there is what rustup would read if the action
+      # ran cargo or rustc from it. Each marker binary leaves EXECUTED
+      # behind when run.
+      - name: "Select a path toolchain for the whole workspace"
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="$GITHUB_WORKSPACE/marker-toolchain"
+          mkdir -p "$marker/bin"
+          for tool in cargo rustc; do
+            script='#!/bin/sh\ntouch "%s/EXECUTED"\necho "%s 9.9.9 (marker)"\n'
+            # shellcheck disable=SC2059 # the format is the script above
+            printf "$script" "$marker" "$tool" > "$marker/bin/$tool"
+            chmod +x "$marker/bin/$tool"
+          done
+          printf '[toolchain]\npath = "%s"\n' "$marker" \
+            > "$GITHUB_WORKSPACE/rust-toolchain.toml"
+
+      - name: "Run on a project under that path toolchain"
+        id: pathtc
+        uses: $/
+        with:
+          path_prefix: rust-fixtures/path-toolchain
+          include_environment: "true"
+
+      - name: "Verify Rust outputs"
+        shell: bash
+        env:
+          PROJECT_NAME: ${{ steps.project.outputs.rust_package_name }}
+          PROJECT_PACKAGES: >-
+            ${{ steps.project.outputs.rust_publishable_packages }}
+          PROJECT_COUNT: >-
+            ${{ steps.project.outputs.rust_publishable_package_count }}
+          PROJECT_KIND: ${{ steps.project.outputs.rust_toolchain_kind }}
+          WORKSPACE_PACKAGES: >-
+            ${{ steps.workspace.outputs.rust_publishable_packages }}
+          WORKSPACE_COUNT: >-
+            ${{ steps.workspace.outputs.rust_publishable_package_count }}
+          PATH_KIND: ${{ steps.pathtc.outputs.rust_toolchain_kind }}
+          PATH_FILE: ${{ steps.pathtc.outputs.rust_toolchain_file }}
+          PATH_CHANNEL: ${{ steps.pathtc.outputs.rust_toolchain_channel }}
+          PATH_METADATA: ${{ steps.pathtc.outputs.metadata_json }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          check "test-rust-project package name" "$PROJECT_NAME" \
+            "lfreleng-test-rust-project"
+          check "test-rust-project publishable packages" \
+            "$PROJECT_PACKAGES" \
+            '[{"name":"lfreleng-test-rust-project","version":"0.1.0","manifest_path":"Cargo.toml"}]'
+          check "test-rust-project publishable count" "$PROJECT_COUNT" "1"
+          check "test-rust-project toolchain kind" "$PROJECT_KIND" "none"
+
+          want="$(cat "$RUNNER_TEMP/workspace-packages.json")"
+          check "workspace packages match cargo metadata" \
+            "$WORKSPACE_PACKAGES" "$want"
+          check "workspace publishable count" "$WORKSPACE_COUNT" \
+            "$(jq length <<< "$want")"
+
+          check "path toolchain kind" "$PATH_KIND" "path"
+          check "path toolchain file" "$PATH_FILE" "../../rust-toolchain.toml"
+          check "path toolchain channel" "$PATH_CHANNEL" ""
+          marker="$GITHUB_WORKSPACE/marker-toolchain"
+          if [ -e "$marker/EXECUTED" ]; then
+            echo "::error::The action ran the project's path toolchain"
+            fail=1
+          else
+            echo "✅ the action ran nothing from the path toolchain"
+          fi
+          if grep -qF -e "(marker)" -e "$marker" <<< "$PATH_METADATA"; then
+            echo "::error::metadata_json carries the path toolchain"
+            fail=1
+          fi
+
+          # Positive control: rustup does run the marker toolchain when
+          # cargo starts in the workspace, so its absence above means
+          # something
+          version="$(cargo --version)"
+          check "control: cargo in the workspace runs the marker" \
+            "$version" "cargo 9.9.9 (marker)"
+          if [ ! -e "$marker/EXECUTED" ]; then
+            echo "::error::Control: the marker toolchain left no marker"
+            fail=1
+          fi
+          exit "$fail"
+
   ### Summary Job ###
   test-summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
-    needs: [test-self, test-matrix]
+    needs: [test-self, test-matrix, test-rust]
     if: always()
     permissions:
       contents: read
@@ -564,6 +739,7 @@ jobs:
           # Env-mediated to avoid template expansion in the run block
           SELF_TEST: ${{ needs.test-self.result }}
           MATRIX_TEST: ${{ needs.test-matrix.result }}
+          RUST_TEST: ${{ needs.test-rust.result }}
         run: |
           # Count tests by checking job results
 
@@ -586,6 +762,12 @@ jobs:
             else
               echo "| Matrix Tests (54 projects) |" \
                 "⚠️  Completed with warnings |"
+            fi
+
+            if [ "$RUST_TEST" = "success" ]; then
+              echo "| Rust Metadata | ✅ Passed |"
+            else
+              echo "| Rust Metadata | ❌ Failed |"
             fi
 
             echo ""
