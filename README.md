@@ -493,12 +493,65 @@ supported releases applies instead.
 
 #### Rust
 
-| Output                   | Description           |
-| ------------------------ | --------------------- |
-| `rust_version`           | Rust compiler version |
-| `cargo_version`          | Cargo version         |
-| `rust_edition`           | Rust edition          |
-| `rust_workspace_members` | Workspace members     |
+<!-- markdownlint-disable MD013 -->
+
+| Output                        | Description                                                         |
+| ----------------------------- | ------------------------------------------------------------------- |
+| `rust_package_name`           | Package name from `Cargo.toml`                                      |
+| `rust_metadata_source`        | Source of Rust metadata (`Cargo.toml`)                              |
+| `rust_edition`                | Rust edition                                                        |
+| `rust_msrv`                   | MSRV: the oldest Rust release the project supports (`rust-version`) |
+| `rust_rust_version`           | Same value as `rust_msrv`, named after Cargo's field                |
+| `rust_rust_version_matrix`    | Rust versions to test against (comma-separated)                     |
+| `rust_matrix_json`            | Rust version test matrix as JSON                                    |
+| `rust_documentation`          | Documentation URL                                                   |
+| `rust_keywords`               | Package keywords (comma-separated)                                  |
+| `rust_categories`             | crates.io categories (comma-separated)                              |
+| `rust_publish`                | `publish` setting: `true`, `false` or a JSON array of registries    |
+| `rust_license_file`           | License file path                                                   |
+| `rust_readme`                 | README path                                                         |
+| `rust_dependencies`           | Normal dependencies as `name@version` (comma-separated)             |
+| `rust_dependency_count`       | Number of normal dependencies                                       |
+| `rust_optional_dependencies`  | Names of optional dependencies (comma-separated)                    |
+| `rust_dev_dependencies`       | Dev-dependencies as `name@version` (comma-separated)                |
+| `rust_dev_dependency_count`   | Number of dev-dependencies                                          |
+| `rust_build_dependencies`     | Build-dependencies as `name@version` (comma-separated)              |
+| `rust_build_dependency_count` | Number of build-dependencies                                        |
+| `rust_total_dependency_count` | Normal, dev- and build-dependencies together                        |
+| `rust_features`               | JSON object mapping each feature to what it enables                 |
+| `rust_feature_names`          | Feature names, sorted (comma-separated)                             |
+| `rust_feature_count`          | Number of features                                                  |
+| `rust_is_workspace`           | `true` when `[workspace]` lists members                             |
+| `rust_workspace_members`      | `[workspace]` members entries as written, globs unexpanded          |
+| `rust_workspace_member_count` | Number of `[workspace]` members entries                             |
+| `rust_workspace_resolver`     | Workspace dependency resolver version                               |
+| `rust_binary_targets`         | Declared `[[bin]]` target names (comma-separated)                   |
+| `rust_binary_count`           | Number of declared `[[bin]]` targets                                |
+| `rust_lib_name`               | `[lib]` target name                                                 |
+| `rust_crate_types`            | `[lib]` crate types (comma-separated)                               |
+| `rust_has_build_script`       | `true` when `package.build` names a build script                    |
+| `rust_build_script`           | Build script path from `package.build`                              |
+| `rust_frameworks`             | Frameworks detected from dependencies (comma-separated)             |
+
+<!-- markdownlint-enable MD013 -->
+
+An output is empty when `Cargo.toml` does not set the value. Fields
+inherited with `{ workspace = true }` resolve against
+`[workspace.package]` in the same manifest.
+
+`rust_msrv` and `rust_rust_version` both carry the MSRV, the oldest
+Rust release the project declares support for. Neither reports a
+compiler: the action runs no Rust toolchain to produce its outputs.
+With `include_environment` enabled, `metadata_json` records under
+`environment.tools` the `rustc` and `cargo` versions of the toolchain
+the job environment selects: the rustup default, or `RUSTUP_TOOLCHAIN`
+when the job sets it. The action probes them from the system temporary
+directory, so a `rust-toolchain` file in the repository can neither
+select nor run them.
+
+Dependency entries carry `(optional)` and a `[feature, ...]` list where
+set. Those lists contain commas too, so parse `metadata_json` when you
+need exact values.
 
 ## Example Output
 
