@@ -39,26 +39,26 @@ type CargoToml struct {
 // Package represents the [package] section of Cargo.toml
 type Package struct {
 	Name          string                 `toml:"name"`
-	Version       interface{}            `toml:"version"`      // Can be string or map (workspace inheritance)
-	Authors       interface{}            `toml:"authors"`      // Can be []string or map (workspace inheritance)
-	Edition       interface{}            `toml:"edition"`      // Can be string or map (workspace inheritance)
-	RustVersion   interface{}            `toml:"rust-version"` // Can be string or map (workspace inheritance)
-	Description   interface{}            `toml:"description"`  // Can be string or map (workspace inheritance)
-	Documentation string                 `toml:"documentation"`
-	Homepage      interface{}            `toml:"homepage"`   // Can be string or map (workspace inheritance)
-	Repository    interface{}            `toml:"repository"` // Can be string or map (workspace inheritance)
-	License       interface{}            `toml:"license"`    // Can be string or map (workspace inheritance)
-	LicenseFile   string                 `toml:"license-file"`
-	Keywords      interface{}            `toml:"keywords"`   // Can be []string or map (workspace inheritance)
-	Categories    interface{}            `toml:"categories"` // Can be []string or map (workspace inheritance)
-	Readme        interface{}            `toml:"readme"`     // Can be string or map (workspace inheritance)
-	Publish       interface{}            `toml:"publish"`
+	Version       interface{}            `toml:"version"`       // Can be string or map (workspace inheritance)
+	Authors       interface{}            `toml:"authors"`       // Can be []string or map (workspace inheritance)
+	Edition       interface{}            `toml:"edition"`       // Can be string or map (workspace inheritance)
+	RustVersion   interface{}            `toml:"rust-version"`  // Can be string or map (workspace inheritance)
+	Description   interface{}            `toml:"description"`   // Can be string or map (workspace inheritance)
+	Documentation interface{}            `toml:"documentation"` // Can be string or map (workspace inheritance)
+	Homepage      interface{}            `toml:"homepage"`      // Can be string or map (workspace inheritance)
+	Repository    interface{}            `toml:"repository"`    // Can be string or map (workspace inheritance)
+	License       interface{}            `toml:"license"`       // Can be string or map (workspace inheritance)
+	LicenseFile   interface{}            `toml:"license-file"`  // Can be string or map (workspace inheritance)
+	Keywords      interface{}            `toml:"keywords"`      // Can be []string or map (workspace inheritance)
+	Categories    interface{}            `toml:"categories"`    // Can be []string or map (workspace inheritance)
+	Readme        interface{}            `toml:"readme"`        // Can be string, bool or map (workspace inheritance)
+	Publish       interface{}            `toml:"publish"`       // Can be bool, []string or map (workspace inheritance)
 	Metadata      map[string]interface{} `toml:"metadata"`
 	DefaultRun    string                 `toml:"default-run"`
 	AutoBenches   bool                   `toml:"autobins"`
 	AutoExamples  bool                   `toml:"autoexamples"`
 	AutoTests     bool                   `toml:"autotests"`
-	Build         string                 `toml:"build"`
+	Build         interface{}            `toml:"build"` // Can be a path string or bool
 }
 
 // Workspace represents the [workspace] section of Cargo.toml
@@ -71,16 +71,20 @@ type Workspace struct {
 
 // WorkspacePackage represents workspace-level package metadata
 type WorkspacePackage struct {
-	Version     string   `toml:"version"`
-	Authors     []string `toml:"authors"`
-	Edition     string   `toml:"edition"`
-	RustVersion string   `toml:"rust-version"`
-	Description string   `toml:"description"`
-	Homepage    string   `toml:"homepage"`
-	Repository  string   `toml:"repository"`
-	License     string   `toml:"license"`
-	Keywords    []string `toml:"keywords"`
-	Categories  []string `toml:"categories"`
+	Version       string      `toml:"version"`
+	Authors       []string    `toml:"authors"`
+	Edition       string      `toml:"edition"`
+	RustVersion   string      `toml:"rust-version"`
+	Description   string      `toml:"description"`
+	Documentation string      `toml:"documentation"`
+	Homepage      string      `toml:"homepage"`
+	Repository    string      `toml:"repository"`
+	License       string      `toml:"license"`
+	LicenseFile   string      `toml:"license-file"`
+	Keywords      []string    `toml:"keywords"`
+	Categories    []string    `toml:"categories"`
+	Readme        interface{} `toml:"readme"`  // Can be string or bool
+	Publish       interface{} `toml:"publish"` // Can be bool or []string
 }
 
 // Bin represents a [[bin]] section

@@ -84,8 +84,8 @@ func applyPackageDetails(cargo *CargoToml, metadata *extractor.ProjectMetadata) 
 		metadata.LanguageSpecific["msrv"] = rustVersion
 	}
 
-	if cargo.Package.Documentation != "" {
-		metadata.LanguageSpecific["documentation"] = cargo.Package.Documentation
+	if documentation, ok := inheritedValue(cargo.Package.Documentation, cargo.Workspace.Package.Documentation).(string); ok && documentation != "" {
+		metadata.LanguageSpecific["documentation"] = documentation
 	}
 
 	keywords := getStringSliceValue(cargo.Package.Keywords, cargo.Workspace.Package.Keywords)
@@ -98,16 +98,16 @@ func applyPackageDetails(cargo *CargoToml, metadata *extractor.ProjectMetadata) 
 		metadata.LanguageSpecific["categories"] = categories
 	}
 
-	if cargo.Package.Publish != nil {
-		metadata.LanguageSpecific["publish"] = cargo.Package.Publish
+	if publish := inheritedValue(cargo.Package.Publish, cargo.Workspace.Package.Publish); publish != nil {
+		metadata.LanguageSpecific["publish"] = publish
 	}
 
-	if cargo.Package.LicenseFile != "" {
-		metadata.LanguageSpecific["license_file"] = cargo.Package.LicenseFile
+	if licenseFile, ok := inheritedValue(cargo.Package.LicenseFile, cargo.Workspace.Package.LicenseFile).(string); ok && licenseFile != "" {
+		metadata.LanguageSpecific["license_file"] = licenseFile
 	}
 
-	readme := getStringValue(cargo.Package.Readme, "")
-	if readme != "" {
+	// readme = false disables README detection; only a path is reported.
+	if readme, ok := inheritedValue(cargo.Package.Readme, cargo.Workspace.Package.Readme).(string); ok && readme != "" {
 		metadata.LanguageSpecific["readme"] = readme
 	}
 
@@ -192,9 +192,10 @@ func applyProjectStructure(cargo *CargoToml, metadata *extractor.ProjectMetadata
 		}
 	}
 
-	if cargo.Package.Build != "" {
+	// build = false disables the build script; only a path is reported.
+	if buildScript, ok := cargo.Package.Build.(string); ok && buildScript != "" {
 		metadata.LanguageSpecific["has_build_script"] = true
-		metadata.LanguageSpecific["build_script"] = cargo.Package.Build
+		metadata.LanguageSpecific["build_script"] = buildScript
 	}
 }
 
@@ -223,6 +224,19 @@ func applyFrameworksAndMatrix(cargo *CargoToml, metadata *extractor.ProjectMetad
 			metadata.LanguageSpecific["matrix_json"] = matrixJSON
 		}
 	}
+}
+
+// inheritedValue resolves a field that may be `{ workspace = true }` to
+// the workspace default, returning any other value unchanged. A map
+// without that marker is malformed and treated as absent.
+func inheritedValue(value, workspaceDefault interface{}) interface{} {
+	if m, ok := value.(map[string]interface{}); ok {
+		if inherit, ok := m["workspace"].(bool); ok && inherit {
+			return workspaceDefault
+		}
+		return nil
+	}
+	return value
 }
 
 // getStringValue extracts a string from an interface{} that could be a string or workspace reference
