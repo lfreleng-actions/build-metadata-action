@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# A project pinning its toolchain with rust-toolchain.toml.
+
+[package]
+name = "toolchain-demo"
+version = "0.1.0"
+edition = "2024"

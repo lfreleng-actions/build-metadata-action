@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -27,6 +28,7 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 	applyDependencyMetadata(&cargo, metadata)
 	applyProjectStructure(&cargo, metadata)
 	applyFrameworksAndMatrix(&cargo, metadata, edition, rustVersion)
+	applyToolchain(filepath.Dir(path), metadata.LanguageSpecific)
 
 	return nil
 }

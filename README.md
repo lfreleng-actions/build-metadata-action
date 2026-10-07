@@ -532,6 +532,12 @@ supported releases applies instead.
 | `rust_has_build_script`       | `true` when `package.build` names a build script                    |
 | `rust_build_script`           | Build script path from `package.build`                              |
 | `rust_frameworks`             | Frameworks detected from dependencies (comma-separated)             |
+| `rust_toolchain_kind`         | Toolchain the toolchain file selects: `channel`, `path` or `none`   |
+| `rust_toolchain_file`         | Toolchain file rustup reads, relative to the project directory      |
+| `rust_toolchain_channel`      | Channel or toolchain name from the toolchain file                   |
+| `rust_toolchain_components`   | Components from the toolchain file (comma-separated)                |
+| `rust_toolchain_targets`      | Targets from the toolchain file (comma-separated)                   |
+| `rust_toolchain_profile`      | Profile from the toolchain file                                     |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -548,6 +554,31 @@ the job environment selects: the rustup default, or `RUSTUP_TOOLCHAIN`
 when the job sets it. The action probes them from the system temporary
 directory, so a `rust-toolchain` file in the repository can neither
 select nor run them.
+
+The `rust_toolchain_*` outputs describe the toolchain a project selects
+through a rustup toolchain file, so later steps can install it. The
+action parses the file itself, the way rustup finds it: the nearest
+`rust-toolchain` or `rust-toolchain.toml` in the project directory or
+a parent, where the legacy `rust-toolchain` wins when both exist.
+Under GitHub Actions the search stops at `GITHUB_WORKSPACE`, and a
+symlinked file must resolve inside it. The search compares real paths,
+as rustup starts from the real working directory, and skips with a
+warning a project directory that resolves outside the workspace. A
+file that selects a toolchain by absolute path (a lone `path` key, or
+a legacy one-line `rust-toolchain` naming one) reports
+`rust_toolchain_kind` as `path` and leaves the path out of every
+output. A file rustup rejects (a relative `path`, a `path` beside
+other keys, a path in `channel`, the reserved name `none`, a legacy
+`rust-toolchain` with a blank line before or after its name, no
+`channel`, `path`, `components` or `targets` key, or an unknown
+`profile` for anything but a custom toolchain) reports `none` with a
+warning annotation. A valid file with `components` or `targets` but
+no `channel` or `path` also reports
+`none`, without a warning, since rustup then keeps its default
+toolchain; `rust_toolchain_file` names the file in both cases and
+stays empty when there is none. Names outside `[A-Za-z0-9._+-]` get
+dropped with a warning annotation that names the problem without
+repeating the content.
 
 Dependency entries carry `(optional)` and a `[feature, ...]` list where
 set. Those lists contain commas too, so parse `metadata_json` when you

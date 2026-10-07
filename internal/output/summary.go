@@ -393,6 +393,7 @@ func writeRustRows(sb *strings.Builder, metadata map[string]interface{}) {
 	writeStringRows(sb, metadata, []stringRow{
 		{"edition", "Rust Edition", false},
 		{"msrv", "MSRV", false},
+		{"toolchain_channel", "Rust Toolchain", true},
 	})
 }
 

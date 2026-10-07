@@ -777,6 +777,39 @@ outputs:
       (Tokio, Serde, Axum, etc.)
     value: ${{ steps.extract.outputs.rust_frameworks }}
 
+  rust_toolchain_kind:
+    description: >-
+      Toolchain the project's rustup toolchain file selects: 'channel',
+      'path' (a directory of binaries) or 'none' (no channel or path:
+      no file, a file rustup rejects, or a valid file with components
+      or targets but no channel or path, which leaves rustup on its
+      default toolchain); read from the file, never by running rustup
+    value: ${{ steps.extract.outputs.rust_toolchain_kind }}
+
+  rust_toolchain_file:
+    description: >-
+      Toolchain file rustup reads, relative to the project directory
+      (rust-toolchain or rust-toolchain.toml, here or in a parent)
+    value: ${{ steps.extract.outputs.rust_toolchain_file }}
+
+  rust_toolchain_channel:
+    description: >-
+      Channel or toolchain name the toolchain file selects; empty for a
+      path toolchain
+    value: ${{ steps.extract.outputs.rust_toolchain_channel }}
+
+  rust_toolchain_components:
+    description: "Comma-separated components from the toolchain file"
+    value: ${{ steps.extract.outputs.rust_toolchain_components }}
+
+  rust_toolchain_targets:
+    description: "Comma-separated targets from the toolchain file"
+    value: ${{ steps.extract.outputs.rust_toolchain_targets }}
+
+  rust_toolchain_profile:
+    description: "Profile from the toolchain file: minimal, default or complete"
+    value: ${{ steps.extract.outputs.rust_toolchain_profile }}
+
   # Success Indicator
   success:
     description: "Whether extraction succeeded"
