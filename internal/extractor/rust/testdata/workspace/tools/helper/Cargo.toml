@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# A path dependency of kept, under the excluded tools/.
+[package]
+name = "helper"
+version = "0.1.0"
+edition = "2021"

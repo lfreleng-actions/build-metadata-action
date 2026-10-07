@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# publish = false: never published.
+[package]
+name = "beta"
+version = "2.0.0"
+publish = false
+edition = "2021"

@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# Under the excluded tools/, but members names it.
+[package]
+name = "kept"
+version = "0.1.0"
+edition = "2021"
+
+[target."cfg(unix)".dev-dependencies]
+helper = { path = "../helper" }

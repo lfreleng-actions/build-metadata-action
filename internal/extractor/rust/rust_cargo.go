@@ -29,6 +29,7 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 	applyProjectStructure(&cargo, metadata)
 	applyFrameworksAndMatrix(&cargo, metadata, edition, rustVersion)
 	applyToolchain(filepath.Dir(path), metadata.LanguageSpecific)
+	applyPublishable(path, metadata.LanguageSpecific)
 
 	return nil
 }

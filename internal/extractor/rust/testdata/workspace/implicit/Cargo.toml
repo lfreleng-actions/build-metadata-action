@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# A member only through the root package path dependency.
+[package]
+name = "implicit"
+version = "0.4.0"
+edition = "2021"

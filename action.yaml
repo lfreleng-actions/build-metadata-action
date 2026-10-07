@@ -810,6 +810,18 @@ outputs:
     description: "Profile from the toolchain file: minimal, default or complete"
     value: ${{ steps.extract.outputs.rust_toolchain_profile }}
 
+  rust_publishable_packages:
+    description: >-
+      JSON array of the workspace packages cargo publish would upload,
+      each {name, version, manifest_path, registries}; manifest_path is
+      relative to path_prefix and registries appears when publish
+      restricts them; '[]' when none
+    value: ${{ steps.extract.outputs.rust_publishable_packages }}
+
+  rust_publishable_package_count:
+    description: "Number of entries in rust_publishable_packages"
+    value: ${{ steps.extract.outputs.rust_publishable_package_count }}
+
   # Success Indicator
   success:
     description: "Whether extraction succeeded"

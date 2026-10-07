@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# publish = []: no registry allowed.
+[package]
+name = "delta"
+version = "1.0.0"
+publish = []
+edition = "2021"
