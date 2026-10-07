@@ -275,9 +275,12 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	return result
 }
 
-// generateRustVersionMatrixFromEdition generates versions based on Rust edition
+// generateRustVersionMatrixFromEdition pairs an edition with the first
+// stable release that supports it.
 func generateRustVersionMatrixFromEdition(edition string) []string {
 	switch edition {
+	case "2024":
+		return []string{"1.85", "stable"}
 	case "2021":
 		return []string{"1.56", "stable"}
 	case "2018":

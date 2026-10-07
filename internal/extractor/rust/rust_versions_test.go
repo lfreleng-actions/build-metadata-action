@@ -126,3 +126,23 @@ func TestRustVersionMatrixOffline(t *testing.T) {
 		})
 	}
 }
+
+// Without an MSRV the matrix starts at the first release supporting the
+// edition; edition 2024 was stabilised in 1.85.
+func TestRustVersionMatrixFromEachEdition(t *testing.T) {
+	tests := map[string]string{
+		"2024": `{"rust-version": ["1.85", "stable"]}`,
+		"2021": `{"rust-version": ["1.56", "stable"]}`,
+		"2018": `{"rust-version": ["1.31", "stable"]}`,
+		"2015": `{"rust-version": ["1.0", "stable"]}`,
+		"2030": `{"rust-version": ["stable"]}`,
+	}
+	for edition, want := range tests {
+		t.Run(edition, func(t *testing.T) {
+			got := extractManifest(t, "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \""+edition+"\"\n")
+			if got["matrix_json"] != want {
+				t.Errorf("matrix_json = %v, want %s", got["matrix_json"], want)
+			}
+		})
+	}
+}
