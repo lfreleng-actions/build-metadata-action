@@ -6,6 +6,7 @@ package environment
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -237,9 +238,69 @@ func detectToolVersions(metadata *Metadata) {
 	}
 }
 
+// rustupProxies names the probed tools that rustup installs as proxies.
+// A proxy picks its toolchain from a rust-toolchain(.toml) file in the
+// working directory or any parent, and a file naming an absolute `path`
+// makes it execute the binaries under that path. Run from the checkout,
+// a version probe would therefore run code the repository supplies, or
+// download and install whatever channel the file names.
+var rustupProxies = map[string]bool{
+	"cargo": true,
+	"rustc": true,
+}
+
+// rustToolchainFiles names the files rustup reads to select a
+// toolchain, searching the working directory and then every parent.
+var rustToolchainFiles = []string{"rust-toolchain", "rust-toolchain.toml"}
+
+// toolWorkDir returns the directory a version probe runs in, and false
+// when the probe must not run. Other tools run in "" (the current
+// directory). Rustup proxies run in the system temporary directory, but
+// TMPDIR is configurable and may point into the checkout on a
+// self-hosted runner, so the resolved directory must lie outside
+// GITHUB_WORKSPACE and neither it nor any parent may hold a toolchain
+// file.
+func toolWorkDir(tool string) (string, bool) {
+	if !rustupProxies[tool] {
+		return "", true
+	}
+	dir, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		return "", false
+	}
+	if dir, err = filepath.Abs(dir); err != nil {
+		return "", false
+	}
+	if workspace := os.Getenv("GITHUB_WORKSPACE"); workspace != "" {
+		realWorkspace, err := filepath.EvalSymlinks(workspace)
+		if err != nil {
+			return "", false
+		}
+		if rel, err := filepath.Rel(realWorkspace, dir); err != nil ||
+			(rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+			return "", false
+		}
+	}
+	for search := dir; ; search = filepath.Dir(search) {
+		for _, name := range rustToolchainFiles {
+			if _, err := os.Lstat(filepath.Join(search, name)); !os.IsNotExist(err) {
+				return "", false
+			}
+		}
+		if filepath.Dir(search) == search {
+			return dir, true
+		}
+	}
+}
+
 // getToolVersion attempts to get the version of a tool
 func getToolVersion(tool string, args ...string) string {
+	dir, ok := toolWorkDir(tool)
+	if !ok {
+		return ""
+	}
 	cmd := exec.Command(tool, args...)
+	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return ""

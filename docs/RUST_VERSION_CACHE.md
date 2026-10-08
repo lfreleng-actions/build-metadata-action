@@ -53,9 +53,21 @@ The cache uses `sync.RWMutex` to ensure thread-safe access:
    - Store in cache with current timestamp
    - Return versions
 
-3. **Network Failure**:
-   - Fall back to static version map
-   - Don't update cache (preserve old data if available)
+3. **Network Failure** (unreachable, non-200, timeout, unparsable):
+   - Estimate the current stable release from the release train (see
+     below) and generate the same range from it
+   - Don't update the cache (preserve old data if available)
+
+### Offline Fallback
+
+Rust ships a stable minor release every six weeks. The fallback starts
+from a verified anchor (1.99.0, released on 2026-10-01), adds one minor
+release for every full six weeks since, and counts a release once its
+day has passed. An offline runner gets the same shape of matrix as an
+online one, without a hand-maintained list that goes stale between
+releases. Should the release train ever slip, the estimate can name a
+release that is not yet out; moving the anchor to a newer verified
+release corrects it.
 
 ## Benefits
 
@@ -69,7 +81,8 @@ The cache uses `sync.RWMutex` to ensure thread-safe access:
 ### Reliability
 
 - 72-hour window protects against temporary network issues
-- Static fallback ensures builds never fail due to network problems
+- The release-train fallback ensures builds never fail due to network
+  problems
 - Cache persists for the lifetime of the process
 
 ### Freshness
@@ -85,6 +98,11 @@ Comprehensive test coverage includes:
 1. **TestRustVersionCaching**: Verifies cache population and reuse
 2. **TestRustVersionCacheExpiration**: Verifies TTL behavior
 3. **TestRustVersionCacheConcurrency**: Verifies thread-safe access
+4. **TestRustVersionMatrixFromChannelManifest** and
+   **TestRustVersionMatrixOffline**: Serve the manifest from a local
+   server, or fail it, to check both paths without network access
+5. **TestFallbackStableVersionFollowsTheReleaseTrain**: Verifies the
+   release-train estimate
 
 All tests pass with both successful and failed network scenarios.
 
@@ -99,13 +117,17 @@ The cache exists during the GitHub Action execution:
 
 ## Comparison with Other Approaches
 
-| Approach | Duration | Pros | Cons |
-| -------- | -------- | ---- | ---- |
-| No cache | N/A | Always fresh | Slow, network dependent |
-| 1-hour cache | 1 hour | Fresh | Less performance benefit |
-| **72-hour cache** | **3 days** | **Fresh & fast** | **Recommended** |
-| 1-week cache | 7 days | Fast | May miss new releases |
-| Persistent cache | Until cleared | Fast | Requires cache management |
+<!-- markdownlint-disable MD013 -->
+
+| Approach          | Duration      | Pros             | Cons                      |
+| ----------------- | ------------- | ---------------- | ------------------------- |
+| No cache          | N/A           | Always fresh     | Slow, network dependent   |
+| 1-hour cache      | 1 hour        | Fresh            | Less performance benefit  |
+| **72-hour cache** | **3 days**    | **Fresh & fast** | **Recommended**           |
+| 1-week cache      | 7 days        | Fast             | May miss new releases     |
+| Persistent cache  | Until cleared | Fast             | Requires cache management |
+
+<!-- markdownlint-enable MD013 -->
 
 ## Future Enhancements
 
@@ -118,6 +140,8 @@ Potential improvements (not yet implemented):
 
 ## Related Files
 
-- Implementation: `internal/extractor/rust/rust.go`
-- Tests: `internal/extractor/rust/rust_test.go`
-- Fallback data: Static version map in `generateRustVersionMatrix()`
+- Implementation: `internal/extractor/rust/rust_versions.go`
+- Tests: `internal/extractor/rust/rust_test.go` and
+  `internal/extractor/rust/rust_versions_test.go`
+- Fallback anchor: `fallbackAnchorMinor` and `fallbackAnchorDate` in
+  `rust_versions.go`

@@ -24,6 +24,38 @@ var rustVersionCache struct {
 	cacheTTL  time.Duration
 }
 
+// rustStableChannelURL is the rustup manifest of the current stable
+// release. Tests point it at a local server.
+var rustStableChannelURL = "https://static.rust-lang.org/dist/channel-rust-stable.toml"
+
+// now is the clock behind the offline fallback; tests replace it.
+var now = time.Now
+
+// The offline fallback extrapolates the current stable release from a
+// verified one. Rust has shipped a stable minor release every six weeks
+// since 1.1, so the anchor needs updating only if that train changes.
+// Verified against static.rust-lang.org: 1.99.0 shipped on 2026-10-01.
+const (
+	fallbackAnchorMinor = 99
+	releaseInterval     = 6 * 7 * 24 * time.Hour
+	// releaseGrace delays counting a release until its day has passed,
+	// since the artefacts publish during the day, not at midnight UTC.
+	releaseGrace = 24 * time.Hour
+)
+
+var fallbackAnchorDate = time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
+
+// fallbackStableVersion estimates the current stable release ("1.N")
+// from the release train, for use when the channel manifest is
+// unreachable. It never reports a release older than the anchor.
+func fallbackStableVersion(at time.Time) string {
+	minor := fallbackAnchorMinor
+	if elapsed := at.Sub(fallbackAnchorDate) - releaseGrace; elapsed > 0 {
+		minor += int(elapsed / releaseInterval)
+	}
+	return fmt.Sprintf("1.%d", minor)
+}
+
 func init() {
 	// Rust releases every 6 weeks, so a 72-hour TTL is conservative.
 	rustVersionCache.cacheTTL = 72 * time.Hour
@@ -59,7 +91,7 @@ func fetchRustVersions() ([]string, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get("https://static.rust-lang.org/dist/channel-rust-stable.toml")
+	resp, err := client.Get(rustStableChannelURL)
 	if err != nil {
 		return nil, err
 	}
@@ -139,25 +171,6 @@ func parseMajorMinor(version string) (int, int, bool) {
 	return major, minor, true
 }
 
-// msrvBelow reports whether the major.minor MSRV is numerically lower
-// than the threshold (also major.minor). String comparison is unsafe
-// here because it is lexicographic ("1.9" would sort after "1.75"). A
-// malformed MSRV returns false so callers fall through to their default.
-func msrvBelow(msrv, threshold string) bool {
-	mMajor, mMinor, ok := parseMajorMinor(msrv)
-	if !ok {
-		return false
-	}
-	tMajor, tMinor, ok := parseMajorMinor(threshold)
-	if !ok {
-		return false
-	}
-	if mMajor != tMajor {
-		return mMajor < tMajor
-	}
-	return mMinor < tMinor
-}
-
 // cloneVersions returns an independent copy of the given slice so that
 // the shared version cache cannot be mutated through a returned slice.
 func cloneVersions(versions []string) []string {
@@ -171,55 +184,17 @@ func cloneVersions(versions []string) []string {
 
 // generateRustVersionMatrix generates a list of Rust versions from MSRV.
 //
-// Strategy:
-// 1. PRIMARY: Dynamically fetch current Rust versions from rust-lang.org
-//   - Ensures we always test against the latest stable releases
-//   - Rust's 6-week release cycle makes static lists outdated quickly
-//   - Generates a range of ~6 recent versions (approximately 9 months)
-//
-// 2. FALLBACK: Use static version map if dynamic fetch fails
-//   - Prevents workflow failures due to network issues or API downtime
-//   - Static list is maintained with recent versions as of code update
-//   - Ensures CI/CD pipelines remain reliable even with connectivity issues
-//
-// The fallback ensures that temporary network issues or API maintenance don't
-// cause build failures, while the dynamic approach keeps testing current.
+// The matrix holds the MSRV, the six most recent stable minor releases
+// at or above it, and "stable". The recent releases come from the live
+// stable channel manifest; when that is unreachable (network issues,
+// timeout) they are extrapolated from the six-week release train, so an
+// offline runner gets the same shape of matrix rather than a stale list.
 func generateRustVersionMatrix(msrv string) []string {
-	dynamicVersions, err := fetchRustVersions()
-	if err == nil && len(dynamicVersions) > 0 {
-		return filterVersionsFromMSRV(msrv, dynamicVersions)
+	versions, err := fetchRustVersions()
+	if err != nil || len(versions) == 0 {
+		versions = generateVersionRange(fallbackStableVersion(now()))
 	}
-
-	// Static fallback used only when the dynamic fetch fails (network issues,
-	// API down, timeout); kept current as of November 2025.
-	versionMap := map[string][]string{
-		"1.84": {"1.84", "stable"},
-		"1.83": {"1.83", "1.84", "stable"},
-		"1.82": {"1.82", "1.83", "1.84", "stable"},
-		"1.81": {"1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.80": {"1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.79": {"1.79", "1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.78": {"1.78", "1.79", "1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.77": {"1.77", "1.78", "1.79", "1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.76": {"1.76", "1.77", "1.78", "1.79", "1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-		"1.75": {"1.75", "1.76", "1.77", "1.78", "1.79", "1.80", "1.81", "1.82", "1.83", "1.84", "stable"},
-	}
-
-	if versions, ok := versionMap[msrv]; ok {
-		return versions
-	}
-
-	for version, testVersions := range versionMap {
-		if strings.HasPrefix(msrv, version) {
-			return testVersions
-		}
-	}
-
-	if msrvBelow(msrv, "1.75") {
-		return []string{msrv, "1.75", "1.80", "1.84", "stable"}
-	}
-
-	return []string{msrv, "stable"}
+	return filterVersionsFromMSRV(msrv, versions)
 }
 
 // filterVersionsFromMSRV filters versions to only include those >= MSRV.
@@ -288,7 +263,10 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 
 	result := []string{msrv}
 	for _, v := range numericVersions {
-		if v != msrv {
+		// Skip the MSRV's own minor release: "1.97" duplicates an MSRV
+		// written as "1.97.0", adding a redundant matrix job.
+		major, minor, ok := parseMajorMinor(v)
+		if !ok || major != msrvMajor || minor != msrvMinor {
 			result = append(result, v)
 		}
 	}
@@ -297,9 +275,12 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	return result
 }
 
-// generateRustVersionMatrixFromEdition generates versions based on Rust edition
+// generateRustVersionMatrixFromEdition pairs an edition with the first
+// stable release that supports it.
 func generateRustVersionMatrixFromEdition(edition string) []string {
 	switch edition {
+	case "2024":
+		return []string{"1.85", "stable"}
 	case "2021":
 		return []string{"1.56", "stable"}
 	case "2018":

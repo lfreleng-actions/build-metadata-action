@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# No version: cargo treats it as publish = false.
+[package]
+name = "gamma"
+edition = "2021"

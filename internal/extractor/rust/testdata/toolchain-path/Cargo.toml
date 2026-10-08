@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# A project selecting a toolchain by path. The action reports the kind
+# but never the path, and never runs anything from it.
+
+[package]
+name = "toolchain-path-demo"
+version = "0.1.0"
+edition = "2021"

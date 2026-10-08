@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# Matched by crates/* but excluded.
+[package]
+name = "excluded"
+version = "1.0.0"
+edition = "2021"

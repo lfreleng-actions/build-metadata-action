@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+[toolchain]
+channel = "1.85.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-musl"]
+profile = "minimal"

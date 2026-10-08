@@ -493,12 +493,138 @@ supported releases applies instead.
 
 #### Rust
 
-| Output                   | Description           |
-| ------------------------ | --------------------- |
-| `rust_version`           | Rust compiler version |
-| `cargo_version`          | Cargo version         |
-| `rust_edition`           | Rust edition          |
-| `rust_workspace_members` | Workspace members     |
+<!-- markdownlint-disable MD013 -->
+
+| Output                           | Description                                                         |
+| -------------------------------- | ------------------------------------------------------------------- |
+| `rust_package_name`              | Package name from `Cargo.toml`                                      |
+| `rust_metadata_source`           | Source of Rust metadata (`Cargo.toml`)                              |
+| `rust_edition`                   | Rust edition                                                        |
+| `rust_msrv`                      | MSRV: the oldest Rust release the project supports (`rust-version`) |
+| `rust_rust_version`              | Same value as `rust_msrv`, named after Cargo's field                |
+| `rust_rust_version_matrix`       | Rust versions to test against (comma-separated)                     |
+| `rust_matrix_json`               | Rust version test matrix as JSON                                    |
+| `rust_documentation`             | Documentation URL                                                   |
+| `rust_keywords`                  | Package keywords (comma-separated)                                  |
+| `rust_categories`                | crates.io categories (comma-separated)                              |
+| `rust_publish`                   | `publish` setting: `true`, `false` or a JSON array of registries    |
+| `rust_license_file`              | License file path                                                   |
+| `rust_readme`                    | README path                                                         |
+| `rust_dependencies`              | Normal dependencies as `name@version` (comma-separated)             |
+| `rust_dependency_count`          | Number of normal dependencies                                       |
+| `rust_optional_dependencies`     | Names of optional dependencies (comma-separated)                    |
+| `rust_dev_dependencies`          | Dev-dependencies as `name@version` (comma-separated)                |
+| `rust_dev_dependency_count`      | Number of dev-dependencies                                          |
+| `rust_build_dependencies`        | Build-dependencies as `name@version` (comma-separated)              |
+| `rust_build_dependency_count`    | Number of build-dependencies                                        |
+| `rust_total_dependency_count`    | Normal, dev- and build-dependencies together                        |
+| `rust_features`                  | JSON object mapping each feature to what it enables                 |
+| `rust_feature_names`             | Feature names, sorted (comma-separated)                             |
+| `rust_feature_count`             | Number of features                                                  |
+| `rust_is_workspace`              | `true` when `[workspace]` lists members                             |
+| `rust_workspace_members`         | `[workspace]` members entries as written, globs unexpanded          |
+| `rust_workspace_member_count`    | Number of `[workspace]` members entries                             |
+| `rust_workspace_resolver`        | Workspace dependency resolver version                               |
+| `rust_binary_targets`            | Declared `[[bin]]` target names (comma-separated)                   |
+| `rust_binary_count`              | Number of declared `[[bin]]` targets                                |
+| `rust_lib_name`                  | `[lib]` target name                                                 |
+| `rust_crate_types`               | `[lib]` crate types (comma-separated)                               |
+| `rust_has_build_script`          | `true` when `package.build` names a build script                    |
+| `rust_build_script`              | Build script path from `package.build`                              |
+| `rust_frameworks`                | Frameworks detected from dependencies (comma-separated)             |
+| `rust_toolchain_kind`            | Toolchain the toolchain file selects: `channel`, `path` or `none`   |
+| `rust_toolchain_file`            | Toolchain file rustup reads, relative to the project directory      |
+| `rust_toolchain_channel`         | Channel or toolchain name from the toolchain file                   |
+| `rust_toolchain_components`      | Components from the toolchain file (comma-separated)                |
+| `rust_toolchain_targets`         | Targets from the toolchain file (comma-separated)                   |
+| `rust_toolchain_profile`         | Profile from the toolchain file                                     |
+| `rust_publishable_packages`      | JSON array of the packages `cargo publish` would upload             |
+| `rust_publishable_package_count` | Number of entries in `rust_publishable_packages`                    |
+
+<!-- markdownlint-enable MD013 -->
+
+An output is empty when `Cargo.toml` does not set the value. Fields
+inherited with `{ workspace = true }` resolve against
+`[workspace.package]` in the same manifest.
+
+`rust_msrv` and `rust_rust_version` both carry the MSRV, the oldest
+Rust release the project declares support for. Neither reports a
+compiler: the action runs no Rust toolchain to produce its outputs.
+With `include_environment` enabled, `metadata_json` records under
+`environment.tools` the `rustc` and `cargo` versions of the toolchain
+the job environment selects: the rustup default, or `RUSTUP_TOOLCHAIN`
+when the job sets it. The action probes them from the system temporary
+directory, so a `rust-toolchain` file in the repository can neither
+select nor run them.
+
+The `rust_toolchain_*` outputs describe the toolchain a project selects
+through a rustup toolchain file, so later steps can install it. The
+action parses the file itself, the way rustup finds it: the nearest
+`rust-toolchain` or `rust-toolchain.toml` in the project directory or
+a parent, where the legacy `rust-toolchain` wins when both exist.
+Under GitHub Actions the search stops at `GITHUB_WORKSPACE`, and a
+symlinked file must resolve inside it. The search compares real paths,
+as rustup starts from the real working directory, and skips with a
+warning a project directory that resolves outside the workspace. A
+file that selects a toolchain by absolute path (a lone `path` key, or
+a legacy one-line `rust-toolchain` naming one) reports
+`rust_toolchain_kind` as `path` and leaves the path out of every
+output. A file rustup rejects (a relative `path`, a `path` beside
+other keys, a path in `channel`, the reserved name `none`, a legacy
+`rust-toolchain` with a blank line before or after its name, no
+`channel`, `path`, `components` or `targets` key, or an unknown
+`profile` for anything but a custom toolchain) reports `none` with a
+warning annotation. A valid file with `components` or `targets` but
+no `channel` or `path` also reports
+`none`, without a warning, since rustup then keeps its default
+toolchain; `rust_toolchain_file` names the file in both cases and
+stays empty when there is none. Names outside `[A-Za-z0-9._+-]` get
+dropped with a warning annotation that names the problem without
+repeating the content.
+
+`rust_publishable_packages` lists the packages of the workspace that
+`cargo publish` would upload, as JSON objects with `name`, `version`,
+`manifest_path` and, when `publish` names registries, `registries`.
+`manifest_path` is relative to `path_prefix`, the form
+`rust-crate-publish-action` takes. The action finds the members the
+way cargo does: the root package, the `members` entries expanded with
+cargo's glob rules (recursive `**`, `[!...]` negation, absolute
+entries), and path dependencies inside the workspace root (relative or
+absolute), less anything under an `exclude` entry that no `members`
+entry names. Cargo reads `exclude` entries as literal paths, not globs,
+and so does the action. A package outside the root joins, as in
+cargo, when its `package.workspace` key points back at the root; its
+`manifest_path` then starts with `../`. Under GitHub Actions the
+action reads no manifest and lists no directory outside
+`GITHUB_WORKSPACE`, whatever the globs say, and, like the toolchain
+search, skips with a warning a project directory that resolves outside
+the workspace, reporting no packages.
+A package with `publish = false`, `publish = []` or no `version` stays
+out of the list. A name or path outside a conservative character set
+(a name must also start with a letter or `_`, as Cargo requires), or a
+version Cargo rejects (anything but SemVer `MAJOR.MINOR.PATCH`
+without leading zeros, with optional pre-release and build metadata),
+leaves the package out, with a warning annotation. A registry name
+outside that character set drops that registry, with a warning;
+the package stays in the list while one or more of its registries
+remain. The action reads `[workspace.package]` from the selected
+manifest alone, so point `path_prefix` at the workspace root: a
+package that inherits `version` or `publish` from a root above
+`path_prefix` stays out of the list, with a warning annotation. The
+action reads the manifests and runs no cargo command.
+
+```yaml
+- id: metadata
+  uses: lfreleng-actions/build-metadata-action@<sha>
+- if: steps.metadata.outputs.rust_publishable_package_count != '0'
+  run: echo "$PACKAGES" | jq -r '.[].manifest_path'
+  env:
+    PACKAGES: ${{ steps.metadata.outputs.rust_publishable_packages }}
+```
+
+Dependency entries carry `(optional)` and a `[feature, ...]` list where
+set. Those lists contain commas too, so parse `metadata_json` when you
+need exact values.
 
 ## Example Output
 
@@ -633,14 +759,23 @@ To keep pace with fast-evolving language ecosystems, the action uses a
 
 #### Rust Version Detection
 
-- **Primary**: Fetches current stable version from `rust-lang.org`
-  - Generates ~6 recent versions (9 months of releases)
-  - Adapts to Rust's 6-week release cycle automatically
+The Rust matrix (`rust_rust_version_matrix`, `rust_matrix_json`) holds
+the MSRV, the six most recent stable minor releases at or above it, and
+`stable`. With no MSRV it falls back to the first release supporting the
+edition, then `stable`.
+
+- **Primary**: Reads the current stable release from
+  `https://static.rust-lang.org/dist/channel-rust-stable.toml`
   - 5-second timeout prevents workflow delays
-- **Fallback**: Static version list (updated monthly)
+  - Cached for 72 hours within one run
+- **Fallback**: When that fetch fails, estimates the current stable
+  release from Rust's six-week release train, counted from a verified
+  release (1.99.0, 2026-10-01)
   - Ensures CI/CD reliability during network issues or API downtime
-  - Prevents build failures from temporary connectivity problems
-  - Provides reasonable version coverage even offline
+  - Produces the same matrix shape as the live path, without a
+    hand-maintained list going stale
+
+See [Rust version caching](docs/RUST_VERSION_CACHE.md) for details.
 
 #### Why This Approach?
 

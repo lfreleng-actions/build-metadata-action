@@ -612,6 +612,216 @@ outputs:
       strategies (e.g. {"go-version": ["1.25", "1.26"]})
     value: ${{ steps.extract.outputs.go_matrix_json }}
 
+  # Language-Specific Outputs (Rust)
+  rust_package_name:
+    description: "Package name from Cargo.toml [package]"
+    value: ${{ steps.extract.outputs.rust_package_name }}
+
+  rust_metadata_source:
+    description: "Source of Rust metadata (Cargo.toml)"
+    value: ${{ steps.extract.outputs.rust_metadata_source }}
+
+  rust_edition:
+    description: >-
+      Rust edition from Cargo.toml, inherited from the workspace when
+      set there
+    value: ${{ steps.extract.outputs.rust_edition }}
+
+  rust_msrv:
+    description: >-
+      Minimum supported Rust version: the rust-version field of
+      Cargo.toml, inherited from the workspace when set there
+    value: ${{ steps.extract.outputs.rust_msrv }}
+
+  rust_rust_version:
+    description: >-
+      Same value as rust_msrv, named after Cargo's rust-version field.
+      This is the MSRV the project declares, not a compiler version
+    value: ${{ steps.extract.outputs.rust_rust_version }}
+
+  rust_rust_version_matrix:
+    description: >-
+      Comma-separated Rust versions to test against: the MSRV, the six
+      latest stable minor releases at or above it, and "stable". With
+      no MSRV, the first release supporting the edition and "stable"
+    value: ${{ steps.extract.outputs.rust_rust_version_matrix }}
+
+  rust_matrix_json:
+    description: >-
+      Rust version test matrix as JSON, ready for workflow matrix
+      strategies (e.g. {"rust-version": ["1.80", "stable"]})
+    value: ${{ steps.extract.outputs.rust_matrix_json }}
+
+  rust_documentation:
+    description: "Documentation URL from Cargo.toml"
+    value: ${{ steps.extract.outputs.rust_documentation }}
+
+  rust_keywords:
+    description: "Comma-separated package keywords"
+    value: ${{ steps.extract.outputs.rust_keywords }}
+
+  rust_categories:
+    description: "Comma-separated crates.io categories"
+    value: ${{ steps.extract.outputs.rust_categories }}
+
+  rust_publish:
+    description: >-
+      The package's publish setting, with publish.workspace = true
+      resolved from [workspace.package]: "true", "false", or a JSON array
+      of the registries allowed. Empty when unset or not resolvable
+    value: ${{ steps.extract.outputs.rust_publish }}
+
+  rust_license_file:
+    description: "License file path from Cargo.toml"
+    value: ${{ steps.extract.outputs.rust_license_file }}
+
+  rust_readme:
+    description: "README path from Cargo.toml"
+    value: ${{ steps.extract.outputs.rust_readme }}
+
+  rust_dependencies:
+    description: >-
+      Comma-separated normal dependencies as name@version, marked
+      "(optional)" and followed by "[features]" where set. Feature
+      lists also contain commas; parse metadata_json for exact values
+    value: ${{ steps.extract.outputs.rust_dependencies }}
+
+  rust_dependency_count:
+    description: "Number of normal dependencies"
+    value: ${{ steps.extract.outputs.rust_dependency_count }}
+
+  rust_optional_dependencies:
+    description: "Comma-separated names of optional dependencies"
+    value: ${{ steps.extract.outputs.rust_optional_dependencies }}
+
+  rust_dev_dependencies:
+    description: "Dev-dependencies, formatted as rust_dependencies"
+    value: ${{ steps.extract.outputs.rust_dev_dependencies }}
+
+  rust_dev_dependency_count:
+    description: "Number of dev-dependencies"
+    value: ${{ steps.extract.outputs.rust_dev_dependency_count }}
+
+  rust_build_dependencies:
+    description: "Build-dependencies, formatted as rust_dependencies"
+    value: ${{ steps.extract.outputs.rust_build_dependencies }}
+
+  rust_build_dependency_count:
+    description: "Number of build-dependencies"
+    value: ${{ steps.extract.outputs.rust_build_dependency_count }}
+
+  rust_total_dependency_count:
+    description: "Number of normal, dev- and build-dependencies together"
+    value: ${{ steps.extract.outputs.rust_total_dependency_count }}
+
+  rust_features:
+    description: "JSON object mapping each feature to the features it enables"
+    value: ${{ steps.extract.outputs.rust_features }}
+
+  rust_feature_names:
+    description: "Comma-separated feature names, sorted"
+    value: ${{ steps.extract.outputs.rust_feature_names }}
+
+  rust_feature_count:
+    description: "Number of features"
+    value: ${{ steps.extract.outputs.rust_feature_count }}
+
+  rust_is_workspace:
+    description: >-
+      'true' when Cargo.toml lists [workspace] members; empty otherwise
+    value: ${{ steps.extract.outputs.rust_is_workspace }}
+
+  rust_workspace_members:
+    description: >-
+      Comma-separated [workspace] members entries as written, with any
+      glob patterns left unexpanded
+    value: ${{ steps.extract.outputs.rust_workspace_members }}
+
+  rust_workspace_member_count:
+    description: "Number of [workspace] members entries"
+    value: ${{ steps.extract.outputs.rust_workspace_member_count }}
+
+  rust_workspace_resolver:
+    description: "Dependency resolver version from [workspace]"
+    value: ${{ steps.extract.outputs.rust_workspace_resolver }}
+
+  rust_binary_targets:
+    description: "Comma-separated names of the declared [[bin]] targets"
+    value: ${{ steps.extract.outputs.rust_binary_targets }}
+
+  rust_binary_count:
+    description: "Number of declared [[bin]] targets"
+    value: ${{ steps.extract.outputs.rust_binary_count }}
+
+  rust_lib_name:
+    description: "Library target name from [lib]"
+    value: ${{ steps.extract.outputs.rust_lib_name }}
+
+  rust_crate_types:
+    description: "Comma-separated [lib] crate types"
+    value: ${{ steps.extract.outputs.rust_crate_types }}
+
+  rust_has_build_script:
+    description: >-
+      'true' when Cargo.toml names a build script in package.build;
+      empty otherwise, including for an implicit build.rs
+    value: ${{ steps.extract.outputs.rust_has_build_script }}
+
+  rust_build_script:
+    description: "Build script path from package.build"
+    value: ${{ steps.extract.outputs.rust_build_script }}
+
+  rust_frameworks:
+    description: >-
+      Comma-separated frameworks detected from normal dependencies
+      (Tokio, Serde, Axum, etc.)
+    value: ${{ steps.extract.outputs.rust_frameworks }}
+
+  rust_toolchain_kind:
+    description: >-
+      Toolchain the project's rustup toolchain file selects: 'channel',
+      'path' (a directory of binaries) or 'none' (no channel or path:
+      no file, a file rustup rejects, or a valid file with components
+      or targets but no channel or path, which leaves rustup on its
+      default toolchain); read from the file, never by running rustup
+    value: ${{ steps.extract.outputs.rust_toolchain_kind }}
+
+  rust_toolchain_file:
+    description: >-
+      Toolchain file rustup reads, relative to the project directory
+      (rust-toolchain or rust-toolchain.toml, here or in a parent)
+    value: ${{ steps.extract.outputs.rust_toolchain_file }}
+
+  rust_toolchain_channel:
+    description: >-
+      Channel or toolchain name the toolchain file selects; empty for a
+      path toolchain
+    value: ${{ steps.extract.outputs.rust_toolchain_channel }}
+
+  rust_toolchain_components:
+    description: "Comma-separated components from the toolchain file"
+    value: ${{ steps.extract.outputs.rust_toolchain_components }}
+
+  rust_toolchain_targets:
+    description: "Comma-separated targets from the toolchain file"
+    value: ${{ steps.extract.outputs.rust_toolchain_targets }}
+
+  rust_toolchain_profile:
+    description: "Profile from the toolchain file: minimal, default or complete"
+    value: ${{ steps.extract.outputs.rust_toolchain_profile }}
+
+  rust_publishable_packages:
+    description: >-
+      JSON array of the workspace packages cargo publish would upload,
+      each {name, version, manifest_path, registries}; manifest_path is
+      relative to path_prefix and registries appears when publish
+      restricts them; '[]' when none
+    value: ${{ steps.extract.outputs.rust_publishable_packages }}
+
+  rust_publishable_package_count:
+    description: "Number of entries in rust_publishable_packages"
+    value: ${{ steps.extract.outputs.rust_publishable_package_count }}
+
   # Success Indicator
   success:
     description: "Whether extraction succeeded"
