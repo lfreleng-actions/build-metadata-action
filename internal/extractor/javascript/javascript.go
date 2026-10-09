@@ -5,13 +5,17 @@ package javascript
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lfreleng-actions/build-metadata-action/internal/extractor"
 	"github.com/lfreleng-actions/build-metadata-action/internal/jsonutil"
+	"gopkg.in/yaml.v3"
 )
 
 // Extractor extracts metadata from JavaScript/Node.js projects
@@ -57,6 +61,8 @@ type PackageJSON struct {
 	// Package manager specific
 	PackageManager string                 `json:"packageManager"` // e.g., "pnpm@8.0.0"
 	Volta          map[string]interface{} `json:"volta"`
+	// Parsed lazily, so a malformed value cannot fail the whole file
+	DevEngines json.RawMessage `json:"devEngines"`
 
 	Config map[string]interface{} `json:"config"`
 }
@@ -106,8 +112,8 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 	}
 
 	applyPackageCore(&pkg, metadata)
-	applyPackageManager(projectPath, &pkg, metadata)
-	applyPackageWorkspaces(&pkg, metadata)
+	applyPackageManager(projectPath, &pkg, metadata.LanguageSpecific)
+	applyPackageWorkspaces(projectPath, &pkg, metadata)
 	applyPackageDependencies(&pkg, metadata)
 	applyPackageScripts(&pkg, metadata)
 	applyPackageTooling(&pkg, metadata)
@@ -162,27 +168,20 @@ func applyPackageCore(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	}
 }
 
-// applyPackageManager resolves the package manager and its lock file, recording
-// has_lock_file even when no lock file is present on disk.
-func applyPackageManager(projectPath string, pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
-	packageManager := detectPackageManager(projectPath, pkg.PackageManager)
-	metadata.LanguageSpecific["package_manager"] = packageManager
-
-	lockFile, lockFileExists := detectLockFile(projectPath, packageManager)
-	if lockFileExists {
-		metadata.LanguageSpecific["lock_file"] = lockFile
-		metadata.LanguageSpecific["has_lock_file"] = true
-	} else {
-		metadata.LanguageSpecific["has_lock_file"] = false
-	}
-}
-
-// applyPackageWorkspaces records monorepo workspace patterns when present.
-func applyPackageWorkspaces(pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
-	if pkg.Workspaces == nil {
-		return
-	}
+// applyPackageWorkspaces records monorepo workspace patterns from the
+// package.json workspaces field and pnpm-workspace.yaml, which pnpm reads
+// in its place. Patterns found in both are listed once.
+func applyPackageWorkspaces(projectPath string, pkg *PackageJSON, metadata *extractor.ProjectMetadata) {
 	workspaces := extractWorkspaces(pkg.Workspaces)
+	pnpmWorkspaces, err := readPnpmWorkspace(projectPath)
+	if err != nil {
+		annotate("Node.js workspace: pnpm-workspace.yaml could not be parsed; ignoring it")
+	}
+	for _, pattern := range pnpmWorkspaces {
+		if pattern != "" && !slices.Contains(workspaces, pattern) {
+			workspaces = append(workspaces, pattern)
+		}
+	}
 	if len(workspaces) > 0 {
 		metadata.LanguageSpecific["is_workspace"] = true
 		metadata.LanguageSpecific["workspaces"] = workspaces
@@ -389,63 +388,24 @@ func extractWorkspaces(workspaces interface{}) []string {
 	return nil
 }
 
-// detectPackageManager detects which package manager is being used
-func detectPackageManager(projectPath, packageManagerField string) string {
-	if packageManagerField != "" {
-		// Format: "pnpm@8.0.0" or "yarn@3.0.0"
-		if strings.Contains(packageManagerField, "@") {
-			parts := strings.Split(packageManagerField, "@")
-			return parts[0]
-		}
-		return packageManagerField
+// readPnpmWorkspace returns the packages patterns from pnpm-workspace.yaml.
+// A missing file is not an error, and pnpm also accepts the file without
+// packages, holding settings only.
+func readPnpmWorkspace(projectPath string) ([]string, error) {
+	content, err := os.ReadFile(filepath.Join(projectPath, "pnpm-workspace.yaml"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
 	}
-
-	if _, err := os.Stat(filepath.Join(projectPath, "pnpm-lock.yaml")); err == nil {
-		return "pnpm"
+	if err != nil {
+		return nil, err
 	}
-
-	if _, err := os.Stat(filepath.Join(projectPath, "yarn.lock")); err == nil {
-		// Check if it's Yarn 2+ (berry)
-		yarnrcPath := filepath.Join(projectPath, ".yarnrc.yml")
-		if _, err := os.Stat(yarnrcPath); err == nil {
-			return "yarn-berry"
-		}
-		return "yarn"
+	var workspace struct {
+		Packages []string `yaml:"packages"`
 	}
-
-	if _, err := os.Stat(filepath.Join(projectPath, "package-lock.json")); err == nil {
-		return "npm"
+	if err := yaml.Unmarshal(content, &workspace); err != nil {
+		return nil, err
 	}
-
-	if _, err := os.Stat(filepath.Join(projectPath, "bun.lockb")); err == nil {
-		return "bun"
-	}
-
-	// Default to npm
-	return "npm"
-}
-
-// detectLockFile returns the lock file name and whether it exists
-func detectLockFile(projectPath, packageManager string) (string, bool) {
-	lockFiles := map[string]string{
-		"npm":        "package-lock.json",
-		"yarn":       "yarn.lock",
-		"yarn-berry": "yarn.lock",
-		"pnpm":       "pnpm-lock.yaml",
-		"bun":        "bun.lockb",
-	}
-
-	lockFile, ok := lockFiles[packageManager]
-	if !ok {
-		return "", false
-	}
-
-	lockFilePath := filepath.Join(projectPath, lockFile)
-	if _, err := os.Stat(lockFilePath); err == nil {
-		return lockFile, true
-	}
-
-	return lockFile, false
+	return workspace.Packages, nil
 }
 
 // detectScriptPatterns detects common script patterns

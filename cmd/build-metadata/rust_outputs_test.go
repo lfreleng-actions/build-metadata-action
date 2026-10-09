@@ -45,17 +45,17 @@ func declaredOutputs(t *testing.T) map[string]string {
 	return values
 }
 
-// writtenRustOutputs runs the Rust extractor over each fixture and emits
-// its values through the binary's own output path, returning every
-// output name written to GITHUB_OUTPUT.
-func writtenRustOutputs(t *testing.T) map[string]bool {
+// writtenOutputs runs the extractor for projectType over each fixture
+// directory under fixtures and emits its values through the binary's own
+// output path, returning every output name written to GITHUB_OUTPUT.
+func writtenOutputs(t *testing.T, fixtures, projectType string) map[string]bool {
 	t.Helper()
 
-	fixtures, err := os.ReadDir(rustFixtures)
+	entries, err := os.ReadDir(fixtures)
 	if err != nil {
-		t.Fatalf("reading %s: %v", rustFixtures, err)
+		t.Fatalf("reading %s: %v", fixtures, err)
 	}
-	rustExtractor, err := extractor.GetExtractor("rust-cargo")
+	projectExtractor, err := extractor.GetExtractor(projectType)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,18 +67,18 @@ func writtenRustOutputs(t *testing.T) map[string]bool {
 	t.Setenv("GITHUB_OUTPUT", outputFile)
 	ctx := &appContext{action: githubactions.New(), isCI: true}
 
-	for _, fixture := range fixtures {
+	for _, fixture := range entries {
 		if !fixture.IsDir() {
 			continue
 		}
-		dir := filepath.Join(rustFixtures, fixture.Name())
-		projectMetadata, err := rustExtractor.Extract(dir)
+		dir := filepath.Join(fixtures, fixture.Name())
+		projectMetadata, err := projectExtractor.Extract(dir)
 		if err != nil {
 			t.Fatalf("extracting %s: %v", dir, err)
 		}
 		metadata := newMetadata(dir)
 		metadata.LanguageSpecific = projectMetadata.LanguageSpecific
-		emitLanguageSpecificOutputs(ctx, metadata, "rust-cargo")
+		emitLanguageSpecificOutputs(ctx, metadata, projectType)
 	}
 
 	body, err := os.ReadFile(outputFile)
@@ -90,7 +90,7 @@ func writtenRustOutputs(t *testing.T) map[string]bool {
 		written[match[1]] = true
 	}
 	if len(written) == 0 {
-		t.Fatal("the Rust fixtures wrote no outputs; the fixtures or this test are wrong")
+		t.Fatalf("the %s fixtures wrote no outputs; the fixtures or this test are wrong", projectType)
 	}
 	return written
 }
@@ -102,7 +102,7 @@ func writtenRustOutputs(t *testing.T) map[string]bool {
 // the declarations and the extractor in step.
 func TestRustOutputsMatchTheirDeclarations(t *testing.T) {
 	declared := declaredOutputs(t)
-	written := writtenRustOutputs(t)
+	written := writtenOutputs(t, rustFixtures, "rust-cargo")
 
 	var undeclared, unwritten []string
 	for name := range written {
