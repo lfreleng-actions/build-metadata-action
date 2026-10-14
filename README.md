@@ -41,7 +41,7 @@ outputs and rich CI/CD integration.
 | Language              | Build Systems                   | Version Files                                 |
 | --------------------- | ------------------------------- | --------------------------------------------- |
 | Python                | setuptools, poetry, flit, hatch | `pyproject.toml`, `setup.py`, `setup.cfg`     |
-| JavaScript/TypeScript | npm, yarn, pnpm                 | `package.json`, `tsconfig.json`               |
+| JavaScript/TypeScript | npm, yarn, pnpm, bun            | `package.json`, `tsconfig.json`               |
 | Java                  | Maven, Gradle (Groovy/Kotlin)   | `pom.xml`, `build.gradle`, `build.gradle.kts` |
 | .NET/C#               | MSBuild, dotnet CLI             | `*.csproj`, `*.sln`, `*.props`                |
 | Go                    | Go modules                      | `go.mod`                                      |
@@ -440,13 +440,50 @@ action reports nothing rather than guessing.
 
 #### Node.js/JavaScript
 
-| Output                 | Description                                |
-| ---------------------- | ------------------------------------------ |
-| `node_version`         | Node.js version                            |
-| `npm_version`          | npm version                                |
-| `node_package_manager` | Detected package manager (npm, yarn, pnpm) |
-| `node_engines`         | Required node/npm versions                 |
-| `node_workspaces`      | Workspace packages (monorepo)              |
+<!-- markdownlint-disable MD013 -->
+
+| Output                               | Description                                                      |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `javascript_package_name`            | Package name from `package.json`                                 |
+| `javascript_package_manager`         | Package manager: `npm`, `yarn`, `yarn-berry`, `pnpm` or `bun`    |
+| `javascript_package_manager_version` | Package manager version `package.json` declares, for Corepack    |
+| `javascript_lock_file`               | Lockfile of that package manager                                 |
+| `javascript_has_lock_file`           | `true` when that lockfile exists                                 |
+| `javascript_module_type`             | Module type (`module` or `commonjs`)                             |
+| `javascript_requires_node`           | Node.js version range from `engines.node`                        |
+| `javascript_is_workspace`            | `true` for a workspace/monorepo                                  |
+| `javascript_has_typescript`          | `true` when the project uses TypeScript                          |
+
+<!-- markdownlint-enable MD013 -->
+
+The action takes the package manager from the `packageManager` field in
+`package.json`, then `devEngines.packageManager`, then the lockfiles
+present, in the order `pnpm-lock.yaml`, `yarn.lock`,
+`npm-shrinkwrap.json` or `package-lock.json`, then `bun.lock` or
+`bun.lockb`. It reports `npm` when nothing names a package manager.
+Where `devEngines.packageManager` lists alternatives, the one matching
+the lockfiles present stands for the project (for Yarn, the one
+admitting the generation of `yarn.lock`), else the first.
+`yarn` means Yarn classic (1.x) and `yarn-berry` Yarn 2 or later. A
+declared Yarn version decides when it admits a single generation, as
+`1.22.22`, `<2`, `4.x` or `>=2` do. Otherwise, as with no version or `>=1`,
+a `.yarnrc.yml` or a Berry lockfile means `yarn-berry`. A project gets
+the same answer whichever of these it carries.
+
+`javascript_package_manager_version` comes from the declaration, minus
+any Corepack integrity hash, and stays empty when the project relies on
+lockfiles alone. A `devEngines` version may be a semver range such as
+`^10.0.0` or `10.x`. The action withholds anything other than a plain
+version or range, such as a URL, a tag like `latest` or the glob
+character `*`.
+
+The action keeps the order above and emits a warning annotation when
+lockfiles from more than one package manager are present, when a
+declaration names a package manager with no lockfile beside lockfiles
+from another, or when `packageManager` names a package manager or major
+version that `devEngines.packageManager` does not allow. Workspaces come
+from the `package.json` `workspaces` field and from
+`pnpm-workspace.yaml`.
 
 #### .NET/C\#
 

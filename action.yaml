@@ -378,15 +378,41 @@ outputs:
     value: ${{ steps.extract.outputs.javascript_package_name }}
 
   javascript_package_manager:
-    description: "Detected package manager (npm, yarn, pnpm, bun)"
+    description: >-
+      Package manager the project uses: npm, yarn (Yarn classic, 1.x),
+      yarn-berry (Yarn 2 and later), pnpm or bun. The packageManager
+      field in package.json decides, then devEngines.packageManager (of
+      several alternatives, the one matching the lockfiles), then the
+      lockfiles present (pnpm, then Yarn, then npm, then Bun); npm when
+      nothing names one. A declared Yarn version admitting one generation
+      only decides between yarn and yarn-berry; otherwise a .yarnrc.yml
+      or a Berry lockfile means yarn-berry. The action emits a warning
+      annotation when lockfiles from more than one package manager are
+      present, when a declaration disagrees with the lockfiles, or when
+      packageManager names a package manager or major version that
+      devEngines.packageManager does not allow.
     value: ${{ steps.extract.outputs.javascript_package_manager }}
 
+  javascript_package_manager_version:
+    description: >-
+      Package manager version from the packageManager field or
+      devEngines.packageManager, minus any Corepack integrity hash, for
+      callers that set up the package manager with Corepack. A devEngines
+      version may be a semver range such as ^10.0.0 or 10.x. Empty when
+      package.json declares no version, or declares one that is not a
+      plain version or range (a URL, a tag such as latest, or one using
+      the glob character *).
+    value: ${{ steps.extract.outputs.javascript_package_manager_version }}
+
   javascript_lock_file:
-    description: "Lock file name"
+    description: >-
+      Lockfile of the detected package manager: package-lock.json or
+      npm-shrinkwrap.json (npm), yarn.lock (Yarn), pnpm-lock.yaml (pnpm),
+      bun.lock or bun.lockb (Bun). Empty when none is present.
     value: ${{ steps.extract.outputs.javascript_lock_file }}
 
   javascript_has_lock_file:
-    description: "Whether lock file exists"
+    description: "Whether a lockfile of the detected package manager exists"
     value: ${{ steps.extract.outputs.javascript_has_lock_file }}
 
   javascript_module_type:
@@ -398,7 +424,9 @@ outputs:
     value: ${{ steps.extract.outputs.javascript_requires_node }}
 
   javascript_is_workspace:
-    description: "Whether project is a workspace/monorepo"
+    description: >-
+      Whether the project is a workspace/monorepo, from the package.json
+      workspaces field or pnpm-workspace.yaml
     value: ${{ steps.extract.outputs.javascript_is_workspace }}
 
   javascript_has_typescript:

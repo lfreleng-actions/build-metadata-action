@@ -447,7 +447,8 @@ func TestGenerateSummary_JavaScriptProject(t *testing.T) {
 			"project_version": "1.0.0",
 		},
 		"language_specific": map[string]interface{}{
-			"package_manager": "npm",
+			"package_manager":         "yarn-berry",
+			"package_manager_version": "4.5.0",
 		},
 	}
 
@@ -458,8 +459,12 @@ func TestGenerateSummary_JavaScriptProject(t *testing.T) {
 		t.Errorf("Should contain Project Information section\nGot:\n%s", summary)
 	}
 
-	if !strings.Contains(summary, "npm") {
+	if !strings.Contains(summary, "| Package Manager | yarn-berry |") {
 		t.Errorf("Should contain package manager\nGot:\n%s", summary)
+	}
+
+	if !strings.Contains(summary, "| Package Manager Version | 4.5.0 |") {
+		t.Errorf("Should contain package manager version\nGot:\n%s", summary)
 	}
 
 	if !strings.Contains(summary, "JavaScript (npm)") {

@@ -369,6 +369,7 @@ func writePythonRows(sb *strings.Builder, metadata map[string]interface{}) {
 func writeJSRows(sb *strings.Builder, metadata map[string]interface{}) {
 	writeStringRows(sb, metadata, []stringRow{
 		{"package_manager", "Package Manager", false},
+		{"package_manager_version", "Package Manager Version", false},
 		{"module_type", "Module Type", false},
 		{"requires_node", "Requires Node", false},
 	})
