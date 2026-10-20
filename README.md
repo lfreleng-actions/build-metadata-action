@@ -740,10 +740,11 @@ since Maven outranks Docker. Two outputs describe the rest of the tree:
   `project_type` input.
 - `has_dockerfiles` and `dockerfile_count` come from a search up to
   eight levels below `path_prefix`. The search counts `Dockerfile`,
-  `Dockerfile.*` and `*.Dockerfile`, skips symlinks, and skips `.git`,
-  `node_modules`, `vendor`, `target`, `.tox`, `.venv` and anything
-  matching `dockerfile_exclude`. Each exclude is a glob matched against
-  the base name and the path relative to `path_prefix`.
+  `Dockerfile.*` and `*.Dockerfile` but not `*.dockerignore` files,
+  skips symlinks, and skips `.git`, `node_modules`, `vendor`, `target`,
+  `.tox`, `.venv` and anything matching `dockerfile_exclude`. Each
+  exclude is a glob matched against the base name and the path relative
+  to `path_prefix`.
 
 ```yaml
 - name: Extract Metadata
