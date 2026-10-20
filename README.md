@@ -824,10 +824,19 @@ The action reads `version.properties` from `path_prefix` and no other
 directory. When `path_prefix` names a sub-project, that directory's own file supplies
 `version_properties_version`; the action does not fall back to a
 parent directory's file, so a sub-project without one reports no
-`version.properties` version. The action composes the version from the
-`major`, `minor` and `patch` keys. It ignores keys whose values
-interpolate `${...}` (such as `base_version` and `release_version` in
-ONAP files), because it never sources the file the way Jenkins does.
+`version.properties` version. The action takes the version from, in
+order: the `major`, `minor` and `patch` keys; `base_version`;
+`release_version`; then a literal `version` key. It never uses
+`snapshot_version`. Values may reference other keys in the same file
+as `${name}`, as ONAP files do to build `base_version` from
+`major_version`/`minor_version`/`patch_version` or
+`release_name`/`sprint_number`/`feature_revision`. The action resolves
+those references against the file's own keys; it never sources
+the file or reads the environment, and it treats a key whose
+references do not resolve, such as a cycle or an unknown name, as
+absent. Resolution has limits: references nest at most 16 deep, a
+resolved value may not exceed 256 bytes, and one file may not expand
+to more than 64 KiB in total. A key over any limit counts as absent.
 
 ## Implementation Details
 
