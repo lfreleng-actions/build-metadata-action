@@ -819,6 +819,15 @@ Automatically detects and handles monorepo structures:
 - Maven multi-module projects
 - Gradle multi-project builds
 
+The action reads `version.properties` from `path_prefix` and no other
+directory. When `path_prefix` names a sub-project, that directory's own file supplies
+`version_properties_version`; the action does not fall back to a
+parent directory's file, so a sub-project without one reports no
+`version.properties` version. The action composes the version from the
+`major`, `minor` and `patch` keys. It ignores keys whose values
+interpolate `${...}` (such as `base_version` and `release_version` in
+ONAP files), because it never sources the file the way Jenkins does.
+
 ## Implementation Details
 
 Built with Go using design patterns from `version-extract-action`:
