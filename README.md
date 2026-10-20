@@ -186,6 +186,7 @@ Generate output in one or more formats simultaneously (comma, space, or newline-
 | ---------------------- | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `path_prefix`          | No       | `.`              | Path to the project root                                                                                                                                               |
 | `project_type`         | No       | `""`             | Declare the project type instead of detecting it (e.g. `java-maven`, `java-gradle`). See [Declaring the project type](#declaring-the-project-type).                    |
+| `dockerfile_exclude`   | No       | `""`             | Globs naming directories or files to skip when counting Dockerfiles, added to the built-in excludes. See [Repository facts](#repository-facts).                        |
 | `output_format`        | No       | `summary`        | Output format(s): `summary`, `json`, `markdown`, `yaml`. Accepts comma-separated, space-separated, or newline-separated values. Set to empty string to disable output. |
 | `include_environment`  | No       | `true`           | Include environment metadata                                                                                                                                           |
 | `use_version_extract`  | No       | `true`           | Use version-extract-action for version detection                                                                                                                       |
@@ -243,6 +244,7 @@ All project types provide these standardized outputs:
 | Output                       | Description                                                                                                            | Example                  |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------ |
 | `project_type`               | Resolved project type, detected or supplied via the `project_type` input                                               | `python-modern`          |
+| `project_types`              | JSON array of every detected project type, in priority order; `[]` when none                                           | `["go-module","docker"]` |
 | `build_tool`                 | Build tool the project type implies; empty when not identified                                                         | `maven`                  |
 | `project_name`               | Project/package name                                                                                                   | `myproject`              |
 | `project_version`            | Current version                                                                                                        | `1.2.3`                  |
@@ -258,6 +260,8 @@ All project types provide these standardized outputs:
 | `release_version`            | Version parsed from a lone release file (`container_release_tag` for container files); empty when more than one exists | `3.8.2`                  |
 | `release_ref`                | Git ref parsed from a lone release file; empty when more than one exists                                               | `abc123...`              |
 | `release_distribution_type`  | `distribution_type` of a lone release file, lowercased; empty when the file sets none or more than one file exists     | `container`              |
+| `has_dockerfiles`            | True when a Dockerfile exists up to eight levels below `path_prefix`, outside the excludes                             | `true`                   |
+| `dockerfile_count`           | Number of Dockerfiles counted for `has_dockerfiles`                                                                    | `2`                      |
 | `build_timestamp`            | ISO 8601 build timestamp                                                                                               | `2025-11-03T12:00:00Z`   |
 | `git_sha`                    | Current git commit SHA                                                                                                 | `abc123...`              |
 | `git_branch`                 | Current git branch                                                                                                     | `main`                   |
@@ -723,6 +727,47 @@ When used in a GitHub Actions workflow, the action generates a rich step summary
 ✅ Metadata extraction successful
 
 ## Integration with Other Actions
+
+### Repository facts
+
+`project_type` names one type: the highest-priority match. A Maven
+project that also builds a container image resolves to `java-maven`,
+since Maven outranks Docker. Two outputs describe the rest of the tree:
+
+- `project_types` lists every type whose marker files exist at
+  `path_prefix`, so polyglot and monorepo callers can route to each
+  relevant lane. Detection fills it even when the caller supplies the
+  `project_type` input.
+- `has_dockerfiles` and `dockerfile_count` come from a search up to
+  eight levels below `path_prefix`. The search counts `Dockerfile`,
+  `Dockerfile.*` and `*.Dockerfile`, skips symlinks, and skips `.git`,
+  `node_modules`, `vendor`, `target`, `.tox`, `.venv` and anything
+  matching `dockerfile_exclude`. Each exclude is a glob matched against
+  the base name and the path relative to `path_prefix`.
+
+```yaml
+- name: Extract Metadata
+  id: metadata
+  uses: lfreleng-actions/build-metadata-action@v1
+
+- name: Report lanes
+  if: steps.metadata.outputs.has_dockerfiles == 'true'
+  env:
+    TYPES: ${{ steps.metadata.outputs.project_types }}
+    COUNT: ${{ steps.metadata.outputs.dockerfile_count }}
+  run: echo "Types ${TYPES}; ${COUNT} Dockerfile(s) need an image lane"
+```
+
+### Boundary with docker-build-matrix-action
+
+This action reports repository-level facts: what kinds of project the
+tree holds, its version, and whether it carries Dockerfiles. It does
+not list images, read `container-tag.yaml` or compute per-image tags.
+Image discovery and tagging belong to
+[docker-build-matrix-action](https://github.com/lfreleng-actions/docker-build-matrix-action).
+The Docker extractor still reads `<path_prefix>/Dockerfile` for the
+`docker_*` metadata in `metadata_json` when Docker is the resolved
+project type.
 
 ### With Version Extract Action
 

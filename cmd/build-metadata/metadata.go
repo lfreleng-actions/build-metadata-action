@@ -29,6 +29,10 @@ type Metadata struct {
 // CommonMetadata contains metadata common to all project types
 type CommonMetadata struct {
 	ProjectType string `json:"project_type"`
+	// ProjectTypes lists every project type whose marker files exist at
+	// the project path, in detection priority order. ProjectType is the
+	// single winner; this lets polyglot callers route to every lane.
+	ProjectTypes []string `json:"project_types,omitempty"`
 	// BuildTool names the build tool the project type implies (maven,
 	// gradle, npm, cargo, ...), or is empty where the type does not name
 	// one unambiguously.
@@ -78,6 +82,11 @@ type CommonMetadata struct {
 	// distribution_type, lowercased (maven, container, artifact, pypi);
 	// empty when it declares none or several release files exist.
 	ReleaseDistributionType string `json:"release_distribution_type,omitempty"`
+	// HasDockerfiles and DockerfileCount report Dockerfiles found by a
+	// bounded search below the project path. Image discovery and tags
+	// are docker-build-matrix-action's job; this reports presence only.
+	HasDockerfiles  bool `json:"has_dockerfiles,omitempty"`
+	DockerfileCount int  `json:"dockerfile_count,omitempty"`
 }
 
 // BuildMetadata contains build-specific metadata
