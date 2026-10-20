@@ -252,7 +252,7 @@ All project types provide these standardized outputs:
 | `version_source`             | Source of version info                                                                                                 | `pyproject.toml`         |
 | `versioning_type`            | Versioning type: `static` or `dynamic`                                                                                 | `static`                 |
 | `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent                                                | `1.1.0`                  |
-| `version_properties_match`   | Whether version.properties matches `project_version` (empty when not comparable)                                       | `true`                   |
+| `version_properties_match`   | Whether version.properties matches `project_version`, ignoring one trailing `-SNAPSHOT` (empty when not comparable)    | `true`                   |
 | `snapshot_version`           | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention)                                                  | `1.1.0-SNAPSHOT`         |
 | `release_files`              | Comma-separated release request files under `releases/` (global-jjb/LF convention); empty when none                    | `releases/3.8.2.yaml`    |
 | `release_file_count`         | Number of release request files found under `releases/`                                                                | `1`                      |

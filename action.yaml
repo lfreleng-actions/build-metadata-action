@@ -189,8 +189,9 @@ outputs:
 
   version_properties_match:
     description: >-
-      Whether version.properties matches project_version
-      (true/false; empty when not comparable)
+      Whether version.properties matches project_version, ignoring one
+      trailing -SNAPSHOT on project_version (true/false; empty when not
+      comparable)
     value: ${{ steps.extract.outputs.version_properties_match }}
 
   snapshot_version:
