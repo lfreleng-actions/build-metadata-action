@@ -723,11 +723,148 @@ jobs:
           fi
           exit "$fail"
 
+  ### Version metadata on pinned Linux Foundation projects ###
+  test-lf-projects:
+    name: "Test: ${{ matrix.repository }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      # Pinned commits keep the expectations deterministic; refreshing
+      # a pin is a deliberate change. An empty project_version or
+      # version_source is not asserted.
+      matrix:
+        include:
+          - repository: onap/cps
+            ref: a0bc7132af6eb60fa10c5d2dd9b7bfcf74ced096
+            subdir: ""
+            props_version: "3.8.6"
+            props_match: "true"
+            project_version: ""
+            version_source: ""
+          - repository: o-ran-sc/oam-nf-oam-adopter
+            ref: 6aa71050e852b43041dabe7984bd2a0eb5dc7844
+            subdir: ""
+            props_version: "1.0.0"
+            props_match: "true"
+            project_version: "1.0.0"
+            version_source: "version.properties"
+          - repository: onap/aai-resources
+            ref: 486cc02ece4813f8dd8e012f94f265c7ee97e173
+            subdir: ""
+            props_version: "2.0.0"
+            props_match: "true"
+            project_version: ""
+            version_source: ""
+          - repository: onap/ccsdk-parent
+            ref: c5d8bf5bdc66204644154acfd4e9168ceabaf3ff
+            subdir: ""
+            props_version: "3.3.4"
+            props_match: "true"
+            project_version: ""
+            version_source: ""
+          - repository: onap/so-libs
+            ref: b89495771af6f91621c16f970437d840bfde43d1
+            subdir: ""
+            props_version: "1.13.0"
+            props_match: "true"
+            project_version: ""
+            version_source: ""
+          # parents/version.properties (2.7.0) has drifted from
+          # parents/pom.xml (14.0.1-SNAPSHOT) at this commit, so the
+          # match is genuinely false
+          - repository: o-ran-sc/oam-oam-controller
+            ref: 143f0ad18dbf25e1e172a2772b0a4c3f0c30c97d
+            subdir: "/parents"
+            props_version: "2.7.0"
+            props_match: "false"
+            project_version: "14.0.1-SNAPSHOT"
+            version_source: "pom.xml"
+          - repository: opendaylight/odlparent
+            ref: b381176b10992ba7a558030d3f2331f08cb070b4
+            subdir: ""
+            props_version: ""
+            props_match: ""
+            project_version: "15.1.1-SNAPSHOT"
+            version_source: "pom.xml"
+          - repository: opendaylight/mdsal
+            ref: 4894e54fdb9b5f0a47e2cd6c9a8251b2148c78be
+            subdir: ""
+            props_version: ""
+            props_match: ""
+            project_version: "17.0.3-SNAPSHOT"
+            version_source: "pom.xml"
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Checkout ${{ matrix.repository }}"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          path: lf-project
+          persist-credentials: false
+
+      - name: "Run on ${{ matrix.repository }}"
+        id: project
+        uses: $/
+        with:
+          path_prefix: lf-project${{ matrix.subdir }}
+
+      - name: "Verify version outputs"
+        shell: bash
+        env:
+          REPOSITORY: ${{ matrix.repository }}
+          GOT_PROPS_VERSION: >-
+            ${{ steps.project.outputs.version_properties_version }}
+          GOT_PROPS_MATCH: ${{ steps.project.outputs.version_properties_match }}
+          GOT_PROJECT_VERSION: ${{ steps.project.outputs.project_version }}
+          GOT_VERSION_SOURCE: ${{ steps.project.outputs.version_source }}
+          WANT_PROPS_VERSION: ${{ matrix.props_version }}
+          WANT_PROPS_MATCH: ${{ matrix.props_match }}
+          WANT_PROJECT_VERSION: ${{ matrix.project_version }}
+          WANT_VERSION_SOURCE: ${{ matrix.version_source }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          check "$REPOSITORY version_properties_version" \
+            "$GOT_PROPS_VERSION" "$WANT_PROPS_VERSION"
+          check "$REPOSITORY version_properties_match" \
+            "$GOT_PROPS_MATCH" "$WANT_PROPS_MATCH"
+          if [ -n "$WANT_PROJECT_VERSION" ]; then
+            check "$REPOSITORY project_version" \
+              "$GOT_PROJECT_VERSION" "$WANT_PROJECT_VERSION"
+          fi
+          if [ -n "$WANT_VERSION_SOURCE" ]; then
+            check "$REPOSITORY version_source" \
+              "$GOT_VERSION_SOURCE" "$WANT_VERSION_SOURCE"
+          fi
+          exit "$fail"
+
   ### Summary Job ###
   test-summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
-    needs: [test-self, test-matrix, test-rust]
+    needs: [test-self, test-matrix, test-rust, test-lf-projects]
     if: always()
     permissions:
       contents: read
@@ -740,6 +877,7 @@ jobs:
           SELF_TEST: ${{ needs.test-self.result }}
           MATRIX_TEST: ${{ needs.test-matrix.result }}
           RUST_TEST: ${{ needs.test-rust.result }}
+          LF_TEST: ${{ needs.test-lf-projects.result }}
         run: |
           # Count tests by checking job results
 
@@ -768,6 +906,12 @@ jobs:
               echo "| Rust Metadata | ✅ Passed |"
             else
               echo "| Rust Metadata | ❌ Failed |"
+            fi
+
+            if [ "$LF_TEST" = "success" ]; then
+              echo "| LF Project Versions | ✅ Passed |"
+            else
+              echo "| LF Project Versions | ❌ Failed |"
             fi
 
             echo ""
