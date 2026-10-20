@@ -236,9 +236,9 @@ outputs:
   has_dockerfiles:
     description: >-
       Returns true when a Dockerfile (Dockerfile, Dockerfile.* or
-      *.Dockerfile) exists up to eight levels below path_prefix, outside
-      the dockerfile_exclude list. Image discovery and per-image tags
-      belong to docker-build-matrix-action.
+      *.Dockerfile, excluding *.dockerignore) exists up to eight levels
+      below path_prefix, outside the dockerfile_exclude list. Image
+      discovery and per-image tags belong to docker-build-matrix-action.
     value: ${{ steps.extract.outputs.has_dockerfiles }}
 
   dockerfile_count:

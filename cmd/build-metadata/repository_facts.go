@@ -106,8 +106,12 @@ func isExcluded(rel, name string, excludes []string) bool {
 }
 
 // isDockerfileName accepts the usual Dockerfile naming conventions:
-// Dockerfile, Dockerfile.<variant> and <variant>.Dockerfile.
+// Dockerfile, Dockerfile.<variant> and <variant>.Dockerfile. BuildKit
+// ignore files such as Dockerfile.dockerignore are not Dockerfiles.
 func isDockerfileName(name string) bool {
+	if strings.HasSuffix(name, ".dockerignore") {
+		return false
+	}
 	return name == "Dockerfile" ||
 		strings.HasPrefix(name, "Dockerfile.") ||
 		strings.HasSuffix(name, ".Dockerfile")

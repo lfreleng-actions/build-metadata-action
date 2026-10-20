@@ -62,6 +62,33 @@ func TestRepositoryFactsEmptyTree(t *testing.T) {
 	}
 }
 
+// BuildKit's per-Dockerfile ignore file is not a Dockerfile.
+func TestRepositoryFactsDockerignoreOnly(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "Dockerfile.dockerignore")
+
+	metadata := newMetadata(dir)
+	applyRepositoryFacts(metadata, dir, nil)
+
+	if metadata.Common.HasDockerfiles || metadata.Common.DockerfileCount != 0 {
+		t.Errorf("Dockerfiles = (%t, %d), want (false, 0)",
+			metadata.Common.HasDockerfiles, metadata.Common.DockerfileCount)
+	}
+}
+
+func TestRepositoryFactsDockerfileWithDockerignore(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, "Dockerfile", "Dockerfile.dockerignore")
+
+	metadata := newMetadata(dir)
+	applyRepositoryFacts(metadata, dir, nil)
+
+	if !metadata.Common.HasDockerfiles || metadata.Common.DockerfileCount != 1 {
+		t.Errorf("Dockerfiles = (%t, %d), want (true, 1)",
+			metadata.Common.HasDockerfiles, metadata.Common.DockerfileCount)
+	}
+}
+
 func TestCountDockerfiles(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -73,6 +100,21 @@ func TestCountDockerfiles(t *testing.T) {
 			name:  "naming conventions",
 			files: []string{"Dockerfile", "images/Dockerfile.alpine", "api.Dockerfile", "docs/dockerfile.md", "Dockerfiles/README"},
 			want:  3,
+		},
+		{
+			name:  "dockerignore beside Dockerfile",
+			files: []string{"Dockerfile", "Dockerfile.dockerignore", ".dockerignore"},
+			want:  1,
+		},
+		{
+			name:  "dockerignore beside variant",
+			files: []string{"Dockerfile.prod", "Dockerfile.prod.dockerignore"},
+			want:  1,
+		},
+		{
+			name:  "plain dockerignore",
+			files: []string{".dockerignore", "app/.dockerignore"},
+			want:  0,
 		},
 		{
 			name:  "built-in excludes",
