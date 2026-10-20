@@ -4,12 +4,17 @@
 package version
 
 import (
+	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/encoding/ianaindex"
 )
 
 // VersionInfo contains version information extracted from a project
@@ -346,90 +351,67 @@ func extractJavaVersion(projectPath, projectType string) (*VersionInfo, error) {
 	return extractFallback(projectPath)
 }
 
-// extractMavenVersion extracts version from Maven pom.xml
+// mavenProjectVersions holds the direct <version> children of <project>
+// and of <parent>. Nothing nested deeper is read, so dependency, plugin
+// and profile versions cannot be mistaken for the project's, wherever
+// in the file the direct elements sit.
+type mavenProjectVersions struct {
+	XMLName xml.Name `xml:"project"`
+	Version string   `xml:"version"`
+	Parent  *struct {
+		Version string `xml:"version"`
+	} `xml:"parent"`
+}
+
+// extractMavenVersion extracts version from Maven pom.xml. A project
+// that declares no <version> of its own inherits its parent's, as
+// Maven does, so <parent><version> is used only when <project> has no
+// direct <version>. A POM that does not parse falls back to
+// version.properties, then git.
 func extractMavenVersion(projectPath string) (*VersionInfo, error) {
-	pomPath := filepath.Join(projectPath, "pom.xml")
-	content, err := os.ReadFile(pomPath)
+	content, err := os.ReadFile(filepath.Join(projectPath, "pom.xml"))
 	if err != nil {
 		return extractFallback(projectPath)
 	}
-
-	inProject := false
-	inParent := false
-	for _, line := range strings.Split(string(content), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, "<project") {
-			inProject = true
-		}
-		// The <parent> block carries the parent POM's coordinates,
-		// including its own <version>; skip it so the project version is
-		// not confused with the parent version.
-		if strings.Contains(line, "<parent>") {
-			inParent = true
-		}
-		// Once the scan reaches sections that commonly hold unrelated
-		// <version> tags (dependencies, build/plugins, profiles), stop
-		// looking: a well-formed POM declares the project version before
-		// these. If it was omitted (inherited from <parent>), fall back to
-		// version.properties/git rather than guess from a nested block.
-		if inProject && !inParent && isMavenVersionBoundary(line) {
-			break
-		}
-		if version, ok := parseMavenVersionLine(line, inProject && !inParent); ok {
-			return &VersionInfo{
-				Version:   version,
-				Source:    "pom.xml",
-				IsDynamic: isMavenDynamicVersion(version),
-			}, nil
-		}
-		if strings.Contains(line, "</parent>") {
-			inParent = false
+	var pom mavenProjectVersions
+	decoder := xml.NewDecoder(bytes.NewReader(content))
+	decoder.CharsetReader = pomCharsetReader
+	if err := decoder.Decode(&pom); err != nil {
+		return extractFallback(projectPath)
+	}
+	if version := strings.TrimSpace(pom.Version); version != "" {
+		return newMavenVersion(version), nil
+	}
+	if pom.Parent != nil {
+		if version := strings.TrimSpace(pom.Parent.Version); version != "" {
+			return newMavenVersion(version), nil
 		}
 	}
-
 	return extractFallback(projectPath)
 }
 
-// isMavenVersionBoundary reports whether the line opens a POM section that
-// typically contains dependency or plugin <version> tags unrelated to the
-// project's own version.
-func isMavenVersionBoundary(line string) bool {
-	boundaries := []string{
-		"<dependencies>",
-		"<dependencyManagement>",
-		"<build>",
-		"<plugins>",
-		"<pluginManagement>",
-		"<profiles>",
-		"<reporting>",
+// pomCharsetReader decodes POMs that declare an encoding other than
+// UTF-8, such as the ISO-8859-1 many older Maven projects use, which the
+// XML decoder otherwise rejects outright. The label is looked up in the
+// IANA registry; an unknown or unsupported charset is an error, so such
+// a POM falls back like any other that does not parse.
+func pomCharsetReader(label string, input io.Reader) (io.Reader, error) {
+	enc, err := ianaindex.IANA.Encoding(label)
+	if err != nil {
+		return nil, err
 	}
-	for _, tag := range boundaries {
-		if strings.Contains(line, tag) {
-			return true
-		}
+	if enc == nil {
+		return nil, fmt.Errorf("unsupported POM encoding %q", label)
 	}
-	return false
+	return enc.NewDecoder().Reader(input), nil
 }
 
-// parseMavenVersionLine extracts the inline <version>X</version> value.
-// The caller passes eligible=true only for lines inside <project> but
-// outside its <parent> block. A well-formed POM declares the project's
-// own <version> before any dependency or plugin blocks, so returning at
-// the first eligible match yields the project version rather than a
-// dependency or plugin version.
-func parseMavenVersionLine(line string, eligible bool) (string, bool) {
-	if !eligible || !strings.Contains(line, "<version>") || !strings.Contains(line, "</version>") {
-		return "", false
+func newMavenVersion(version string) *VersionInfo {
+	return &VersionInfo{
+		Version:   version,
+		Source:    "pom.xml",
+		IsDynamic: isMavenDynamicVersion(version),
 	}
-	// Contains above guarantees both tags exist, so Index is >= 0. The
-	// opening tag may sit at index 0 on a trimmed line, so gate only on
-	// the closing tag following the value.
-	start := strings.Index(line, "<version>") + len("<version>")
-	end := strings.Index(line, "</version>")
-	if end > start {
-		return line[start:end], true
-	}
-	return "", false
 }
 
 func isMavenDynamicVersion(version string) bool {
