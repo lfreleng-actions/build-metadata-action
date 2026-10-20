@@ -6,8 +6,9 @@ package main
 import "testing"
 
 // TestVersionPropertiesMatch locks in the comparator semantics: a
-// "true"/"false" string when both sides are present, and "" (not
-// comparable) when either side is empty.
+// "true"/"false" string when both sides are present, ignoring one
+// trailing -SNAPSHOT on the project version, and "" (not comparable)
+// when either side is empty.
 func TestVersionPropertiesMatch(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -25,6 +26,36 @@ func TestVersionPropertiesMatch(t *testing.T) {
 			name:           "mismatched versions",
 			propsVersion:   "1.9.0",
 			projectVersion: "2.0.0",
+			want:           "false",
+		},
+		{
+			name:           "development SNAPSHOT matches release",
+			propsVersion:   "3.8.6",
+			projectVersion: "3.8.6-SNAPSHOT",
+			want:           "true",
+		},
+		{
+			name:           "differing SNAPSHOT does not match",
+			propsVersion:   "3.8.6",
+			projectVersion: "3.9.0-SNAPSHOT",
+			want:           "false",
+		},
+		{
+			name:           "identical SNAPSHOT versions still match",
+			propsVersion:   "3.8.6-SNAPSHOT",
+			projectVersion: "3.8.6-SNAPSHOT",
+			want:           "true",
+		},
+		{
+			name:           "only one SNAPSHOT suffix is removed",
+			propsVersion:   "3.8.6",
+			projectVersion: "3.8.6-SNAPSHOT-SNAPSHOT",
+			want:           "false",
+		},
+		{
+			name:           "SNAPSHOT in version.properties is not stripped",
+			propsVersion:   "3.8.6-SNAPSHOT",
+			projectVersion: "3.8.6",
 			want:           "false",
 		},
 		{

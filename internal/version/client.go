@@ -4,12 +4,17 @@
 package version
 
 import (
+	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/text/encoding/ianaindex"
 )
 
 // VersionInfo contains version information extracted from a project
@@ -86,13 +91,18 @@ func extractFallback(projectPath string) (*VersionInfo, error) {
 
 // ExtractVersionProperties extracts a version from a version.properties
 // file, the convention used by Linux Foundation / ONAP projects (via
-// global-jjb) to hold the authoritative release version as separate
-// major/minor/patch keys. Literal release_version=X.Y.Z and
-// version=X.Y.Z keys are also accepted. Values containing ${...}
-// interpolation are ignored: Jenkins-era files interpolate derived
-// keys (base_version, release_version) from the major/minor/patch
-// trio when the file is sourced in shell, and this parser never
-// executes the file.
+// global-jjb) to hold the authoritative release version. It takes, in
+// order: the major/minor/patch trio, then base_version, then
+// release_version, then a literal version key. Values may reference
+// other keys of the same file as ${name}, which ONAP files use to
+// derive base_version from keys such as major_version/minor_version/
+// patch_version or release_name/sprint_number/feature_revision. Those
+// references resolve against the file's own literal keys only: the
+// parser never executes or sources the file and never reads the
+// environment. A key whose references cannot be resolved counts as
+// absent, as does one that exceeds the resolution bounds below.
+// snapshot_version is never used, since a -SNAPSHOT value is
+// not a release version.
 func ExtractVersionProperties(projectPath string) (*VersionInfo, bool) {
 	propsPath := filepath.Join(projectPath, "version.properties")
 	content, err := os.ReadFile(propsPath)
@@ -100,25 +110,28 @@ func ExtractVersionProperties(projectPath string) (*VersionInfo, bool) {
 		return nil, false
 	}
 
-	props := parseVersionProperties(string(content))
+	raw := parseVersionProperties(string(content))
+	resolver := newPropertyResolver(raw)
 
-	if version, ok := composeSemanticVersion(props); ok {
+	if version, ok := composeSemanticVersion(resolver); ok {
 		return newPropertiesVersion(version), true
 	}
 
-	// release_version wins over a bare version key when both are present.
-	for _, key := range []string{"release_version", "version"} {
-		if version, ok := props[key]; ok {
+	for _, key := range []string{"base_version", "release_version"} {
+		if version, ok := resolver.resolve(key, 0); ok {
 			return newPropertiesVersion(version), true
 		}
+	}
+
+	if version, ok := raw["version"]; ok && !strings.Contains(version, "$\u007b") {
+		return newPropertiesVersion(version), true
 	}
 
 	return nil, false
 }
 
 // parseVersionProperties parses key=value lines into a map, skipping
-// blanks, comments, and shell-interpolated values (e.g. ${major}) that
-// this parser never resolves because it does not source the file.
+// blanks and comments. Values keep any ${name} references unresolved.
 func parseVersionProperties(content string) map[string]string {
 	props := make(map[string]string)
 	for _, line := range strings.Split(content, "\n") {
@@ -132,7 +145,7 @@ func parseVersionProperties(content string) map[string]string {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
-		if value == "" || strings.Contains(value, "$\u007b") {
+		if key == "" || value == "" {
 			continue
 		}
 		props[key] = value
@@ -140,12 +153,112 @@ func parseVersionProperties(content string) map[string]string {
 	return props
 }
 
+// Bounds on ${name} resolution. The file is untrusted input, so nesting,
+// the size of any one expanded value and the total bytes produced per
+// file are all capped: depth alone does not stop a chain of keys that
+// each repeat the previous reference from expanding exponentially.
+const (
+	maxPropertyDepth      = 16
+	maxPropertyValueBytes = 256
+	maxPropertyWorkBytes  = 64 * 1024
+)
+
+// propertyResolver expands ${name} references against one file's own
+// keys on demand. Only the keys a version is read from are resolved,
+// each at most once; a key whose expansion would exceed a budget is
+// rejected before its content is copied, and counts as unresolvable.
+type propertyResolver struct {
+	raw      map[string]string
+	memo     map[string]resolvedProperty
+	visiting map[string]bool
+	work     int
+}
+
+// resolvedProperty is a cached expansion with its height: how many
+// reference levels it needs below the key itself. A cache hit at some
+// depth is valid only while depth plus height stays within the nesting
+// limit, so the result does not depend on the order keys resolve in.
+type resolvedProperty struct {
+	value  string
+	height int
+}
+
+func newPropertyResolver(raw map[string]string) *propertyResolver {
+	return &propertyResolver{
+		raw:      raw,
+		memo:     make(map[string]resolvedProperty),
+		visiting: make(map[string]bool),
+	}
+}
+
+// resolve returns key's value with every reference substituted, or false
+// when the key is missing, unresolvable, cyclic, nested too deep or over
+// budget.
+func (r *propertyResolver) resolve(key string, depth int) (string, bool) {
+	value, _, ok := r.resolveAt(key, depth)
+	return value, ok
+}
+
+func (r *propertyResolver) resolveAt(key string, depth int) (string, int, bool) {
+	if cached, ok := r.memo[key]; ok {
+		if depth+cached.height > maxPropertyDepth {
+			return "", 0, false
+		}
+		return cached.value, cached.height, true
+	}
+	value, ok := r.raw[key]
+	if !ok || r.visiting[key] || depth > maxPropertyDepth {
+		return "", 0, false
+	}
+	r.visiting[key] = true
+	defer delete(r.visiting, key)
+
+	var sb strings.Builder
+	height := 0
+	rest := value
+	for {
+		start := strings.Index(rest, "$\u007b")
+		if start < 0 {
+			if !r.write(&sb, rest) {
+				return "", 0, false
+			}
+			break
+		}
+		end := strings.Index(rest[start:], "}")
+		if end < 0 {
+			return "", 0, false
+		}
+		end += start
+		ref, refHeight, ok := r.resolveAt(rest[start+2:end], depth+1)
+		if !ok || !r.write(&sb, rest[:start]) || !r.write(&sb, ref) {
+			return "", 0, false
+		}
+		height = max(height, refHeight+1)
+		rest = rest[end+1:]
+	}
+	resolved := sb.String()
+	r.memo[key] = resolvedProperty{value: resolved, height: height}
+	return resolved, height, true
+}
+
+// write appends s to sb when both the value and the per-file work
+// budgets allow it, charging the work budget; otherwise it copies
+// nothing and reports false.
+func (r *propertyResolver) write(sb *strings.Builder, s string) bool {
+	if sb.Len()+len(s) > maxPropertyValueBytes || r.work+len(s) > maxPropertyWorkBytes {
+		return false
+	}
+	r.work += len(s)
+	sb.WriteString(s)
+	return true
+}
+
 // composeSemanticVersion builds major.minor.patch when all three keys
-// are present, the authoritative form used by global-jjb release files.
-func composeSemanticVersion(props map[string]string) (string, bool) {
-	major, hasMajor := props["major"]
-	minor, hasMinor := props["minor"]
-	patch, hasPatch := props["patch"]
+// resolve, the authoritative form used by global-jjb release files.
+func composeSemanticVersion(r *propertyResolver) (string, bool) {
+	major, hasMajor := r.resolve("major", 0)
+	minor, hasMinor := r.resolve("minor", 0)
+	patch, hasPatch := r.resolve("patch", 0)
 	if hasMajor && hasMinor && hasPatch {
 		return major + "." + minor + "." + patch, true
 	}
@@ -238,90 +351,67 @@ func extractJavaVersion(projectPath, projectType string) (*VersionInfo, error) {
 	return extractFallback(projectPath)
 }
 
-// extractMavenVersion extracts version from Maven pom.xml
+// mavenProjectVersions holds the direct <version> children of <project>
+// and of <parent>. Nothing nested deeper is read, so dependency, plugin
+// and profile versions cannot be mistaken for the project's, wherever
+// in the file the direct elements sit.
+type mavenProjectVersions struct {
+	XMLName xml.Name `xml:"project"`
+	Version string   `xml:"version"`
+	Parent  *struct {
+		Version string `xml:"version"`
+	} `xml:"parent"`
+}
+
+// extractMavenVersion extracts version from Maven pom.xml. A project
+// that declares no <version> of its own inherits its parent's, as
+// Maven does, so <parent><version> is used only when <project> has no
+// direct <version>. A POM that does not parse falls back to
+// version.properties, then git.
 func extractMavenVersion(projectPath string) (*VersionInfo, error) {
-	pomPath := filepath.Join(projectPath, "pom.xml")
-	content, err := os.ReadFile(pomPath)
+	content, err := os.ReadFile(filepath.Join(projectPath, "pom.xml"))
 	if err != nil {
 		return extractFallback(projectPath)
 	}
-
-	inProject := false
-	inParent := false
-	for _, line := range strings.Split(string(content), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.Contains(line, "<project") {
-			inProject = true
-		}
-		// The <parent> block carries the parent POM's coordinates,
-		// including its own <version>; skip it so the project version is
-		// not confused with the parent version.
-		if strings.Contains(line, "<parent>") {
-			inParent = true
-		}
-		// Once the scan reaches sections that commonly hold unrelated
-		// <version> tags (dependencies, build/plugins, profiles), stop
-		// looking: a well-formed POM declares the project version before
-		// these. If it was omitted (inherited from <parent>), fall back to
-		// version.properties/git rather than guess from a nested block.
-		if inProject && !inParent && isMavenVersionBoundary(line) {
-			break
-		}
-		if version, ok := parseMavenVersionLine(line, inProject && !inParent); ok {
-			return &VersionInfo{
-				Version:   version,
-				Source:    "pom.xml",
-				IsDynamic: isMavenDynamicVersion(version),
-			}, nil
-		}
-		if strings.Contains(line, "</parent>") {
-			inParent = false
+	var pom mavenProjectVersions
+	decoder := xml.NewDecoder(bytes.NewReader(content))
+	decoder.CharsetReader = pomCharsetReader
+	if err := decoder.Decode(&pom); err != nil {
+		return extractFallback(projectPath)
+	}
+	if version := strings.TrimSpace(pom.Version); version != "" {
+		return newMavenVersion(version), nil
+	}
+	if pom.Parent != nil {
+		if version := strings.TrimSpace(pom.Parent.Version); version != "" {
+			return newMavenVersion(version), nil
 		}
 	}
-
 	return extractFallback(projectPath)
 }
 
-// isMavenVersionBoundary reports whether the line opens a POM section that
-// typically contains dependency or plugin <version> tags unrelated to the
-// project's own version.
-func isMavenVersionBoundary(line string) bool {
-	boundaries := []string{
-		"<dependencies>",
-		"<dependencyManagement>",
-		"<build>",
-		"<plugins>",
-		"<pluginManagement>",
-		"<profiles>",
-		"<reporting>",
+// pomCharsetReader decodes POMs that declare an encoding other than
+// UTF-8, such as the ISO-8859-1 many older Maven projects use, which the
+// XML decoder otherwise rejects outright. The label is looked up in the
+// IANA registry; an unknown or unsupported charset is an error, so such
+// a POM falls back like any other that does not parse.
+func pomCharsetReader(label string, input io.Reader) (io.Reader, error) {
+	enc, err := ianaindex.IANA.Encoding(label)
+	if err != nil {
+		return nil, err
 	}
-	for _, tag := range boundaries {
-		if strings.Contains(line, tag) {
-			return true
-		}
+	if enc == nil {
+		return nil, fmt.Errorf("unsupported POM encoding %q", label)
 	}
-	return false
+	return enc.NewDecoder().Reader(input), nil
 }
 
-// parseMavenVersionLine extracts the inline <version>X</version> value.
-// The caller passes eligible=true only for lines inside <project> but
-// outside its <parent> block. A well-formed POM declares the project's
-// own <version> before any dependency or plugin blocks, so returning at
-// the first eligible match yields the project version rather than a
-// dependency or plugin version.
-func parseMavenVersionLine(line string, eligible bool) (string, bool) {
-	if !eligible || !strings.Contains(line, "<version>") || !strings.Contains(line, "</version>") {
-		return "", false
+func newMavenVersion(version string) *VersionInfo {
+	return &VersionInfo{
+		Version:   version,
+		Source:    "pom.xml",
+		IsDynamic: isMavenDynamicVersion(version),
 	}
-	// Contains above guarantees both tags exist, so Index is >= 0. The
-	// opening tag may sit at index 0 on a trimmed line, so gate only on
-	// the closing tag following the value.
-	start := strings.Index(line, "<version>") + len("<version>")
-	end := strings.Index(line, "</version>")
-	if end > start {
-		return line[start:end], true
-	}
-	return "", false
 }
 
 func isMavenDynamicVersion(version string) bool {

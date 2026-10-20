@@ -252,7 +252,7 @@ All project types provide these standardized outputs:
 | `version_source`             | Source of version info                                                                                                 | `pyproject.toml`         |
 | `versioning_type`            | Versioning type: `static` or `dynamic`                                                                                 | `static`                 |
 | `version_properties_version` | Version from version.properties (LF/ONAP convention); empty when absent                                                | `1.1.0`                  |
-| `version_properties_match`   | Whether version.properties matches `project_version` (empty when not comparable)                                       | `true`                   |
+| `version_properties_match`   | Whether version.properties matches `project_version`, ignoring one trailing `-SNAPSHOT` (empty when not comparable)    | `true`                   |
 | `snapshot_version`           | Synthesized interim/development version (`X.Y.Z-SNAPSHOT` convention)                                                  | `1.1.0-SNAPSHOT`         |
 | `release_files`              | Comma-separated release request files under `releases/` (global-jjb/LF convention); empty when none                    | `releases/3.8.2.yaml`    |
 | `release_file_count`         | Number of release request files found under `releases/`                                                                | `1`                      |
@@ -824,10 +824,19 @@ The action reads `version.properties` from `path_prefix` and no other
 directory. When `path_prefix` names a sub-project, that directory's own file supplies
 `version_properties_version`; the action does not fall back to a
 parent directory's file, so a sub-project without one reports no
-`version.properties` version. The action composes the version from the
-`major`, `minor` and `patch` keys. It ignores keys whose values
-interpolate `${...}` (such as `base_version` and `release_version` in
-ONAP files), because it never sources the file the way Jenkins does.
+`version.properties` version. The action takes the version from, in
+order: the `major`, `minor` and `patch` keys; `base_version`;
+`release_version`; then a literal `version` key. It never uses
+`snapshot_version`. Values may reference other keys in the same file
+as `${name}`, as ONAP files do to build `base_version` from
+`major_version`/`minor_version`/`patch_version` or
+`release_name`/`sprint_number`/`feature_revision`. The action resolves
+those references against the file's own keys; it never sources
+the file or reads the environment, and it treats a key whose
+references do not resolve, such as a cycle or an unknown name, as
+absent. Resolution has limits: references nest at most 16 deep, a
+resolved value may not exceed 256 bytes, and one file may not expand
+to more than 64 KiB in total. A key over any limit counts as absent.
 
 ## Implementation Details
 

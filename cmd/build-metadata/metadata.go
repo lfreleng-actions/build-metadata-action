@@ -54,7 +54,8 @@ type CommonMetadata struct {
 	// version.
 	VersionPropertiesVersion string `json:"version_properties_version,omitempty"`
 	// VersionPropertiesMatch reports ("true"/"false") whether
-	// VersionPropertiesVersion equals ProjectVersion; empty when the
+	// VersionPropertiesVersion equals ProjectVersion, ignoring one
+	// trailing -SNAPSHOT on ProjectVersion; empty when the
 	// project has no usable version.properties file or no project
 	// version.
 	VersionPropertiesMatch string `json:"version_properties_match,omitempty"`
@@ -140,12 +141,16 @@ func populateCIMetadata(metadata *Metadata) {
 
 // versionPropertiesMatch returns "true"/"false" comparing the
 // version.properties version against the resolved project version,
-// or "" when either side is empty (not comparable).
+// or "" when either side is empty (not comparable). A single trailing
+// -SNAPSHOT on the project version is ignored: during development an
+// ONAP repository holds X.Y.Z in version.properties and
+// X.Y.Z-SNAPSHOT in pom.xml, which is the expected state.
 func versionPropertiesMatch(propsVersion, projectVersion string) string {
 	if propsVersion == "" || projectVersion == "" {
 		return ""
 	}
-	return fmt.Sprintf("%t", propsVersion == projectVersion)
+	release := strings.TrimSuffix(projectVersion, "-SNAPSHOT")
+	return fmt.Sprintf("%t", propsVersion == projectVersion || propsVersion == release)
 }
 
 // synthesizeSnapshotVersion derives the interim/development version
