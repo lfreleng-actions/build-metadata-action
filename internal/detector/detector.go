@@ -175,9 +175,16 @@ func DetectAllProjectTypes(projectPath string) ([]string, error) {
 		return nil, fmt.Errorf("could not detect any project types in %s", projectPath)
 	}
 
-	// Convert to strings
+	// Several rules can name the same type (the Terraform rules match
+	// main.tf, variables.tf and *.tf), so report each type once.
+	seen := make(map[string]bool)
 	for _, pt := range detected {
-		projectTypes = append(projectTypes, pt.String())
+		name := pt.String()
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		projectTypes = append(projectTypes, name)
 	}
 
 	return projectTypes, nil

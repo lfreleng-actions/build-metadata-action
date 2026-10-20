@@ -48,6 +48,7 @@ func (c *appContext) setOutput(name, value string) {
 
 func emitCommonOutputs(ctx *appContext, metadata *Metadata) {
 	ctx.setOutput("project_type", metadata.Common.ProjectType)
+	ctx.setOutput("project_types", projectTypesJSON(metadata.Common.ProjectTypes))
 	ctx.setOutput("build_tool", metadata.Common.BuildTool)
 	ctx.setOutput("project_name", metadata.Common.ProjectName)
 	ctx.setOutput("project_version", metadata.Common.ProjectVersion)
@@ -63,6 +64,8 @@ func emitCommonOutputs(ctx *appContext, metadata *Metadata) {
 	ctx.setOutput("release_version", metadata.Common.ReleaseVersion)
 	ctx.setOutput("release_ref", metadata.Common.ReleaseRef)
 	ctx.setOutput("release_distribution_type", metadata.Common.ReleaseDistributionType)
+	ctx.setOutput("has_dockerfiles", fmt.Sprintf("%t", metadata.Common.HasDockerfiles))
+	ctx.setOutput("dockerfile_count", fmt.Sprintf("%d", metadata.Common.DockerfileCount))
 	ctx.setOutput("build_timestamp", metadata.Common.BuildTimestamp.Format(time.RFC3339))
 	ctx.setOutput("git_sha", metadata.Common.GitSHA)
 	ctx.setOutput("git_branch", metadata.Common.GitBranch)
@@ -73,6 +76,19 @@ func emitCommonOutputs(ctx *appContext, metadata *Metadata) {
 	ctx.setOutput("ci_run_url", metadata.Build.CIRunURL)
 	ctx.setOutput("runner_os", metadata.Build.RunnerOS)
 	ctx.setOutput("runner_arch", metadata.Build.RunnerArch)
+}
+
+// projectTypesJSON renders the detected project types as a JSON array,
+// "[]" when none matched, so callers can always pass it to fromJSON.
+func projectTypesJSON(types []string) string {
+	if len(types) == 0 {
+		return "[]"
+	}
+	encoded, err := json.Marshal(types)
+	if err != nil {
+		return "[]"
+	}
+	return string(encoded)
 }
 
 // emitProjectMatchRepo compares the detected project name against the

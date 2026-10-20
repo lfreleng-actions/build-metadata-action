@@ -39,6 +39,7 @@ func main() {
 	extractProjectMetadata(ctx, metadata, projectType, cfg.absPath)
 	applyVersionProperties(metadata, cfg.absPath)
 	applyReleaseFiles(metadata, cfg.absPath)
+	applyRepositoryFacts(metadata, cfg.absPath, cfg.dockerfileExcludes)
 	collectEnvironmentMetadata(ctx, cfg, metadata)
 
 	emitCommonOutputs(ctx, metadata)

@@ -25,6 +25,15 @@ inputs:
     required: false
     default: ""
 
+  dockerfile_exclude:
+    description: >-
+      Globs (comma, space or newline separated) naming directories or
+      files to skip when counting Dockerfiles, matched against the base
+      name and the path relative to path_prefix. Added to the built-in
+      excludes (.git, node_modules, vendor, target, .tox, .venv).
+    required: false
+    default: ""
+
   output_format:
     # Can be provided comma-separated, space-separated or newline-separated
     # Set to an empty string to disable output
@@ -139,6 +148,14 @@ outputs:
       project_type input (e.g. python-modern, javascript-npm)
     value: ${{ steps.extract.outputs.project_type }}
 
+  project_types:
+    description: >-
+      JSON array of every project type whose marker files exist at
+      path_prefix, in detection priority order (e.g.
+      ["java-maven","docker"]); "[]" when none match. Detected even when
+      the project_type input is supplied.
+    value: ${{ steps.extract.outputs.project_types }}
+
   build_tool:
     # Empty where the project type does not name a tool unambiguously,
     # so a consumer can distinguish "not identified" from a wrong guess.
@@ -215,6 +232,18 @@ outputs:
       distribution_type of a lone release file, lowercased (maven, container,
       artifact, pypi); empty when it declares none or several files exist
     value: ${{ steps.extract.outputs.release_distribution_type }}
+
+  has_dockerfiles:
+    description: >-
+      Returns true when a Dockerfile (Dockerfile, Dockerfile.* or
+      *.Dockerfile) exists up to eight levels below path_prefix, outside
+      the dockerfile_exclude list. Image discovery and per-image tags
+      belong to docker-build-matrix-action.
+    value: ${{ steps.extract.outputs.has_dockerfiles }}
+
+  dockerfile_count:
+    description: "Number of Dockerfiles counted for has_dockerfiles"
+    value: ${{ steps.extract.outputs.dockerfile_count }}
 
   versioning_type:
     description: "Versioning type: 'static' or 'dynamic'"
@@ -870,6 +899,7 @@ runs:
       env:
         INPUT_PATH_PREFIX: ${{ inputs.path_prefix }}
         INPUT_PROJECT_TYPE: ${{ inputs.project_type }}
+        INPUT_DOCKERFILE_EXCLUDE: ${{ inputs.dockerfile_exclude }}
         INPUT_OUTPUT_FORMAT: ${{ inputs.output_format }}
         INPUT_INCLUDE_ENVIRONMENT: ${{ inputs.include_environment }}
         INPUT_USE_VERSION_EXTRACT: ${{ inputs.use_version_extract }}

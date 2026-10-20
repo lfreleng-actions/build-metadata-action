@@ -307,6 +307,32 @@ func TestDetectAllProjectTypes(t *testing.T) {
 	}
 }
 
+// TestDetectAllProjectTypesReportsEachTypeOnce covers rules that share a
+// type: main.tf, variables.tf and *.tf all name terraform-module.
+func TestDetectAllProjectTypesReportsEachTypeOnce(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, name := range []string{"main.tf", "variables.tf", "Dockerfile"} {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(""), 0o600); err != nil {
+			t.Fatalf("Failed to write %s: %v", name, err)
+		}
+	}
+
+	results, err := DetectAllProjectTypes(tmpDir)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	want := []string{"docker", "terraform-module"}
+	if len(results) != len(want) {
+		t.Fatalf("DetectAllProjectTypes() = %v, want %v", results, want)
+	}
+	for i := range want {
+		if results[i] != want[i] {
+			t.Errorf("DetectAllProjectTypes()[%d] = %q, want %q", i, results[i], want[i])
+		}
+	}
+}
+
 // TestDetectionPriority tests that higher priority types are detected first
 func TestDetectionPriority(t *testing.T) {
 	tests := []struct {

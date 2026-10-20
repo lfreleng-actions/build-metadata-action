@@ -19,6 +19,7 @@ type runConfig struct {
 	verboseOutput       bool
 	absPath             string
 	projectTypeOverride string
+	dockerfileExcludes  []string
 	outputFormats       []string
 	includeEnvironment  bool
 	useVersionExtract   bool
@@ -77,6 +78,7 @@ func parseFlags(action *githubactions.Action, isCI bool) runConfig {
 		// frontend-maven-plugin resolves as javascript-npm and reports
 		// no java_version at all.
 		projectTypeOverride: action.GetInput("project_type"),
+		dockerfileExcludes:  parseMultiSeparatorInput(action.GetInput("dockerfile_exclude")),
 		// Output formats can be comma, space, or newline separated. An
 		// explicit empty string disables output; when unset the
 		// action.yaml default ("summary") is already applied upstream.
