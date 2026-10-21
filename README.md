@@ -6,7 +6,7 @@
 # 🔧 Build Metadata Action
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://golang.org)
 
 Universal GitHub Action to capture and display comprehensive metadata related to
 software builds across 15+ languages and build systems.
@@ -896,7 +896,7 @@ architecture and design decisions.
 
 ### Prerequisites
 
-- Go 1.24 or higher
+- Go 1.26 or higher
 - Git
 - (Optional) Language toolchains for testing
 
