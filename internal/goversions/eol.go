@@ -62,7 +62,7 @@ func isValidHTTPURL(raw string) bool {
 
 // EOLData represents the end-of-life information for a Go release cycle
 type EOLData struct {
-	Cycle             string      `json:"cycle"`             // Version number (e.g., "1.25")
+	Cycle             string      `json:"cycle"`             // Version number (e.g., "1.27")
 	ReleaseDate       string      `json:"releaseDate"`       // Release date
 	EOL               interface{} `json:"eol"`               // End of life date or boolean
 	Latest            string      `json:"latest"`            // Latest patch version
@@ -248,8 +248,8 @@ func (c *EOLClient) IsVersionEOL(version string, data []EOLData) (bool, string) 
 // controlling the supported range. Go's release support policy keeps
 // exactly the two most recent releases supported (each release is
 // supported until two newer major releases ship), so the fallback range
-// is deliberately narrow: as of mid-2026 the supported releases are
-// 1.25 and 1.26. Bumping either bound when a new Go release ships (or
+// is deliberately narrow: as of late 2026 the supported releases are
+// 1.26 and 1.27. Bumping either bound when a new Go release ships (or
 // an old one drops out of support) is a one-line change here; every
 // consumer in this repository derives from these constants -- see
 // `GetFallbackVersions`, `Baseline`, `Latest`, and the Go extractor's
@@ -260,13 +260,13 @@ func (c *EOLClient) IsVersionEOL(version string, data []EOLData) (bool, string) 
 // not need to be renamed on every release cadence.
 const (
 	baselineMajor = 1
-	baselineMinor = 25
+	baselineMinor = 26
 	latestMajor   = 1
-	latestMinor   = 26
+	latestMinor   = 27
 )
 
 // Baseline returns the oldest supported Go version as a major.minor
-// string (e.g. "1.25"). It is the single exported representation of
+// string (e.g. "1.26"). It is the single exported representation of
 // `baselineMajor.baselineMinor` for callers outside the goversions
 // package, so the baseline floor stays a one-line change here.
 func Baseline() string {
@@ -274,7 +274,7 @@ func Baseline() string {
 }
 
 // Latest returns the newest supported Go version as a major.minor
-// string (e.g. "1.26"). The companion to Baseline; bumping the upper
+// string (e.g. "1.27"). The companion to Baseline; bumping the upper
 // bound is a one-line change to `latestMinor` (or `latestMajor`).
 func Latest() string {
 	return fmt.Sprintf("%d.%d", latestMajor, latestMinor)

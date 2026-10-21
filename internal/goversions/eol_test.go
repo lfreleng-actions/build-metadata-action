@@ -70,29 +70,29 @@ func TestGetSupportedVersions(t *testing.T) {
 		// notes below only flag these cycles as "in the past" for
 		// filtering purposes.
 		client.cachedData = []EOLData{
+			{Cycle: "1.27", EOL: futureDate},
 			{Cycle: "1.26", EOL: futureDate},
-			{Cycle: "1.25", EOL: futureDate},
-			{Cycle: "1.24", EOL: pastDate}, // EOL (date in the past)
-			{Cycle: "1.23", EOL: true},     // EOL (boolean form)
+			{Cycle: "1.25", EOL: pastDate}, // EOL (date in the past)
+			{Cycle: "1.24", EOL: true},     // EOL (boolean form)
 		}
 		client.cacheTime = time.Now()
 
 		supported, err := client.GetSupportedVersions()
 		require.NoError(t, err)
 
+		assert.Contains(t, supported, "1.27")
 		assert.Contains(t, supported, "1.26")
-		assert.Contains(t, supported, "1.25")
+		assert.NotContains(t, supported, "1.25")
 		assert.NotContains(t, supported, "1.24")
-		assert.NotContains(t, supported, "1.23")
 	})
 
 	t.Run("filters out pre-baseline versions", func(t *testing.T) {
 		futureDate := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
 
 		client.cachedData = []EOLData{
+			{Cycle: "1.27", EOL: futureDate},
 			{Cycle: "1.26", EOL: futureDate},
-			{Cycle: "1.25", EOL: futureDate},
-			{Cycle: "1.24", EOL: futureDate}, // Should be filtered (1.25 floor)
+			{Cycle: "1.25", EOL: futureDate}, // Should be filtered (1.26 floor)
 			{Cycle: "1.22", EOL: futureDate}, // Should be filtered
 		}
 		client.cacheTime = time.Now()
@@ -100,9 +100,9 @@ func TestGetSupportedVersions(t *testing.T) {
 		supported, err := client.GetSupportedVersions()
 		require.NoError(t, err)
 
+		assert.Contains(t, supported, "1.27")
 		assert.Contains(t, supported, "1.26")
-		assert.Contains(t, supported, "1.25")
-		assert.NotContains(t, supported, "1.24")
+		assert.NotContains(t, supported, "1.25")
 		assert.NotContains(t, supported, "1.22")
 	})
 }
@@ -155,14 +155,14 @@ func TestGetFallbackVersions(t *testing.T) {
 
 	assert.NotEmpty(t, versions)
 	// Go's support policy keeps the latest two releases supported; as
-	// of mid-2026 those are 1.25 and 1.26.
-	assert.Equal(t, []string{"1.25", "1.26"}, versions)
+	// of late 2026 those are 1.26 and 1.27.
+	assert.Equal(t, []string{"1.26", "1.27"}, versions)
 
-	// Should not contain EOL versions. 1.24 dropped out of support
-	// when 1.26 shipped.
+	// Should not contain EOL versions. 1.25 dropped out of support
+	// when 1.27 shipped.
+	assert.NotContains(t, versions, "1.25")
 	assert.NotContains(t, versions, "1.24")
 	assert.NotContains(t, versions, "1.23")
-	assert.NotContains(t, versions, "1.22")
 }
 
 func TestBaselineAndLatest(t *testing.T) {
@@ -179,13 +179,13 @@ func TestIsVersionBaselineOrLater(t *testing.T) {
 		version  string
 		expected bool
 	}{
-		{"1.25", true},
 		{"1.26", true},
 		{"1.27", true},
+		{"1.28", true},
 		{"1.99", true},
 		{"2.0", true},
+		{"1.25", false},
 		{"1.24", false},
-		{"1.23", false},
 		{"1.22", false},
 		{"invalid", false},
 		{"1", false},

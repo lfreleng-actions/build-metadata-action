@@ -667,7 +667,7 @@ outputs:
   go_matrix_json:
     description: >-
       Go version test matrix as JSON, ready for workflow matrix
-      strategies (e.g. {"go-version": ["1.25", "1.26"]})
+      strategies (e.g. {"go-version": ["1.26", "1.27"]})
     value: ${{ steps.extract.outputs.go_matrix_json }}
 
   # Language-Specific Outputs (Rust)
