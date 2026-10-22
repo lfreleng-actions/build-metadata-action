@@ -667,7 +667,7 @@ outputs:
   go_matrix_json:
     description: >-
       Go version test matrix as JSON, ready for workflow matrix
-      strategies (e.g. {"go-version": ["1.25", "1.26"]})
+      strategies (e.g. {"go-version": ["1.26", "1.27"]})
     value: ${{ steps.extract.outputs.go_matrix_json }}
 
   # Language-Specific Outputs (Rust)
@@ -891,7 +891,12 @@ runs:
     - name: "Setup Go"
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: '1.25.x'
+        # Newest supported release line. check-latest makes setup-go
+        # resolve the newest patch rather than reuse an older one
+        # cached on the runner image, so the binary always carries the
+        # latest crypto/x509 and net/http fixes for its HTTPS lookups.
+        go-version: '1.27.x'
+        check-latest: true
         cache: false
 
     - name: "Build and Extract Metadata"
