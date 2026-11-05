@@ -255,13 +255,13 @@ func (c *EOLClient) IsVersionEOL(version string, data []EOLData) (bool, string) 
 // not need to be renamed on every annual cadence.
 const (
 	baselineMajor = 3
-	baselineMinor = 10
+	baselineMinor = 11
 	latestMajor   = 3
-	latestMinor   = 14
+	latestMinor   = 15
 )
 
 // Baseline returns the oldest supported Python version as a major.minor
-// string (e.g. "3.10"). It is the single exported representation of
+// string (e.g. "3.11"). It is the single exported representation of
 // `baselineMajor.baselineMinor` for callers outside the pyversions
 // package, so the baseline floor stays a one-line change here.
 func Baseline() string {
@@ -269,7 +269,7 @@ func Baseline() string {
 }
 
 // Latest returns the newest supported Python version as a major.minor
-// string (e.g. "3.14"). The companion to Baseline; bumping the upper
+// string (e.g. "3.15"). The companion to Baseline; bumping the upper
 // bound is a one-line change to `latestMinor` (or `latestMajor`).
 func Latest() string {
 	return fmt.Sprintf("%d.%d", latestMajor, latestMinor)

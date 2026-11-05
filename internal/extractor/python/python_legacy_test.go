@@ -114,8 +114,8 @@ func TestLegacy_SetupCfgClassifiersDeriveMatrix(t *testing.T) {
 	require.NoError(t, err)
 
 	matrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
-	assert.Equal(t, []string{"3.10", "3.11", "3.12"}, matrix,
-		"classifier-derived matrix should ignore the bare 3 and sort numerically")
+	assert.Equal(t, []string{"3.11", "3.12"}, matrix,
+		"classifier-derived matrix should ignore the bare 3 and the EOL 3.10 and sort numerically")
 	assert.Equal(t, "3.12", metadata.LanguageSpecific["build_version"])
 	assert.Equal(t, "classifiers", metadata.LanguageSpecific["requires_python_source"])
 	assert.Equal(t, "static", metadata.LanguageSpecific["versioning_type"])
@@ -279,7 +279,7 @@ func TestLegacy_SetupPyClassifiersDeriveMatrix(t *testing.T) {
 	require.NoError(t, err)
 
 	matrix, _ := metadata.LanguageSpecific["version_matrix"].([]string)
-	assert.Equal(t, []string{"3.10", "3.11"}, matrix)
+	assert.Equal(t, []string{"3.11"}, matrix)
 	assert.Equal(t, "3.11", metadata.LanguageSpecific["build_version"])
 	assert.Equal(t, "classifiers", metadata.LanguageSpecific["requires_python_source"])
 	assert.Nil(t, metadata.LanguageSpecific["requires_python_fallback"])
@@ -401,14 +401,14 @@ func TestLegacy_ParseSetupCfgContinuationLines(t *testing.T) {
 func TestLegacy_DerivePythonVersionsFromClassifiers(t *testing.T) {
 	input := []string{
 		"Programming Language :: Python :: 3",
+		"Programming Language :: Python :: 3.12",
 		"Programming Language :: Python :: 3.11",
-		"Programming Language :: Python :: 3.10",
-		"Programming Language :: Python :: 3.11", // duplicate
+		"Programming Language :: Python :: 3.12", // duplicate
 		"Operating System :: OS Independent",
 		"Programming Language :: Python :: 3 :: Only",
 	}
 	result := derivePythonVersionsFromClassifiers(input)
-	assert.Equal(t, []string{"3.10", "3.11"}, result)
+	assert.Equal(t, []string{"3.11", "3.12"}, result)
 }
 
 // TestLegacy_DetectDynamicProviderFromSetupPy covers each provider branch.
@@ -692,7 +692,7 @@ func TestLegacy_SetupPyScmNoVersionIsUnresolved(t *testing.T) {
 // TestLegacy_ClassifierFiltersOutOfRangeVersions confirms that Python
 // versions declared in trove classifiers that fall outside the active
 // policy's SupportedSet (in the default offline policy: anything below
-// the baseline floor, which today excludes 2.x and 3.6-3.9) are filtered
+// the baseline floor, which today excludes 2.x and 3.6-3.10) are filtered
 // out of the classifier-derived matrix. EOL filtering proper is handled
 // separately by the policy and surfaced via the `python_eol_versions`
 // outputs; this test covers the supported-range filter only.
@@ -708,7 +708,7 @@ func TestLegacy_ClassifierFiltersOutOfRangeVersions(t *testing.T) {
 		"Programming Language :: Python :: 3.11",
 	}
 	result := derivePythonVersionsFromClassifiers(input)
-	assert.Equal(t, []string{"3.10", "3.11"}, result,
+	assert.Equal(t, []string{"3.11"}, result,
 		"classifier-derived matrices must drop versions outside the active policy's SupportedSet")
 }
 
@@ -806,7 +806,7 @@ func TestLegacy_PyProjectClassifierMatrixPropagates(t *testing.T) {
 
 	matrix, ok := metadata.LanguageSpecific["version_matrix"].([]string)
 	require.True(t, ok, "classifier-derived version_matrix must be propagated from setup.cfg fallback")
-	assert.Equal(t, []string{"3.10", "3.11", "3.12"}, matrix)
+	assert.Equal(t, []string{"3.11", "3.12"}, matrix)
 
 	assert.Equal(t, "3.12", metadata.LanguageSpecific["build_version"],
 		"build_version must be the highest classifier-declared Python version")
@@ -843,8 +843,8 @@ func TestLegacy_PoetryDependenciesPython(t *testing.T) {
 		"requires_python_source must signal that the matrix was derived from poetry deps")
 	matrix, ok := metadata.LanguageSpecific["version_matrix"].([]string)
 	require.True(t, ok, "version_matrix must be generated from poetry dependencies")
-	assert.Equal(t, []string{"3.11", "3.12", "3.13", "3.14"}, matrix)
-	assert.Equal(t, "3.14", metadata.LanguageSpecific["build_version"],
+	assert.Equal(t, []string{"3.11", "3.12", "3.13", "3.14", "3.15"}, matrix)
+	assert.Equal(t, "3.15", metadata.LanguageSpecific["build_version"],
 		"build_version must be the newest entry in the resolved matrix")
 	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
 		"poetry-derived matrices must not be flagged as fallback guesses")

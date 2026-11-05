@@ -13,7 +13,7 @@ import (
 
 // ErrNoVersionsMatch is returned by ResolveVersions when the supplied
 // constraint parses cleanly but no supported version satisfies it
-// (e.g. `<3.10` against a 3.10+ supported set, or `>=4.0` against a
+// (e.g. `<3.11` against a 3.11+ supported set, or `>=4.0` against a
 // 3.x-only set). Callers can detect this with `errors.Is(err,
 // ErrNoVersionsMatch)` and react explicitly (typically by widening the
 // matrix and tagging the source as `out-of-range-fallback`) instead of
