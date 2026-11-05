@@ -94,7 +94,7 @@ inputs:
     description: >-
       When 'true', the Python extractor skips the live endoflife.date
       consultation and uses the action's static supported-version list
-      (3.10 through 3.14 at the time of writing). Useful for hermetic
+      (3.11 through 3.15 at the time of writing). Useful for hermetic
       builds or when the runner has no outbound network access. Default
       'false' so the extractor benefits from live EOL data.
     required: false

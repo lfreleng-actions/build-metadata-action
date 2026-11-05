@@ -46,9 +46,14 @@ func TestConstraintForms_PyProject(t *testing.T) {
 		matrix   []string
 	}{
 		{
-			name:     "exclusion constraint (>=3.10,!=3.11)",
-			requires: ">=3.10,!=3.11",
-			matrix:   []string{"3.10", "3.12", "3.13", "3.14"},
+			name:     "floor below baseline (>=3.10)",
+			requires: ">=3.10",
+			matrix:   []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
+		},
+		{
+			name:     "exclusion constraint (>=3.11,!=3.12)",
+			requires: ">=3.11,!=3.12",
+			matrix:   []string{"3.11", "3.13", "3.14", "3.15"},
 		},
 		{
 			name:     "exact pin (==3.12)",
@@ -56,14 +61,14 @@ func TestConstraintForms_PyProject(t *testing.T) {
 			matrix:   []string{"3.12"},
 		},
 		{
-			name:     "wildcard exact (==3.10.*)",
-			requires: "==3.10.*",
-			matrix:   []string{"3.10"},
+			name:     "wildcard exact (==3.11.*)",
+			requires: "==3.11.*",
+			matrix:   []string{"3.11"},
 		},
 		{
 			name:     "compatible release without patch (~=3.11)",
 			requires: "~=3.11",
-			matrix:   []string{"3.11", "3.12", "3.13", "3.14"},
+			matrix:   []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 		{
 			name:     "compatible release with patch (~=3.11.5)",
@@ -71,29 +76,29 @@ func TestConstraintForms_PyProject(t *testing.T) {
 			matrix:   []string{"3.11"},
 		},
 		{
-			name:     "greater than (>3.10)",
-			requires: ">3.10",
-			matrix:   []string{"3.11", "3.12", "3.13", "3.14"},
+			name:     "greater than (>3.11)",
+			requires: ">3.11",
+			matrix:   []string{"3.12", "3.13", "3.14", "3.15"},
 		},
 		{
-			name:     "multi-bound with exclusion (>=3.10,<3.14,!=3.12)",
-			requires: ">=3.10,<3.14,!=3.12",
-			matrix:   []string{"3.10", "3.11", "3.13"},
+			name:     "multi-bound with exclusion (>=3.11,<3.15,!=3.13)",
+			requires: ">=3.11,<3.15,!=3.13",
+			matrix:   []string{"3.11", "3.12", "3.14"},
 		},
 		{
-			name:     "inclusive upper bound (>=3.10,<=3.12)",
-			requires: ">=3.10,<=3.12",
-			matrix:   []string{"3.10", "3.11", "3.12"},
+			name:     "inclusive upper bound (>=3.11,<=3.13)",
+			requires: ">=3.11,<=3.13",
+			matrix:   []string{"3.11", "3.12", "3.13"},
 		},
 		{
-			name:     "tightest bound wins (>=3.10,<=3.13,<3.12)",
-			requires: ">=3.10,<=3.13,<3.12",
-			matrix:   []string{"3.10", "3.11"},
+			name:     "tightest bound wins (>=3.11,<=3.14,<3.13)",
+			requires: ">=3.11,<=3.14,<3.13",
+			matrix:   []string{"3.11", "3.12"},
 		},
 		{
-			name:     "tie-break exclusive over inclusive (<=3.12,<3.12)",
-			requires: ">=3.10,<=3.12,<3.12",
-			matrix:   []string{"3.10", "3.11"},
+			name:     "tie-break exclusive over inclusive (<=3.13,<3.13)",
+			requires: ">=3.11,<=3.13,<3.13",
+			matrix:   []string{"3.11", "3.12"},
 		},
 	}
 
@@ -135,17 +140,17 @@ func TestConstraintForms_PoetryCaret(t *testing.T) {
 		{
 			name:   "caret without patch (^3.11)",
 			python: "^3.11",
-			matrix: []string{"3.11", "3.12", "3.13", "3.14"},
+			matrix: []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 		{
 			name:   "caret with patch (^3.11.5)",
 			python: "^3.11.5",
-			matrix: []string{"3.11", "3.12", "3.13", "3.14"},
+			matrix: []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 		{
-			name:   "caret at floor (^3.10)",
+			name:   "caret below floor (^3.10)",
 			python: "^3.10",
-			matrix: []string{"3.10", "3.11", "3.12", "3.13", "3.14"},
+			matrix: []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 	}
 
@@ -185,9 +190,9 @@ func TestConstraintForms_SetupCfg(t *testing.T) {
 		matrix   []string
 	}{
 		{
-			name:     "exclusion (!=3.11)",
-			requires: ">=3.10,!=3.11",
-			matrix:   []string{"3.10", "3.12", "3.13", "3.14"},
+			name:     "exclusion (!=3.12)",
+			requires: ">=3.11,!=3.12",
+			matrix:   []string{"3.11", "3.13", "3.14", "3.15"},
 		},
 		{
 			name:     "exact (==3.13)",
@@ -239,7 +244,7 @@ func TestConstraintForms_SetupPy(t *testing.T) {
 			name: "tilde with single quotes",
 			setup: "from setuptools import setup\n" +
 				"setup(name='tilde-pkg', version='1.0', python_requires='~=3.11')\n",
-			matrix: []string{"3.11", "3.12", "3.13", "3.14"},
+			matrix: []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 		{
 			name: "exact with double quotes",
@@ -250,8 +255,8 @@ func TestConstraintForms_SetupPy(t *testing.T) {
 		{
 			name: "exclusion in multi-clause",
 			setup: "from setuptools import setup\n" +
-				"setup(name='excl-pkg', version='1.0', python_requires='>=3.10,!=3.11')\n",
-			matrix: []string{"3.10", "3.12", "3.13", "3.14"},
+				"setup(name='excl-pkg', version='1.0', python_requires='>=3.11,!=3.12')\n",
+			matrix: []string{"3.11", "3.13", "3.14", "3.15"},
 		},
 	}
 
@@ -309,6 +314,32 @@ func TestConstraintForms_OutOfRangeResolution(t *testing.T) {
 		"source must record that the matrix was widened beyond the project's constraint")
 }
 
+// TestConstraintForms_EOLMinorOnlyFallsBack covers a project pinned to
+// 3.10, which is below the supported baseline: no supported version
+// satisfies it, so the matrix widens and the source records the fallback.
+func TestConstraintForms_EOLMinorOnlyFallsBack(t *testing.T) {
+	withOfflinePolicy(t)
+	pyproject := "[project]\n" +
+		"name = \"eol-only\"\n" +
+		"version = \"1.0\"\n" +
+		"requires-python = \"==3.10.*\"\n"
+
+	tmpDir := createTempProject(t, map[string]string{
+		"pyproject.toml": pyproject,
+	})
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	ex := NewExtractor()
+	metadata, err := ex.Extract(tmpDir)
+	require.NoError(t, err)
+
+	got, _ := metadata.LanguageSpecific["version_matrix"].([]string)
+	assert.Equal(t, supportedPythonVersions, got)
+	assert.NotContains(t, got, "3.10")
+	assert.Equal(t, "out-of-range-fallback",
+		metadata.LanguageSpecific["requires_python_source"])
+}
+
 // TestConstraintForms_PoetryCaretBeatsRequiresPython covers a real-world
 // edge case: a Poetry pyproject.toml that DOES carry both a [project]
 // table (with requires-python) AND a [tool.poetry.dependencies].python.
@@ -334,7 +365,7 @@ func TestConstraintForms_PoetryCaretBeatsRequiresPython(t *testing.T) {
 	require.NoError(t, err)
 
 	got, _ := metadata.LanguageSpecific["version_matrix"].([]string)
-	assert.Equal(t, []string{"3.12", "3.13", "3.14"}, got,
+	assert.Equal(t, []string{"3.12", "3.13", "3.14", "3.15"}, got,
 		"PEP 621 requires-python must beat Poetry's caret when both are present")
 	assert.Equal(t, "requires-python",
 		metadata.LanguageSpecific["requires_python_source"])
