@@ -4,6 +4,7 @@
 package version
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -32,17 +33,17 @@ func extractFromGit(projectPath string) (*VersionInfo, error) {
 
 	// Try to get the latest git tag
 	cmd := exec.Command("git", "-C", projectPath, "describe", "--tags", "--abbrev=0")
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	if err != nil {
 		// If no tags, try to get a short commit hash
 		cmd = exec.Command("git", "-C", projectPath, "rev-parse", "--short", "HEAD")
-		output, err = cmd.CombinedOutput()
+		output, err = cmd.Output()
 		if err != nil {
 			return &VersionInfo{
 				Version:   "unknown",
 				Source:    "none",
 				IsDynamic: false,
-			}, fmt.Errorf("could not determine version")
+			}, commandError("could not determine version", err)
 		}
 
 		return &VersionInfo{
@@ -66,9 +67,9 @@ func extractFromGit(projectPath string) (*VersionInfo, error) {
 // GetLatestGitTag returns the latest git tag for a repository
 func GetLatestGitTag(projectPath string) (string, error) {
 	cmd := exec.Command("git", "-C", projectPath, "describe", "--tags", "--abbrev=0")
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get git tag: %w", err)
+		return "", commandError("failed to get git tag", err)
 	}
 	return strings.TrimSpace(string(output)), nil
 }
@@ -76,11 +77,28 @@ func GetLatestGitTag(projectPath string) (string, error) {
 // GetAllGitTags returns all git tags for a repository
 func GetAllGitTags(projectPath string) ([]string, error) {
 	cmd := exec.Command("git", "-C", projectPath, "tag", "--list")
-	output, err := cmd.CombinedOutput()
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get git tags: %w", err)
+		return nil, commandError("failed to get git tags", err)
 	}
 
-	tags := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var tags []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if tag := strings.TrimSpace(line); tag != "" {
+			tags = append(tags, tag)
+		}
+	}
 	return tags, nil
+}
+
+// commandError wraps an error from cmd.Output, appending the stderr an
+// *exec.ExitError carries so the failure stays diagnosable.
+func commandError(msg string, err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+			return fmt.Errorf("%s: %w (stderr: %s)", msg, err, stderr)
+		}
+	}
+	return fmt.Errorf("%s: %w", msg, err)
 }

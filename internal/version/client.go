@@ -39,23 +39,55 @@ func ExtractVersion(projectPath, projectType string) (*VersionInfo, error) {
 	return extractBasic(projectPath, projectType)
 }
 
+// versionExtractResult is the subset of the JSON document
+// version-extract prints with --format json that this action uses.
+type versionExtractResult struct {
+	Success       bool   `json:"success"`
+	Version       string `json:"version"`
+	File          string `json:"file"`
+	VersionSource string `json:"version_source"`
+	Error         string `json:"error"`
+}
+
+// toolSource maps the manifest path version-extract reports, such as
+// "./pyproject.toml", to the project-relative form the action uses.
+func toolSource(projectPath, file string) string {
+	if file == "" {
+		return "version-extract-action"
+	}
+	if filepath.IsAbs(file) {
+		if rel, err := filepath.Rel(projectPath, file); err == nil && !strings.HasPrefix(rel, "..") {
+			file = rel
+		}
+	}
+	return filepath.ToSlash(filepath.Clean(file))
+}
+
 // extractWithTool uses the version-extract-action tool to extract version
 func extractWithTool(projectPath, projectType, toolPath string) (*VersionInfo, error) {
 	cmd := exec.Command(toolPath, "--path", projectPath, "--type", projectType, "--format", "json")
-	output, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("version-extract-action failed: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("version-extract-action failed: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
 	}
 
-	// Parse the JSON output
-	// This is a simplified version - actual implementation would parse JSON properly
-	info := &VersionInfo{
-		Version:   strings.TrimSpace(string(output)),
-		Source:    "version-extract-action",
-		IsDynamic: false,
+	var result versionExtractResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("version-extract-action printed invalid JSON: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+	if !result.Success || strings.TrimSpace(result.Version) == "" {
+		return nil, fmt.Errorf("version-extract-action found no version: %s (stderr: %s)", result.Error, strings.TrimSpace(stderr.String()))
 	}
 
-	return info, nil
+	// version_source classifies the version ("static" or
+	// "dynamic-git-tag"); the manifest it came from is in file.
+	return &VersionInfo{
+		Version:   strings.TrimSpace(result.Version),
+		Source:    toolSource(projectPath, result.File),
+		IsDynamic: strings.HasPrefix(result.VersionSource, "dynamic"),
+	}, nil
 }
 
 // extractBasic performs basic version extraction without external tools
