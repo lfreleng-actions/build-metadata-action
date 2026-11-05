@@ -377,6 +377,16 @@ func TestExtractVersion(t *testing.T) {
 			output: "some random text",
 			want:   "some random text",
 		},
+		{
+			name:   "version on a later line",
+			output: "------\nGradle 8.5\n------",
+			want:   "8.5",
+		},
+		{
+			name:   "JVM option notice before version",
+			output: "Picked up _JAVA_OPTIONS: -Dfoo=1.2\nopenjdk version \"17.0.9\" 2023-10-17",
+			want:   `"17.0.9"`,
+		},
 	}
 
 	for _, tt := range tests {
