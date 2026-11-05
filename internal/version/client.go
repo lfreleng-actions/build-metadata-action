@@ -39,23 +39,55 @@ func ExtractVersion(projectPath, projectType string) (*VersionInfo, error) {
 	return extractBasic(projectPath, projectType)
 }
 
+// versionExtractResult is the subset of the JSON document
+// version-extract prints with --format json that this action uses.
+type versionExtractResult struct {
+	Success       bool   `json:"success"`
+	Version       string `json:"version"`
+	File          string `json:"file"`
+	VersionSource string `json:"version_source"`
+	Error         string `json:"error"`
+}
+
+// toolSource maps the manifest path version-extract reports, such as
+// "./pyproject.toml", to the project-relative form the action uses.
+func toolSource(projectPath, file string) string {
+	if file == "" {
+		return "version-extract-action"
+	}
+	if filepath.IsAbs(file) {
+		if rel, err := filepath.Rel(projectPath, file); err == nil && !strings.HasPrefix(rel, "..") {
+			file = rel
+		}
+	}
+	return filepath.ToSlash(filepath.Clean(file))
+}
+
 // extractWithTool uses the version-extract-action tool to extract version
 func extractWithTool(projectPath, projectType, toolPath string) (*VersionInfo, error) {
 	cmd := exec.Command(toolPath, "--path", projectPath, "--type", projectType, "--format", "json")
-	output, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("version-extract-action failed: %w (output: %s)", err, string(output))
+		return nil, fmt.Errorf("version-extract-action failed: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
 	}
 
-	// Parse the JSON output
-	// This is a simplified version - actual implementation would parse JSON properly
-	info := &VersionInfo{
-		Version:   strings.TrimSpace(string(output)),
-		Source:    "version-extract-action",
-		IsDynamic: false,
+	var result versionExtractResult
+	if err := json.Unmarshal(output, &result); err != nil {
+		return nil, fmt.Errorf("version-extract-action printed invalid JSON: %w (stderr: %s)", err, strings.TrimSpace(stderr.String()))
+	}
+	if !result.Success || strings.TrimSpace(result.Version) == "" {
+		return nil, fmt.Errorf("version-extract-action found no version: %s (stderr: %s)", result.Error, strings.TrimSpace(stderr.String()))
 	}
 
-	return info, nil
+	// version_source classifies the version ("static" or
+	// "dynamic-git-tag"); the manifest it came from is in file.
+	return &VersionInfo{
+		Version:   strings.TrimSpace(result.Version),
+		Source:    toolSource(projectPath, result.File),
+		IsDynamic: strings.HasPrefix(result.VersionSource, "dynamic"),
+	}, nil
 }
 
 // extractBasic performs basic version extraction without external tools
@@ -545,80 +577,4 @@ func extractRustVersion(projectPath string) (*VersionInfo, error) {
 	}
 
 	return extractFallback(projectPath)
-}
-
-// ensureTagsAreFetched attempts to fetch git tags from remote
-// This is useful in CI environments with shallow clones where tags aren't fetched by default
-func ensureTagsAreFetched(projectPath string) {
-	// Check if this is a git repository
-	cmd := exec.Command("git", "-C", projectPath, "rev-parse", "--git-dir")
-	if err := cmd.Run(); err != nil {
-		// Not a git repo, skip
-		return
-	}
-
-	// Try to fetch tags quietly - don't fail if this doesn't work
-	// (repo might be offline, or tags might already be present)
-	cmd = exec.Command("git", "-C", projectPath, "fetch", "--tags", "--quiet")
-	_ = cmd.Run() // Ignore errors - this is best-effort
-}
-
-// extractFromGit extracts version from git tags as a fallback
-func extractFromGit(projectPath string) (*VersionInfo, error) {
-	// Ensure tags are fetched (important for CI environments)
-	ensureTagsAreFetched(projectPath)
-
-	// Try to get the latest git tag
-	cmd := exec.Command("git", "-C", projectPath, "describe", "--tags", "--abbrev=0")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		// If no tags, try to get a short commit hash
-		cmd = exec.Command("git", "-C", projectPath, "rev-parse", "--short", "HEAD")
-		output, err = cmd.CombinedOutput()
-		if err != nil {
-			return &VersionInfo{
-				Version:   "unknown",
-				Source:    "none",
-				IsDynamic: false,
-			}, fmt.Errorf("could not determine version")
-		}
-
-		return &VersionInfo{
-			Version:   "0.0.0-dev+" + strings.TrimSpace(string(output)),
-			Source:    "git-commit",
-			IsDynamic: true,
-		}, nil
-	}
-
-	version := strings.TrimSpace(string(output))
-	// Remove 'v' prefix if present
-	version = strings.TrimPrefix(version, "v")
-
-	return &VersionInfo{
-		Version:   version,
-		Source:    "git-tag",
-		IsDynamic: false,
-	}, nil
-}
-
-// GetLatestGitTag returns the latest git tag for a repository
-func GetLatestGitTag(projectPath string) (string, error) {
-	cmd := exec.Command("git", "-C", projectPath, "describe", "--tags", "--abbrev=0")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to get git tag: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
-// GetAllGitTags returns all git tags for a repository
-func GetAllGitTags(projectPath string) ([]string, error) {
-	cmd := exec.Command("git", "-C", projectPath, "tag", "--list")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get git tags: %w", err)
-	}
-
-	tags := strings.Split(strings.TrimSpace(string(output)), "\n")
-	return tags, nil
 }

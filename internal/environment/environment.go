@@ -4,6 +4,7 @@
 package environment
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -293,7 +294,10 @@ func toolWorkDir(tool string) (string, bool) {
 	}
 }
 
-// getToolVersion attempts to get the version of a tool
+// getToolVersion attempts to get the version of a tool. Stdout and
+// stderr are read separately: stdout is preferred, and stderr is
+// consulted only when stdout holds no version, since some tools (such
+// as java -version) print their version there by design.
 func getToolVersion(tool string, args ...string) string {
 	dir, ok := toolWorkDir(tool)
 	if !ok {
@@ -301,44 +305,56 @@ func getToolVersion(tool string, args ...string) string {
 	}
 	cmd := exec.Command(tool, args...)
 	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
 		return ""
 	}
 
-	version := strings.TrimSpace(string(output))
-
-	version = extractVersion(version)
-
-	return version
-}
-
-// extractVersion extracts a version number from tool output
-func extractVersion(output string) string {
-	// Take only the first line for most tools
-	lines := strings.Split(output, "\n")
-	if len(lines) > 0 {
-		firstLine := lines[0]
-
-		// Common patterns
-		// "tool version X.Y.Z" or "tool X.Y.Z"
-		parts := strings.Fields(firstLine)
-		for i, part := range parts {
-			// Look for version-like strings
-			if isVersionLike(part) {
-				return part
-			}
-			// Check if this is a "version" keyword followed by version number
-			if strings.ToLower(part) == "version" && i+1 < len(parts) {
-				return parts[i+1]
-			}
+	for _, stream := range []string{stdout.String(), stderr.String()} {
+		if version, ok := findVersion(stream); ok {
+			return version
 		}
-
-		// If nothing found, return the first line
-		return firstLine
 	}
 
-	return output
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		output = strings.TrimSpace(stderr.String())
+	}
+	return extractVersion(output)
+}
+
+// extractVersion extracts a version number from tool output, returning
+// the first line unchanged when no line yields a version
+func extractVersion(output string) string {
+	if version, ok := findVersion(output); ok {
+		return version
+	}
+	firstLine, _, _ := strings.Cut(output, "\n")
+	return firstLine
+}
+
+// findVersion scans every line of output in order for a version-like
+// token, or the word after "version". Lines starting with "Picked up "
+// are JVM notices about JAVA_TOOL_OPTIONS and similar, printed before
+// the version, and are skipped.
+func findVersion(output string) (string, bool) {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Picked up ") {
+			continue
+		}
+		parts := strings.Fields(line)
+		for i, part := range parts {
+			if isVersionLike(part) {
+				return part, true
+			}
+			if strings.ToLower(part) == "version" && i+1 < len(parts) {
+				return parts[i+1], true
+			}
+		}
+	}
+	return "", false
 }
 
 // isVersionLike checks if a string looks like a version number
