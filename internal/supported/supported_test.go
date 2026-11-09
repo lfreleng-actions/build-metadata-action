@@ -191,6 +191,70 @@ func TestMatrixUpstreamDownFallsBackToSnapshot(t *testing.T) {
 	}
 }
 
+// TestMatrixBrokenManifestFailsReport records the module behaviour
+// CatalogWithoutSource exists for: a manifest answering 404 or a body
+// that does not parse fails the whole report, even when endoflife.date
+// answered.
+func TestMatrixBrokenManifestFailsReport(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		breakIt func(*supportedtest.Upstream)
+	}{
+		{"not found", func(u *supportedtest.Upstream) { u.FailGoManifest(http.StatusNotFound) }},
+		{"malformed", func(u *supportedtest.Upstream) { u.ServeGoManifest("<html>not json</html>") }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			isolate(t)
+			up := supportedtest.NewGoUpstream(t)
+			tt.breakIt(up)
+			r := newResolver(t, Settings{
+				Timeout:          time.Second,
+				EndOfLifeBaseURL: up.URL,
+				ManifestBaseURL:  up.URL,
+			})
+			if _, err := r.Matrix(context.Background(), "go", ""); err == nil {
+				t.Error("Matrix succeeded with a broken manifest")
+			}
+		})
+	}
+}
+
+// TestCatalogWithoutSourceIgnoresBrokenManifest verifies a catalog
+// without Go's manifest source resolves from endoflife.date alone, so a
+// broken manifest leaves the live lifecycle data in force.
+func TestCatalogWithoutSourceIgnoresBrokenManifest(t *testing.T) {
+	isolate(t)
+	cat, err := CatalogWithoutSource("go", SourceActionsManifest)
+	if err != nil {
+		t.Fatalf("CatalogWithoutSource: %v", err)
+	}
+	up := supportedtest.NewGoUpstream(t)
+	up.ServeGoReleases(supportedtest.GoReleasesNewer)
+	up.FailGoManifest(http.StatusNotFound)
+	r := newResolver(t, Settings{
+		Catalog:          cat,
+		Timeout:          time.Second,
+		EndOfLifeBaseURL: up.URL,
+		ManifestBaseURL:  up.URL,
+	})
+
+	rep, err := r.Matrix(context.Background(), "go", "")
+	if err != nil {
+		t.Fatalf("Matrix: %v", err)
+	}
+	if want := []string{"1.27", "1.28"}; !reflect.DeepEqual(rep.Matrix.Versions, want) {
+		t.Errorf("matrix = %v, want %v", rep.Matrix.Versions, want)
+	}
+	if rep.Source.Kind != "live" {
+		t.Errorf("source kind = %q, want live", rep.Source.Kind)
+	}
+	for _, s := range rep.Source.Sources {
+		if s.Type == SourceActionsManifest {
+			t.Errorf("report lists source %+v, want no manifest source", s)
+		}
+	}
+}
+
 // TestCatalogWithoutSourceLeavesEmbeddedCatalog verifies removing a
 // source does not reach later catalogs, and that an unknown tool is an
 // error.

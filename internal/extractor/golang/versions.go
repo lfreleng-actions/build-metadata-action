@@ -4,91 +4,183 @@
 package golang
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
-	"sort"
 
-	"github.com/lfreleng-actions/build-metadata-action/internal/goversions"
+	"github.com/lfreleng-actions/build-metadata-action/internal/supported"
+	"github.com/lfreleng-actions/supported-versions-action/pkg/catalog"
 )
 
-// activeSupportedVersions is the set of Go versions (major.minor,
-// ascending) that generateGoVersionMatrix is allowed to emit. It
-// defaults to the static goversions fallback list so `go test` and
-// offline invocations never touch the network; the CLI entry point
-// (`cmd/build-metadata/main.go`) swaps in the live EOL-aware set via
-// SetSupportedVersions before invoking Extract on Go projects. This
-// package-scoped wiring mirrors the Python extractor's policy pattern
-// (see `internal/extractor/python/policy.go`): the
-// `extractor.Extractor` interface has a fixed `Extract(path string)`
-// signature that we cannot widen.
-var activeSupportedVersions = goversions.GetFallbackVersions()
+// goTool is the catalog id of Go in the supported-versions module.
+const goTool = "go"
 
-// SetSupportedVersions replaces the supported Go version set used for
-// matrix generation. Passing nil or an empty slice resets to the static
-// goversions fallback list. The slice is copied before storing so
-// later caller-side mutation cannot affect matrix generation (the same
-// defensive copy the Python extractor makes in policy.go).
-func SetSupportedVersions(versions []string) {
-	if len(versions) == 0 {
-		activeSupportedVersions = goversions.GetFallbackVersions()
-		return
-	}
-	activeSupportedVersions = append([]string(nil), versions...)
+// MatrixResolver answers matrix questions for a tool. A
+// *supported.Resolver satisfies it; tests inject a recorded report.
+type MatrixResolver interface {
+	Matrix(ctx context.Context, tool, constraint string) (supported.Report, error)
 }
 
-// ResolveSupportedVersions consults the live endoflife.date Go feed and
-// returns the currently supported (non-EOL) Go versions at or above the
-// goversions baseline, sorted ascending. When the live API is
-// unavailable (offline runners, outages) it falls back to the static
-// goversions fallback list after emitting a warning, so the action
-// always exits cleanly. Uses the goversions package defaults for
-// timeout and retry budget; no runtime configuration is currently
-// plumbed through action inputs.
-func ResolveSupportedVersions() []string {
-	client := goversions.NewEOLClient(goversions.DefaultTimeout, goversions.DefaultMaxRetries)
-	supported, err := client.GetSupportedVersions()
+// activeResolver resolves the Go matrix. The CLI entry point
+// (`cmd/build-metadata/run.go`) installs one built from the action
+// inputs via SetResolver before invoking Extract on Go projects. This
+// package-scoped wiring mirrors the Python extractor's policy pattern:
+// the `extractor.Extractor` interface has a fixed `Extract(path string)`
+// signature that we cannot widen. When none is installed, the snapshot
+// resolver applies, so `go test` and library callers never touch the
+// network.
+var activeResolver MatrixResolver
+
+// SetResolver installs the resolver used for matrix generation; nil
+// restores the snapshot default.
+func SetResolver(r MatrixResolver) {
+	activeResolver = r
+}
+
+// NewResolver builds a resolver from s with the Go admission this
+// extractor has always applied: a line is admitted once released, as
+// the lifecycle data says, whether or not the actions/go-versions
+// manifest has a build of it yet. The module's catalog admits a Go line
+// only once it is installable, which would drop a new line from the
+// matrix until its builds land.
+//
+// With that admission the manifest cannot change the matrix, so the
+// resolver reads endoflife.date alone: s.Catalog is replaced by the
+// embedded catalog without Go's manifest source. The module fails a
+// whole report when the manifest answers 404 or does not parse, which
+// would otherwise discard valid lifecycle data for the snapshot.
+func NewResolver(s supported.Settings) (*supported.Resolver, error) {
+	cat, err := supported.CatalogWithoutSource(goTool, supported.SourceActionsManifest)
 	if err != nil {
-		fmt.Fprintf(os.Stderr,
-			"[WARNING] Failed to fetch live Go EOL data (%v); using static supported set\n", err)
-		return goversions.GetFallbackVersions()
+		return nil, err
 	}
-	if len(supported) == 0 {
-		fmt.Fprintf(os.Stderr,
-			"[WARNING] Live Go EOL data yielded no supported versions at or above %s; using static supported set\n",
-			goversions.Baseline())
-		return goversions.GetFallbackVersions()
+	s.Catalog = cat
+	override := catalog.PolicyOverride{}
+	if s.Override != nil {
+		override = *s.Override
 	}
-	// endoflife.date returns cycles in newest-first order; downstream
-	// consumers expect ascending order so the last element is the
-	// newest release.
-	sort.Slice(supported, func(i, j int) bool {
-		return compareGoVersionStrings(supported[i], supported[j]) < 0
-	})
-	return supported
+	admit := catalog.AdmitReleased
+	override.Admit = &admit
+	s.Override = &override
+	return supported.New(s)
+}
+
+// newSnapshotResolver builds a resolver that reads the module's
+// embedded snapshot alone: offline, and without the runner cache, so a
+// malformed response cached by an earlier fetch cannot defeat the
+// fallback. Tests replace it to fix the clock or the report.
+var newSnapshotResolver = func() (MatrixResolver, error) {
+	return NewResolver(supported.Settings{Offline: true, NoCache: true})
+}
+
+// resolveMatrix asks r for the Go lines the go.mod minimum allows.
+func resolveMatrix(r MatrixResolver, minimum string) (supported.Report, error) {
+	return r.Matrix(context.Background(), goTool, minimum)
 }
 
 // generateGoVersionMatrix generates the list of Go versions a workflow
 // should test against, given the minimum Go version declared in go.mod.
-// The matrix is the subset of the supported (non-EOL) Go version set at
-// or above that minimum. When the go.mod minimum is older than every
-// supported release the full supported set is returned (testing on EOL
-// toolchains adds no value); when it is newer than every supported
-// release (e.g. a pre-release toolchain) the matrix contains just the
-// declared minimum so the workflow still tests something meaningful.
+// The matrix is the supported Go release lines at or above that
+// minimum, ascending, as the supported-versions module resolves them.
+// When the go.mod minimum is older than every supported line the full
+// supported set is returned (testing on EOL toolchains adds no value);
+// when it is newer than every supported line (e.g. a pre-release
+// toolchain) the matrix contains just the declared minimum so the
+// workflow still tests something meaningful.
 func generateGoVersionMatrix(goVersion string) []string {
 	minimum := normalizeGoVersion(goVersion)
 
-	var matrix []string
-	for _, v := range activeSupportedVersions {
-		if compareGoVersionStrings(v, minimum) >= 0 {
-			matrix = append(matrix, v)
-		}
-	}
-
-	if len(matrix) == 0 {
+	rep, err := resolveGoReport(minimum)
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Failed to resolve supported Go versions (%v); using the go.mod minimum %s\n",
+			err, minimum)
 		return []string{minimum}
 	}
-	return matrix
+
+	lines := rep.Matrix.Versions
+	if len(lines) == 0 {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] No supported Go versions resolved; using the go.mod minimum %s\n", minimum)
+		return []string{minimum}
+	}
+	// The module widens a constraint that allows no line to the whole
+	// matrix. A minimum older than every line is already "applied", so
+	// this outcome only arises for a minimum newer than every line,
+	// where this action tests the declared minimum alone.
+	if rep.Constraint != nil && rep.Constraint.Outcome == supported.OutcomeOutOfRangeFallback &&
+		compareGoVersionStrings(minimum, lines[len(lines)-1]) > 0 {
+		return []string{minimum}
+	}
+	return lines
+}
+
+// resolveGoReport resolves the Go report through the installed
+// resolver, dropping any line older than the embedded snapshot's
+// oldest supported line: upstream data that lags an end-of-life date
+// cannot put a line back that the snapshot already retired. When the
+// installed resolver fails, or yields no supported line (such as an
+// upstream answering with an empty release list), it retries against
+// the snapshot, as the static fallback list served before.
+func resolveGoReport(minimum string) (supported.Report, error) {
+	snapshot, snapErr := newSnapshotResolver()
+	if c, ok := snapshot.(io.Closer); snapErr == nil && ok {
+		defer func() { _ = c.Close() }()
+	}
+	if activeResolver != nil {
+		rep, err := resolveMatrix(activeResolver, minimum)
+		if err == nil && snapErr == nil {
+			rep.Matrix.Versions = dropBelowFloor(rep.Matrix.Versions, snapshotFloor(snapshot))
+		}
+		switch {
+		case err != nil:
+			fmt.Fprintf(os.Stderr,
+				"[WARNING] Failed to resolve supported Go versions (%v); retrying from the embedded snapshot\n", err)
+		case len(rep.Matrix.Versions) == 0:
+			fmt.Fprintf(os.Stderr,
+				"[WARNING] Resolved no supported Go versions; retrying from the embedded snapshot\n")
+		default:
+			return rep, nil
+		}
+	}
+	if snapErr != nil {
+		return supported.Report{}, snapErr
+	}
+	return resolveMatrix(snapshot, minimum)
+}
+
+// snapshotFloor returns the oldest Go line r holds supported, or ""
+// when it holds none or cannot tell.
+func snapshotFloor(r MatrixResolver) string {
+	rep, err := resolveMatrix(r, "")
+	if err != nil || len(rep.Matrix.Versions) == 0 {
+		return ""
+	}
+	return rep.Matrix.Versions[0]
+}
+
+// dropBelowFloor returns the lines at or above floor, in a new slice;
+// an empty floor keeps every line.
+func dropBelowFloor(lines []string, floor string) []string {
+	if floor == "" {
+		return lines
+	}
+	kept := make([]string, 0, len(lines))
+	var dropped []string
+	for _, line := range lines {
+		if compareGoVersionStrings(line, floor) < 0 {
+			dropped = append(dropped, line)
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(dropped) > 0 {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Dropping Go %v: older than %s, the oldest line the embedded snapshot supports\n",
+			dropped, floor)
+	}
+	return kept
 }
 
 // normalizeGoVersion reduces a go.mod version directive to major.minor

@@ -5,6 +5,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/lfreleng-actions/build-metadata-action/internal/detector"
 	"github.com/lfreleng-actions/build-metadata-action/internal/environment"
@@ -27,6 +29,7 @@ import (
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/scala"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/swift"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/terraform"
+	"github.com/lfreleng-actions/build-metadata-action/internal/supported"
 	"github.com/lfreleng-actions/build-metadata-action/internal/version"
 )
 
@@ -112,12 +115,61 @@ func configureExtractorPolicies(projectType string, cfg runConfig) {
 	if language == "python" {
 		python.SetActivePolicy(python.ResolvePolicy(cfg.pythonOffline, cfg.pythonTimeout, cfg.pythonRetries))
 	}
-	// ResolveSupportedVersions falls back to the static goversions list
-	// when the live API is unreachable, so offline runners degrade
-	// gracefully.
 	if language == "go" {
-		golang.SetSupportedVersions(golang.ResolveSupportedVersions())
+		configureGoResolver(cfg)
 	}
+}
+
+// legacyGoEOLAPIURLEnv named a mirror of the endoflife.date v0 Go
+// endpoint for the resolver the supported-versions module replaced.
+// The module reads the v1 API from a fixed root, so the variable no
+// longer applies; configureGoResolver warns when it is still set.
+const legacyGoEOLAPIURLEnv = "BUILD_METADATA_GO_EOL_API_URL"
+
+// configureGoResolver builds the supported-versions resolver once, with
+// the Go extractor's admission, and installs it into the Go extractor.
+// The python_offline_mode, python_eol_timeout and
+// python_eol_max_retries inputs govern it too. The module falls back
+// to its embedded snapshot when the upstream is unreachable, so
+// offline runners degrade gracefully. The resolver lives until the
+// process exits, which releases its cache.
+func configureGoResolver(cfg runConfig) {
+	warnLegacyGoEOLAPIURL(os.Getenv, os.Stderr)
+	r, err := golang.NewResolver(goResolverSettings(cfg))
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Failed to build the supported-versions resolver (%v); resolving Go versions offline\n", err)
+		golang.SetResolver(nil)
+		return
+	}
+	golang.SetResolver(r)
+}
+
+// goResolverSettings maps the action inputs onto the Go resolver's
+// settings. Offline mode also skips the runner cache: the module serves
+// cached release facts of any age when offline, so a cache filled by an
+// earlier online step would otherwise change the matrix, and offline
+// mode promises the embedded snapshot alone.
+func goResolverSettings(cfg runConfig) supported.Settings {
+	return supported.Settings{
+		Offline: cfg.pythonOffline,
+		NoCache: cfg.pythonOffline,
+		Timeout: cfg.pythonTimeout,
+		Retries: cfg.pythonRetries,
+	}
+}
+
+// warnLegacyGoEOLAPIURL writes a warning to w when getenv reports
+// legacyGoEOLAPIURLEnv set, so a mirror configured through it does not
+// go unnoticed now that the module reads the public endpoint.
+func warnLegacyGoEOLAPIURL(getenv func(string) string, w io.Writer) {
+	if getenv(legacyGoEOLAPIURLEnv) == "" {
+		return
+	}
+	_, _ = fmt.Fprintf(w,
+		"[WARNING] %s is no longer honoured: Go versions resolve through the supported-versions module, "+
+			"which reads the endoflife.date v1 API at https://endoflife.date/api/v1/\n",
+		legacyGoEOLAPIURLEnv)
 }
 
 func extractVersionInfo(ctx *appContext, cfg runConfig, metadata *Metadata, projectType string) {

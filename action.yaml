@@ -88,26 +88,34 @@ inputs:
     default: "false"
 
   # ===================================================================
-  # Python-specific inputs (consumed by the Python extractor only)
+  # Supported-version inputs (named for Python, but they govern the
+  # version resolution of Python and Go)
   # ===================================================================
   python_offline_mode:
     description: >-
-      When 'true', the Python extractor skips the live endoflife.date
-      consultation and uses the action's static supported-version list
-      (3.11 through 3.15 at the time of writing). Useful for hermetic
-      builds or when the runner has no outbound network access. Default
-      'false' so the extractor benefits from live EOL data.
+      When 'true', Python and Go version resolution skips the live
+      endoflife.date consultation. The Python extractor uses the
+      action's static supported-version list (3.11 through 3.15 at the
+      time of writing); the Go extractor uses the
+      supported-versions-action module's embedded snapshot alone,
+      ignoring release data an earlier step cached. Useful for
+      hermetic builds or when the runner has no outbound network
+      access. Default 'false' so the extractors benefit from live EOL
+      data.
     required: false
     default: "false"
 
   python_eol_timeout:
-    description: "endoflife.date HTTP timeout in seconds (online mode only)"
+    description: >-
+      Upstream release-data HTTP timeout in seconds, for Python and Go
+      (online mode only)
     required: false
     default: "5"
 
   python_eol_max_retries:
     description: >-
-      endoflife.date HTTP retry budget (online mode only). Set to '0'
+      Upstream release-data HTTP retry budget, for Python and Go
+      (online mode only). Set to '0'
       to opt out of retries entirely (a single attempt with no retry
       on failure). Values are integers; negative values are treated
       as the documented default ('2').
@@ -660,8 +668,10 @@ outputs:
     description: >-
       Comma-separated list of Go versions to test against: the
       supported (non-EOL) Go releases at or above the go.mod minimum.
-      Sourced live from endoflife.date with a static fallback when the
-      API is unreachable.
+      Resolved through the supported-versions-action module from live
+      upstream data, falling back to the module's embedded snapshot
+      when the upstream is unreachable or answers with unusable data,
+      or python_offline_mode is 'true'.
     value: ${{ steps.extract.outputs.go_go_version_matrix }}
 
   go_matrix_json:

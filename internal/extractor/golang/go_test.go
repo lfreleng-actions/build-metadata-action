@@ -468,12 +468,10 @@ require (
 
 // TestVersionMatrix tests Go version matrix generation
 func TestVersionMatrix(t *testing.T) {
-	// Pin a deterministic supported set so the test does not depend on
-	// the goversions fallback constants (which move as Go releases
-	// ship and reach EOL). The default set is exercised separately in
-	// versions_test.go.
-	SetSupportedVersions([]string{"1.25", "1.26"})
-	defer SetSupportedVersions(nil)
+	// Pin the clock and resolve offline from the module's embedded
+	// snapshot, so the test does not move as Go releases ship and
+	// reach EOL.
+	useOfflineResolver(t)
 
 	tests := []struct {
 		name           string
@@ -484,31 +482,31 @@ func TestVersionMatrix(t *testing.T) {
 		{
 			name:           "go.mod minimum below supported set",
 			goVersion:      "1.21",
-			expectedMatrix: []string{"1.25", "1.26"},
+			expectedMatrix: []string{"1.26", "1.27"},
 			expectedInJSON: true,
 		},
 		{
-			name:           "go.mod minimum at supported baseline",
-			goVersion:      "1.25",
-			expectedMatrix: []string{"1.25", "1.26"},
+			name:           "go.mod minimum at oldest supported release",
+			goVersion:      "1.26",
+			expectedMatrix: []string{"1.26", "1.27"},
 			expectedInJSON: true,
 		},
 		{
 			name:           "go.mod minimum at newest supported release",
-			goVersion:      "1.26",
-			expectedMatrix: []string{"1.26"},
+			goVersion:      "1.27",
+			expectedMatrix: []string{"1.27"},
 			expectedInJSON: true,
 		},
 		{
 			name:           "go.mod minimum with patch component",
-			goVersion:      "1.25.4",
-			expectedMatrix: []string{"1.25", "1.26"},
+			goVersion:      "1.26.4",
+			expectedMatrix: []string{"1.26", "1.27"},
 			expectedInJSON: true,
 		},
 		{
 			name:           "go.mod minimum newer than supported set",
-			goVersion:      "1.27",
-			expectedMatrix: []string{"1.27"},
+			goVersion:      "1.28",
+			expectedMatrix: []string{"1.28"},
 			expectedInJSON: true,
 		},
 	}

@@ -50,12 +50,14 @@ const (
 // actions versions manifests. Use URL as both Settings.EndOfLifeBaseURL
 // and Settings.ManifestBaseURL.
 type Upstream struct {
-	URL      string
-	requests atomic.Int64
-	status   atomic.Int64
+	URL            string
+	requests       atomic.Int64
+	status         atomic.Int64
+	manifestStatus atomic.Int64
 
 	mu       sync.Mutex
 	releases string
+	manifest string
 }
 
 // GoReleasesEmpty is an endoflife.date v1 response for the go product
@@ -76,6 +78,55 @@ func (u *Upstream) goReleases() string {
 	return u.releases
 }
 
+// GoReleasesStale is GoReleases as an upstream that lags a release
+// might still answer it: 1.25 is not yet marked end-of-life and
+// carries no end-of-life date.
+const GoReleasesStale = `{"schema_version":"1.2.0","result":{"name":"go","releases":[
+{"name":"1.27","releaseDate":"2026-08-11","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.27.3","date":"2026-10-07"}},
+{"name":"1.26","releaseDate":"2026-02-10","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.26.10","date":"2026-10-07"}},
+{"name":"1.25","releaseDate":"2025-08-12","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.25.14","date":"2026-08-19"}},
+{"name":"1.24","releaseDate":"2025-02-11","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-02-10","latest":{"name":"1.24.13","date":"2026-02-04"}}
+]}}`
+
+// GoManifestLagging is GoManifest before the newest line's builds
+// reach it: it lists no 1.27 build.
+const GoManifestLagging = `[
+{"version":"1.26.10","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"1.25.14","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"1.24.13","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
+]`
+
+// ServeGoManifest makes later requests for the go manifest answer
+// body in place of GoManifest.
+func (u *Upstream) ServeGoManifest(body string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.manifest = body
+}
+
+func (u *Upstream) goManifest() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.manifest
+}
+
+// GoReleasesNewer is GoReleases as endoflife.date might answer it
+// once the embedded snapshot lags: 1.28 is released and 1.26 has
+// reached end-of-life, so the supported lines are 1.27 and 1.28.
+const GoReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"go","releases":[
+{"name":"1.28","releaseDate":"2026-11-03","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.28.0","date":"2026-11-03"}},
+{"name":"1.27","releaseDate":"2026-08-11","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.27.3","date":"2026-10-07"}},
+{"name":"1.26","releaseDate":"2026-02-10","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-11-03","latest":{"name":"1.26.10","date":"2026-10-07"}},
+{"name":"1.25","releaseDate":"2025-08-12","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-08-19","latest":{"name":"1.25.14","date":"2026-08-19"}}
+]}}`
+
+// FailGoManifest makes later requests for the go manifest alone answer
+// status, as a manifest that moved or broke would; zero restores the
+// manifest body.
+func (u *Upstream) FailGoManifest(status int) {
+	u.manifestStatus.Store(int64(status))
+}
+
 // Fail makes every later request answer status, as an outage would;
 // zero restores the recorded responses.
 func (u *Upstream) Fail(status int) {
@@ -87,12 +138,12 @@ func (u *Upstream) Requests() int64 {
 	return u.requests.Load()
 }
 
-// NewGoUpstream starts an Upstream serving GoReleases, or the body
-// ServeGoReleases set, and GoManifest;
-// any other path answers 404. The server stops when the test ends.
+// NewGoUpstream starts an Upstream serving GoReleases and GoManifest,
+// or the bodies ServeGoReleases and ServeGoManifest set; any other
+// path answers 404. The server stops when the test ends.
 func NewGoUpstream(t *testing.T) *Upstream {
 	t.Helper()
-	u := &Upstream{releases: GoReleases}
+	u := &Upstream{releases: GoReleases, manifest: GoManifest}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.requests.Add(1)
 		if status := u.status.Load(); status != 0 {
@@ -104,8 +155,12 @@ func NewGoUpstream(t *testing.T) *Upstream {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(u.goReleases()))
 		case goManifestPath:
+			if status := u.manifestStatus.Load(); status != 0 {
+				w.WriteHeader(int(status))
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(GoManifest))
+			_, _ = w.Write([]byte(u.goManifest()))
 		default:
 			http.NotFound(w, r)
 		}
@@ -121,6 +176,15 @@ func NewGoUpstream(t *testing.T) *Upstream {
 // be. Point $SUPPORTED_VERSIONS_CACHE_DIR at a test directory first.
 func CacheMalformedGoReleases(t *testing.T, fetchedAt time.Time) {
 	t.Helper()
+	CacheGoReleases(t, "<html>not json</html>", fetchedAt)
+}
+
+// CacheGoReleases stores body as an HTTP 200 answer for
+// DefaultGoReleasesURL in the cache cache.Open resolves, fetched at
+// fetchedAt, as an earlier online step would have left it. Point
+// $SUPPORTED_VERSIONS_CACHE_DIR at a test directory first.
+func CacheGoReleases(t *testing.T, body string, fetchedAt time.Time) {
+	t.Helper()
 	c, err := cache.Open()
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
@@ -131,7 +195,7 @@ func CacheMalformedGoReleases(t *testing.T, fetchedAt time.Time) {
 		URL:       DefaultGoReleasesURL,
 		Status:    http.StatusOK,
 		FetchedAt: fetchedAt,
-		Body:      []byte("<html>not json</html>"),
+		Body:      []byte(body),
 	})
 	if err != nil {
 		t.Fatalf("cache.Put: %v", err)
