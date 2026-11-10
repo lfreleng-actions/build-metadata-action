@@ -99,7 +99,56 @@ var DefaultPythonReleasesURL = defaultReleasesURL(pythonReleasesPath)
 // overridden.
 var DefaultPythonManifestURL = (&url.URL{Scheme: "https", Host: "raw.githubusercontent.com", Path: pythonManifestPath}).String()
 
+// RustReleases is an endoflife.date v1 response for the rust product,
+// built from the release facts the module's snapshot recorded on
+// 2026-11-06 and trimmed to the newest seven lines.
+const RustReleases = `{"schema_version":"1.2.0","result":{"name":"rust","releases":[
+{"name":"1.99","releaseDate":"2026-10-01","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.99.1","date":"2026-10-15"}},
+{"name":"1.98","releaseDate":"2026-08-20","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-10-01","latest":{"name":"1.98.1","date":"2026-09-03"}},
+{"name":"1.97","releaseDate":"2026-07-09","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-08-20","latest":{"name":"1.97.1","date":"2026-07-16"}},
+{"name":"1.96","releaseDate":"2026-05-28","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-07-09","latest":{"name":"1.96.1","date":"2026-06-30"}},
+{"name":"1.95","releaseDate":"2026-04-16","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-05-28","latest":{"name":"1.95.0","date":"2026-04-16"}},
+{"name":"1.94","releaseDate":"2026-03-06","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-04-16","latest":{"name":"1.94.1","date":"2026-03-26"}},
+{"name":"1.93","releaseDate":"2026-01-22","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-03-06","latest":{"name":"1.93.1","date":"2026-02-12"}}
+]}}`
+
+// RustReleasesNewer is RustReleases as endoflife.date might answer it
+// once the embedded snapshot lags: 1.100 is released and 1.99 has
+// reached end-of-life.
+const RustReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"rust","releases":[
+{"name":"1.100","releaseDate":"2026-11-12","isLts":false,"isEoas":false,"isEol":false,"latest":{"name":"1.100.0","date":"2026-11-12"}},
+{"name":"1.99","releaseDate":"2026-10-01","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-11-12","latest":{"name":"1.99.1","date":"2026-10-15"}},
+{"name":"1.98","releaseDate":"2026-08-20","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-10-01","latest":{"name":"1.98.1","date":"2026-09-03"}},
+{"name":"1.97","releaseDate":"2026-07-09","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-08-20","latest":{"name":"1.97.1","date":"2026-07-16"}},
+{"name":"1.96","releaseDate":"2026-05-28","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-07-09","latest":{"name":"1.96.1","date":"2026-06-30"}},
+{"name":"1.95","releaseDate":"2026-04-16","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-05-28","latest":{"name":"1.95.0","date":"2026-04-16"}}
+]}}`
+
+// RustReleasesEmpty is an endoflife.date v1 response for the rust
+// product that lists no release, as a degraded upstream might answer.
+const RustReleasesEmpty = `{"schema_version":"1.2.0","result":{"name":"rust","releases":[]}}`
+
+// RustChannel is the part of the stable channel manifest the module
+// reads, as static.rust-lang.org served it for 1.99.1.
+const RustChannel = "manifest-version = \"2\"\ndate = \"2026-10-15\"\n\n" +
+	"[pkg.rust]\nversion = \"1.99.1 (0123456789 2026-10-15)\"\n"
+
+// RustChannelNewer is RustChannel once 1.100.0 ships: the channel
+// serves a release endoflife.date may not list yet.
+const RustChannelNewer = "manifest-version = \"2\"\ndate = \"2026-11-12\"\n\n" +
+	"[pkg.rust]\nversion = \"1.100.0 (0123456789 2026-11-12)\"\n"
+
+// DefaultRustReleasesURL is the endoflife.date URL the module reads
+// the rust product from when no base URL is overridden.
+var DefaultRustReleasesURL = defaultReleasesURL(rustReleasesPath)
+
+// DefaultRustChannelURL is the URL the module reads the Rust stable
+// channel manifest from when no base URL is overridden.
+var DefaultRustChannelURL = (&url.URL{Scheme: "https", Host: "static.rust-lang.org", Path: rustChannelPath}).String()
+
 const (
+	rustReleasesPath   = "/products/rust/"
+	rustChannelPath    = "/dist/channel-rust-stable.toml"
 	goReleasesPath     = "/products/go/"
 	goManifestPath     = "/actions/go-versions/main/versions-manifest.json"
 	pythonReleasesPath = "/products/python/"
@@ -110,9 +159,13 @@ func defaultReleasesURL(path string) string {
 	return (&url.URL{Scheme: "https", Host: "endoflife.date", Path: "/api/v1" + path}).String()
 }
 
-// Upstream is a test server standing in for endoflife.date and the
-// actions versions manifests, serving one tool's release facts. Use URL
-// as both Settings.EndOfLifeBaseURL and Settings.ManifestBaseURL.
+// Upstream is a test server standing in for endoflife.date and one
+// more source of a tool, serving that tool's release facts. For Go and
+// Python the second source is the actions versions manifest: use URL
+// as both Settings.EndOfLifeBaseURL and Settings.ManifestBaseURL. For
+// Rust it is the stable channel manifest: use URL as both
+// Settings.EndOfLifeBaseURL and Settings.RustBaseURL. The manifest
+// methods act on the second source either way.
 type Upstream struct {
 	URL            string
 	requests       atomic.Int64
@@ -237,6 +290,28 @@ func NewPythonUpstream(t *testing.T) *Upstream {
 		releases:     PythonReleases,
 		manifest:     PythonManifest,
 	})
+}
+
+// NewRustUpstream starts an Upstream serving RustReleases and
+// RustChannel, or the bodies ServeReleases and ServeManifest set; any
+// other path answers 404. The server stops when the test ends.
+func NewRustUpstream(t *testing.T) *Upstream {
+	t.Helper()
+	return newUpstream(t, &Upstream{
+		releasesPath: rustReleasesPath,
+		manifestPath: rustChannelPath,
+		releases:     RustReleases,
+		manifest:     RustChannel,
+	})
+}
+
+// CacheReleases stores body as an HTTP 200 answer for the tool's
+// endoflife.date product on u in the cache cache.Open resolves,
+// fetched at fetchedAt. Point $SUPPORTED_VERSIONS_CACHE_DIR at a test
+// directory first.
+func (u *Upstream) CacheReleases(t *testing.T, body string, fetchedAt time.Time) {
+	t.Helper()
+	CacheResponse(t, u.URL+u.releasesPath, body, fetchedAt)
 }
 
 func newUpstream(t *testing.T, u *Upstream) *Upstream {
