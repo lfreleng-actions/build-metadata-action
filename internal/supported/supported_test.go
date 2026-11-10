@@ -200,8 +200,8 @@ func TestMatrixBrokenManifestFailsReport(t *testing.T) {
 		name    string
 		breakIt func(*supportedtest.Upstream)
 	}{
-		{"not found", func(u *supportedtest.Upstream) { u.FailGoManifest(http.StatusNotFound) }},
-		{"malformed", func(u *supportedtest.Upstream) { u.ServeGoManifest("<html>not json</html>") }},
+		{"not found", func(u *supportedtest.Upstream) { u.FailManifest(http.StatusNotFound) }},
+		{"malformed", func(u *supportedtest.Upstream) { u.ServeManifest("<html>not json</html>") }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			isolate(t)
@@ -229,8 +229,8 @@ func TestCatalogWithoutSourceIgnoresBrokenManifest(t *testing.T) {
 		t.Fatalf("CatalogWithoutSource: %v", err)
 	}
 	up := supportedtest.NewGoUpstream(t)
-	up.ServeGoReleases(supportedtest.GoReleasesNewer)
-	up.FailGoManifest(http.StatusNotFound)
+	up.ServeReleases(supportedtest.GoReleasesNewer)
+	up.FailManifest(http.StatusNotFound)
 	r := newResolver(t, Settings{
 		Catalog:          cat,
 		Timeout:          time.Second,
@@ -307,7 +307,7 @@ func TestNewCacheFailsToOpen(t *testing.T) {
 func TestMatrixEmptyUpstreamReleases(t *testing.T) {
 	isolate(t)
 	up := supportedtest.NewGoUpstream(t)
-	up.ServeGoReleases(supportedtest.GoReleasesEmpty)
+	up.ServeReleases(supportedtest.GoReleasesEmpty)
 	r := newResolver(t, Settings{
 		Timeout:          time.Second,
 		EndOfLifeBaseURL: up.URL,

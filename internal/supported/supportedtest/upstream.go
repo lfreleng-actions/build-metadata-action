@@ -39,21 +39,88 @@ const GoManifest = `[
 
 // DefaultGoReleasesURL is the endoflife.date URL the module reads the
 // go product from when no base URL is overridden.
-var DefaultGoReleasesURL = (&url.URL{Scheme: "https", Host: "endoflife.date", Path: "/api/v1" + goReleasesPath}).String()
+var DefaultGoReleasesURL = defaultReleasesURL(goReleasesPath)
+
+// PythonReleases is an endoflife.date v1 response for the python
+// product, modelled on the module's 2026-11-06 snapshot: 3.11 through
+// 3.15 are supported and 3.10 has reached end-of-life.
+const PythonReleases = `{"schema_version":"1.2.0","result":{"name":"python","releases":[
+{"name":"3.15","releaseDate":"2026-10-09","isLts":false,"isEoas":false,"eoasFrom":"2028-10-09","isEol":false,"eolFrom":"2031-10-31","latest":{"name":"3.15.2","date":"2026-11-04"}},
+{"name":"3.14","releaseDate":"2025-10-07","isLts":false,"isEoas":false,"eoasFrom":"2027-10-01","isEol":false,"eolFrom":"2030-10-31","latest":{"name":"3.14.10","date":"2026-11-04"}},
+{"name":"3.13","releaseDate":"2024-10-07","isLts":false,"isEoas":true,"eoasFrom":"2026-10-01","isEol":false,"eolFrom":"2029-10-31","latest":{"name":"3.13.18","date":"2026-11-04"}},
+{"name":"3.12","releaseDate":"2023-10-02","isLts":false,"isEoas":true,"eoasFrom":"2025-04-02","isEol":false,"eolFrom":"2028-10-31","latest":{"name":"3.12.16","date":"2026-11-04"}},
+{"name":"3.11","releaseDate":"2022-10-24","isLts":false,"isEoas":true,"eoasFrom":"2024-04-01","isEol":false,"eolFrom":"2027-10-31","latest":{"name":"3.11.18","date":"2026-11-04"}},
+{"name":"3.10","releaseDate":"2021-10-04","isLts":false,"isEoas":true,"eoasFrom":"2023-04-05","isEol":true,"eolFrom":"2026-10-01","latest":{"name":"3.10.22","date":"2026-10-01"}}
+]}}`
+
+// PythonManifest is an actions/python-versions manifest with one
+// stable build of each line PythonReleases lists.
+const PythonManifest = `[
+{"version":"3.15.2","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.14.10","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.13.18","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.12.16","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.11.18","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.10.22","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
+]`
+
+// PythonReleasesNewer is PythonReleases as endoflife.date might
+// answer it once the embedded snapshot lags: 3.16 is released.
+const PythonReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"python","releases":[
+{"name":"3.16","releaseDate":"2026-11-03","isLts":false,"isEoas":false,"eoasFrom":"2028-11-03","isEol":false,"eolFrom":"2032-10-31","latest":{"name":"3.16.0","date":"2026-11-03"}},
+{"name":"3.15","releaseDate":"2026-10-09","isLts":false,"isEoas":false,"eoasFrom":"2028-10-09","isEol":false,"eolFrom":"2031-10-31","latest":{"name":"3.15.2","date":"2026-11-04"}},
+{"name":"3.14","releaseDate":"2025-10-07","isLts":false,"isEoas":false,"eoasFrom":"2027-10-01","isEol":false,"eolFrom":"2030-10-31","latest":{"name":"3.14.10","date":"2026-11-04"}},
+{"name":"3.13","releaseDate":"2024-10-07","isLts":false,"isEoas":true,"eoasFrom":"2026-10-01","isEol":false,"eolFrom":"2029-10-31","latest":{"name":"3.13.18","date":"2026-11-04"}},
+{"name":"3.12","releaseDate":"2023-10-02","isLts":false,"isEoas":true,"eoasFrom":"2025-04-02","isEol":false,"eolFrom":"2028-10-31","latest":{"name":"3.12.16","date":"2026-11-04"}},
+{"name":"3.11","releaseDate":"2022-10-24","isLts":false,"isEoas":true,"eoasFrom":"2024-04-01","isEol":false,"eolFrom":"2027-10-31","latest":{"name":"3.11.18","date":"2026-11-04"}}
+]}}`
+
+// PythonManifestNewer is PythonManifest once a stable 3.16 build has
+// landed.
+const PythonManifestNewer = `[
+{"version":"3.16.0","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.15.2","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.14.10","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.13.18","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.12.16","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"3.11.18","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
+]`
+
+// PythonReleasesEmpty is an endoflife.date v1 response for the python
+// product that lists no release, as a degraded upstream might answer.
+const PythonReleasesEmpty = `{"schema_version":"1.2.0","result":{"name":"python","releases":[]}}`
+
+// DefaultPythonReleasesURL is the endoflife.date URL the module reads
+// the python product from when no base URL is overridden.
+var DefaultPythonReleasesURL = defaultReleasesURL(pythonReleasesPath)
+
+// DefaultPythonManifestURL is the URL the module reads the
+// actions/python-versions manifest from when no base URL is
+// overridden.
+var DefaultPythonManifestURL = (&url.URL{Scheme: "https", Host: "raw.githubusercontent.com", Path: pythonManifestPath}).String()
 
 const (
-	goReleasesPath = "/products/go/"
-	goManifestPath = "/actions/go-versions/main/versions-manifest.json"
+	goReleasesPath     = "/products/go/"
+	goManifestPath     = "/actions/go-versions/main/versions-manifest.json"
+	pythonReleasesPath = "/products/python/"
+	pythonManifestPath = "/actions/python-versions/main/versions-manifest.json"
 )
 
+func defaultReleasesURL(path string) string {
+	return (&url.URL{Scheme: "https", Host: "endoflife.date", Path: "/api/v1" + path}).String()
+}
+
 // Upstream is a test server standing in for endoflife.date and the
-// actions versions manifests. Use URL as both Settings.EndOfLifeBaseURL
-// and Settings.ManifestBaseURL.
+// actions versions manifests, serving one tool's release facts. Use URL
+// as both Settings.EndOfLifeBaseURL and Settings.ManifestBaseURL.
 type Upstream struct {
 	URL            string
 	requests       atomic.Int64
 	status         atomic.Int64
 	manifestStatus atomic.Int64
+
+	releasesPath string
+	manifestPath string
 
 	mu       sync.Mutex
 	releases string
@@ -64,15 +131,15 @@ type Upstream struct {
 // that lists no release, as a degraded upstream might answer.
 const GoReleasesEmpty = `{"schema_version":"1.2.0","result":{"name":"go","releases":[]}}`
 
-// ServeGoReleases makes later requests for the go product answer body
-// in place of GoReleases.
-func (u *Upstream) ServeGoReleases(body string) {
+// ServeReleases makes later requests for the tool's endoflife.date
+// product answer body in place of the recorded releases.
+func (u *Upstream) ServeReleases(body string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.releases = body
 }
 
-func (u *Upstream) goReleases() string {
+func (u *Upstream) currentReleases() string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.releases
@@ -96,15 +163,15 @@ const GoManifestLagging = `[
 {"version":"1.24.13","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
 ]`
 
-// ServeGoManifest makes later requests for the go manifest answer
-// body in place of GoManifest.
-func (u *Upstream) ServeGoManifest(body string) {
+// ServeManifest makes later requests for the tool's manifest answer
+// body in place of the recorded manifest.
+func (u *Upstream) ServeManifest(body string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.manifest = body
 }
 
-func (u *Upstream) goManifest() string {
+func (u *Upstream) currentManifest() string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.manifest
@@ -120,10 +187,10 @@ const GoReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"go","releas
 {"name":"1.25","releaseDate":"2025-08-12","isLts":false,"isEoas":false,"isEol":true,"eolFrom":"2026-08-19","latest":{"name":"1.25.14","date":"2026-08-19"}}
 ]}}`
 
-// FailGoManifest makes later requests for the go manifest alone answer
-// status, as a manifest that moved or broke would; zero restores the
-// manifest body.
-func (u *Upstream) FailGoManifest(status int) {
+// FailManifest makes later requests for the tool's manifest alone
+// answer status, as a manifest that moved or broke would; zero restores
+// the manifest body.
+func (u *Upstream) FailManifest(status int) {
 	u.manifestStatus.Store(int64(status))
 }
 
@@ -139,11 +206,33 @@ func (u *Upstream) Requests() int64 {
 }
 
 // NewGoUpstream starts an Upstream serving GoReleases and GoManifest,
-// or the bodies ServeGoReleases and ServeGoManifest set; any other
-// path answers 404. The server stops when the test ends.
+// or the bodies ServeReleases and ServeManifest set; any other path
+// answers 404. The server stops when the test ends.
 func NewGoUpstream(t *testing.T) *Upstream {
 	t.Helper()
-	u := &Upstream{releases: GoReleases, manifest: GoManifest}
+	return newUpstream(t, &Upstream{
+		releasesPath: goReleasesPath,
+		manifestPath: goManifestPath,
+		releases:     GoReleases,
+		manifest:     GoManifest,
+	})
+}
+
+// NewPythonUpstream starts an Upstream serving PythonReleases and
+// PythonManifest, or the bodies ServeReleases and ServeManifest set;
+// any other path answers 404. The server stops when the test ends.
+func NewPythonUpstream(t *testing.T) *Upstream {
+	t.Helper()
+	return newUpstream(t, &Upstream{
+		releasesPath: pythonReleasesPath,
+		manifestPath: pythonManifestPath,
+		releases:     PythonReleases,
+		manifest:     PythonManifest,
+	})
+}
+
+func newUpstream(t *testing.T, u *Upstream) *Upstream {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.requests.Add(1)
 		if status := u.status.Load(); status != 0 {
@@ -151,16 +240,16 @@ func NewGoUpstream(t *testing.T) *Upstream {
 			return
 		}
 		switch r.URL.Path {
-		case goReleasesPath:
+		case u.releasesPath:
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(u.goReleases()))
-		case goManifestPath:
+			_, _ = w.Write([]byte(u.currentReleases()))
+		case u.manifestPath:
 			if status := u.manifestStatus.Load(); status != 0 {
 				w.WriteHeader(int(status))
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(u.goManifest()))
+			_, _ = w.Write([]byte(u.currentManifest()))
 		default:
 			http.NotFound(w, r)
 		}
@@ -185,14 +274,31 @@ func CacheMalformedGoReleases(t *testing.T, fetchedAt time.Time) {
 // $SUPPORTED_VERSIONS_CACHE_DIR at a test directory first.
 func CacheGoReleases(t *testing.T, body string, fetchedAt time.Time) {
 	t.Helper()
+	CacheResponse(t, DefaultGoReleasesURL, body, fetchedAt)
+}
+
+// CacheMalformedPythonReleases stores a malformed HTTP 200 body for
+// DefaultPythonReleasesURL in the cache cache.Open resolves, as
+// CacheMalformedGoReleases does for Go.
+func CacheMalformedPythonReleases(t *testing.T, fetchedAt time.Time) {
+	t.Helper()
+	CacheResponse(t, DefaultPythonReleasesURL, "<html>not json</html>", fetchedAt)
+}
+
+// CacheResponse stores body as an HTTP 200 answer for rawURL in the
+// cache cache.Open resolves, fetched at fetchedAt, as an earlier
+// online step would have left it. Point $SUPPORTED_VERSIONS_CACHE_DIR
+// at a test directory first.
+func CacheResponse(t *testing.T, rawURL, body string, fetchedAt time.Time) {
+	t.Helper()
 	c, err := cache.Open()
 	if err != nil {
 		t.Fatalf("cache.Open: %v", err)
 	}
 	defer func() { _ = c.Close() }()
-	err = c.Put(cache.Key(http.MethodGet, DefaultGoReleasesURL, nil), cache.Entry{
+	err = c.Put(cache.Key(http.MethodGet, rawURL, nil), cache.Entry{
 		Method:    http.MethodGet,
-		URL:       DefaultGoReleasesURL,
+		URL:       rawURL,
 		Status:    http.StatusOK,
 		FetchedAt: fetchedAt,
 		Body:      []byte(body),
