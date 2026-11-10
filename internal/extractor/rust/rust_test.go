@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 // TestDetect verifies the extractor can detect Rust projects
@@ -561,120 +560,6 @@ edition = "2021"
 	if len(matrix) != 2 || matrix[0] != "1.56" || matrix[1] != "stable" {
 		t.Errorf("rust_version_matrix = %v, expected [1.56, stable] for edition 2021", matrix)
 	}
-}
-
-// TestRustVersionCaching verifies the cache works correctly
-func TestRustVersionCaching(t *testing.T) {
-	// Clear cache before test
-	rustVersionCache.Lock()
-	rustVersionCache.versions = nil
-	rustVersionCache.fetchedAt = time.Time{}
-	rustVersionCache.Unlock()
-
-	// First call should fetch from network (or fail gracefully)
-	versions1, err1 := fetchRustVersions()
-
-	// If network call fails, we expect an error
-	// If it succeeds, we expect versions
-	if err1 == nil {
-		if len(versions1) == 0 {
-			t.Error("fetchRustVersions() returned empty versions without error")
-		}
-
-		// Check that cache was populated
-		rustVersionCache.RLock()
-		cachedVersions := rustVersionCache.versions
-		cacheTime := rustVersionCache.fetchedAt
-		rustVersionCache.RUnlock()
-
-		if len(cachedVersions) == 0 {
-			t.Error("Cache was not populated after successful fetch")
-		}
-
-		if cacheTime.IsZero() {
-			t.Error("Cache timestamp was not set")
-		}
-
-		// Second call should use cache (no network call)
-		versions2, err2 := fetchRustVersions()
-		if err2 != nil {
-			t.Errorf("Second fetchRustVersions() returned error: %v", err2)
-		}
-
-		// Verify we got the same versions from cache
-		if len(versions1) != len(versions2) {
-			t.Errorf("Cached versions differ: first=%v, second=%v", versions1, versions2)
-		}
-
-		// Verify cache time didn't change (proving we used cache)
-		rustVersionCache.RLock()
-		cacheTime2 := rustVersionCache.fetchedAt
-		rustVersionCache.RUnlock()
-
-		if !cacheTime.Equal(cacheTime2) {
-			t.Error("Cache timestamp changed, suggesting a second network call was made")
-		}
-	}
-	// If network call fails, that's acceptable in tests (offline scenarios)
-}
-
-// TestRustVersionCacheExpiration verifies cache expires after TTL
-func TestRustVersionCacheExpiration(t *testing.T) {
-	// Set a short TTL for testing
-	originalTTL := rustVersionCache.cacheTTL
-	defer func() {
-		rustVersionCache.cacheTTL = originalTTL
-	}()
-
-	rustVersionCache.Lock()
-	rustVersionCache.cacheTTL = 1 * time.Millisecond
-	rustVersionCache.versions = []string{"1.70", "1.71", "stable"}
-	rustVersionCache.fetchedAt = time.Now()
-	rustVersionCache.Unlock()
-
-	// Wait for cache to expire
-	time.Sleep(10 * time.Millisecond)
-
-	// This should attempt to fetch again (cache expired)
-	// We don't assert success because network might not be available
-	_, _ = fetchRustVersions()
-
-	// Verify the cache was either:
-	// 1. Updated with new data if fetch succeeded, OR
-	// 2. Still has old data if fetch failed
-	rustVersionCache.RLock()
-	hasData := len(rustVersionCache.versions) > 0
-	rustVersionCache.RUnlock()
-
-	if !hasData {
-		t.Error("Cache should have data (either old or new)")
-	}
-}
-
-// TestRustVersionCacheConcurrency verifies cache is thread-safe
-func TestRustVersionCacheConcurrency(t *testing.T) {
-	// Populate cache
-	rustVersionCache.Lock()
-	rustVersionCache.versions = []string{"1.70", "1.71", "stable"}
-	rustVersionCache.fetchedAt = time.Now()
-	rustVersionCache.cacheTTL = 1 * time.Hour
-	rustVersionCache.Unlock()
-
-	// Run concurrent reads
-	done := make(chan bool)
-	for i := 0; i < 10; i++ {
-		go func() {
-			_, _ = fetchRustVersions()
-			done <- true
-		}()
-	}
-
-	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
-		<-done
-	}
-
-	// If we get here without deadlock or race condition, the test passes
 }
 
 // TestWorkspaceInheritance verifies that workspace inheritance is handled correctly

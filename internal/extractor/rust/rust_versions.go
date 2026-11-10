@@ -4,155 +4,109 @@
 package rust
 
 import (
+	"context"
 	"fmt"
-	"net/http"
-	"regexp"
+	"io"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
-	"github.com/BurntSushi/toml"
+	"github.com/lfreleng-actions/build-metadata-action/internal/supported"
 )
 
-// rustVersionCache holds cached Rust version information
-var rustVersionCache struct {
-	sync.RWMutex
-	versions  []string
-	fetchedAt time.Time
-	cacheTTL  time.Duration
+// rustTool is the catalog id of Rust in the supported-versions module.
+const rustTool = "rust"
+
+// MatrixResolver answers matrix questions for a tool. A
+// *supported.Resolver satisfies it; tests inject a recorded report.
+type MatrixResolver = supported.MatrixResolver
+
+// activeResolver resolves the Rust release lines. The CLI entry point
+// (`cmd/build-metadata/run.go`) installs one built from the action
+// inputs via SetResolver before invoking Extract on Rust projects, as
+// it does for the Python and Go extractors: the `extractor.Extractor`
+// interface has a fixed `Extract(path string)` signature. When none is
+// installed, the snapshot resolver applies, so `go test` and library
+// callers never touch the network.
+var activeResolver MatrixResolver
+
+// SetResolver installs the resolver used for matrix generation; nil
+// restores the snapshot default.
+func SetResolver(r MatrixResolver) {
+	activeResolver = r
 }
 
-// rustStableChannelURL is the rustup manifest of the current stable
-// release. Tests point it at a local server.
-var rustStableChannelURL = "https://static.rust-lang.org/dist/channel-rust-stable.toml"
-
-// now is the clock behind the offline fallback; tests replace it.
-var now = time.Now
-
-// The offline fallback extrapolates the current stable release from a
-// verified one. Rust has shipped a stable minor release every six weeks
-// since 1.1, so the anchor needs updating only if that train changes.
-// Verified against static.rust-lang.org: 1.99.0 shipped on 2026-10-01.
-const (
-	fallbackAnchorMinor = 99
-	releaseInterval     = 6 * 7 * 24 * time.Hour
-	// releaseGrace delays counting a release until its day has passed,
-	// since the artefacts publish during the day, not at midnight UTC.
-	releaseGrace = 24 * time.Hour
-)
-
-var fallbackAnchorDate = time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC)
-
-// fallbackStableVersion estimates the current stable release ("1.N")
-// from the release train, for use when the channel manifest is
-// unreachable. It never reports a release older than the anchor.
-func fallbackStableVersion(at time.Time) string {
-	minor := fallbackAnchorMinor
-	if elapsed := at.Sub(fallbackAnchorDate) - releaseGrace; elapsed > 0 {
-		minor += int(elapsed / releaseInterval)
-	}
-	return fmt.Sprintf("1.%d", minor)
+// NewResolver builds a resolver from s with the module's Rust policy:
+// the six newest release lines and the stable label, read from
+// endoflife.date and the stable channel manifest.
+func NewResolver(s supported.Settings) (*supported.Resolver, error) {
+	return supported.New(s)
 }
 
-func init() {
-	// Rust releases every 6 weeks, so a 72-hour TTL is conservative.
-	rustVersionCache.cacheTTL = 72 * time.Hour
+// newSnapshotResolver builds a resolver that reads the module's
+// embedded snapshot alone: offline, and without the runner cache, so a
+// malformed response cached by an earlier fetch cannot defeat the
+// fallback. Tests replace it to fix the clock or the report.
+var newSnapshotResolver = func() (MatrixResolver, error) {
+	return NewResolver(supported.Settings{Offline: true, NoCache: true})
 }
 
-// fetchRustVersions fetches available Rust versions dynamically from rust-lang.org.
-//
-// This function queries the official Rust release channel to get the current stable
-// version and generates a reasonable testing matrix. It has a 5-second timeout and
-// will return an error if the fetch fails, allowing the caller to fall back to
-// static version lists.
-//
-// The function:
-// 1. Fetches channel-rust-stable.toml from static.rust-lang.org
-// 2. Parses the current stable version (e.g., "1.84.0")
-// 3. Generates a range of the last 6 minor versions (roughly 9 months)
-// 4. Always includes "stable" for testing against the latest release
-//
-// This ensures version matrices stay current without manual updates, while the
-// 5-second timeout and error handling prevent workflow failures if the API is
-// unreachable. The caller should always have a fallback strategy.
-func fetchRustVersions() ([]string, error) {
-	rustVersionCache.RLock()
-	if len(rustVersionCache.versions) > 0 && time.Since(rustVersionCache.fetchedAt) < rustVersionCache.cacheTTL {
-		// Return a defensive copy so callers cannot mutate the shared cache.
-		versions := cloneVersions(rustVersionCache.versions)
-		rustVersionCache.RUnlock()
-		return versions, nil
-	}
-	rustVersionCache.RUnlock()
+// warnings receives the warnings matrix resolution emits. Tests
+// replace it.
+var warnings io.Writer = os.Stderr
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
+func warnf(format string, args ...any) {
+	_, _ = fmt.Fprintf(warnings, "[WARNING] "+format+"\n", args...)
+}
 
-	resp, err := client.Get(rustStableChannelURL)
+// isSpecialVersion reports a channel name rather than a release line.
+func isSpecialVersion(v string) bool {
+	return v == "stable" || v == "beta" || v == "nightly"
+}
+
+// usable reports whether versions holds a numeric release line.
+func usable(versions []string) bool {
+	for _, v := range versions {
+		if _, _, ok := parseMajorMinor(v); ok && !isSpecialVersion(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveRustVersions returns the module's unconstrained Rust matrix:
+// the newest release lines, ascending, then the stable label. No
+// constraint is passed, so the module never widens one; the caller
+// applies the MSRV. When the installed resolver fails or yields no
+// release line, it retries against the embedded snapshot.
+func resolveRustVersions() ([]string, error) {
+	if activeResolver != nil {
+		rep, err := activeResolver.Matrix(context.Background(), rustTool, "")
+		switch {
+		case err != nil:
+			warnf("Failed to resolve Rust versions (%v); retrying from the embedded snapshot", err)
+		case !usable(rep.Matrix.Versions):
+			warnf("Resolved no Rust release lines; retrying from the embedded snapshot")
+		default:
+			return rep.Matrix.Versions, nil
+		}
+	}
+	snapshot, err := newSnapshotResolver()
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch Rust versions: status %d", resp.StatusCode)
+	if c, ok := snapshot.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
 	}
-
-	var data map[string]interface{}
-	if _, err := toml.NewDecoder(resp.Body).Decode(&data); err != nil {
+	rep, err := snapshot.Matrix(context.Background(), rustTool, "")
+	if err != nil {
 		return nil, err
 	}
-
-	if pkg, ok := data["pkg"].(map[string]interface{}); ok {
-		if rust, ok := pkg["rust"].(map[string]interface{}); ok {
-			if version, ok := rust["version"].(string); ok {
-				// Version string format is "1.XX.Y (hash date)".
-				re := regexp.MustCompile(`^(\d+\.\d+)`)
-				if matches := re.FindStringSubmatch(version); len(matches) > 1 {
-					stableVersion := matches[1]
-					versions := generateVersionRange(stableVersion)
-
-					// Cache an independent copy so a caller mutating the
-					// returned slice cannot corrupt the shared cache.
-					rustVersionCache.Lock()
-					rustVersionCache.versions = cloneVersions(versions)
-					rustVersionCache.fetchedAt = time.Now()
-					rustVersionCache.Unlock()
-
-					return versions, nil
-				}
-			}
-		}
+	if !usable(rep.Matrix.Versions) {
+		return nil, fmt.Errorf("the embedded snapshot holds no Rust release line")
 	}
-
-	return nil, fmt.Errorf("could not parse version from response")
-}
-
-// generateVersionRange generates a range of versions from a stable version.
-//
-// Given a stable version (e.g., "1.84"), this generates approximately the last
-// 6 minor versions plus "stable". This provides ~9 months of version coverage,
-// which is a reasonable testing range that balances thoroughness with CI time.
-func generateVersionRange(stableVersion string) []string {
-	major, minor, ok := parseMajorMinor(stableVersion)
-	if !ok {
-		// Non-numeric or incomplete version: fall back to the minimal
-		// matrix rather than emit a bogus "0.0" entry.
-		return []string{stableVersion, "stable"}
-	}
-
-	versions := []string{}
-	for i := 0; i < 6 && minor-i >= 0; i++ {
-		versions = append(versions, fmt.Sprintf("%d.%d", major, minor-i))
-	}
-
-	// "stable" tracks whatever release is currently current.
-	versions = append(versions, "stable")
-
-	return versions
+	return rep.Matrix.Versions, nil
 }
 
 // parseMajorMinor parses the leading "major.minor" of a version string.
@@ -171,30 +125,45 @@ func parseMajorMinor(version string) (int, int, bool) {
 	return major, minor, true
 }
 
-// cloneVersions returns an independent copy of the given slice so that
-// the shared version cache cannot be mutated through a returned slice.
-func cloneVersions(versions []string) []string {
-	if versions == nil {
-		return nil
-	}
-	out := make([]string, len(versions))
-	copy(out, versions)
-	return out
-}
-
 // generateRustVersionMatrix generates a list of Rust versions from MSRV.
 //
-// The matrix holds the MSRV, the six most recent stable minor releases
-// at or above it, and "stable". The recent releases come from the live
-// stable channel manifest; when that is unreachable (network issues,
-// timeout) they are extrapolated from the six-week release train, so an
-// offline runner gets the same shape of matrix rather than a stale list.
+// The matrix holds the MSRV, the module's recent release lines at or
+// above it, and "stable". The lines come from the supported-versions
+// module: live endoflife.date and stable channel data, the runner
+// cache, or the snapshot embedded in the module when neither is
+// available. When no release line resolves at all, the matrix is the
+// MSRV and "stable" alone; no release is ever estimated. A malformed
+// MSRV leaves the lines unfiltered, newest first, then "stable".
 func generateRustVersionMatrix(msrv string) []string {
-	versions, err := fetchRustVersions()
-	if err != nil || len(versions) == 0 {
-		versions = generateVersionRange(fallbackStableVersion(now()))
+	versions, err := resolveRustVersions()
+	if err != nil {
+		warnf("Failed to resolve supported Rust versions (%v); using the MSRV %s and stable", err, msrv)
+		versions = []string{"stable"}
+	}
+	if _, _, ok := parseMajorMinor(msrv); !ok {
+		return newestFirst(versions)
 	}
 	return filterVersionsFromMSRV(msrv, versions)
+}
+
+// newestFirst returns the release lines in versions newest first,
+// followed by the special versions in their original order. The
+// module reports lines ascending; the action has always emitted the
+// unfiltered matrix of a malformed MSRV descending.
+func newestFirst(versions []string) []string {
+	numeric := []string{}
+	special := []string{}
+	for _, v := range versions {
+		if isSpecialVersion(v) {
+			special = append(special, v)
+		} else {
+			numeric = append(numeric, v)
+		}
+	}
+	sort.SliceStable(numeric, func(i, j int) bool {
+		return lineLess(numeric[j], numeric[i])
+	})
+	return append(numeric, special...)
 }
 
 // filterVersionsFromMSRV filters versions to only include those >= MSRV.
@@ -217,7 +186,7 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	}
 
 	for _, version := range allVersions {
-		if version == "stable" || version == "beta" || version == "nightly" {
+		if isSpecialVersion(version) {
 			filtered = append(filtered, version)
 			continue
 		}
@@ -235,7 +204,7 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	numericVersions := []string{}
 	specialVersions := []string{}
 	for _, v := range filtered {
-		if v == "stable" || v == "beta" || v == "nightly" {
+		if isSpecialVersion(v) {
 			specialVersions = append(specialVersions, v)
 		} else {
 			numericVersions = append(numericVersions, v)
@@ -243,22 +212,7 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	}
 
 	sort.Slice(numericVersions, func(i, j int) bool {
-		iParts := strings.Split(numericVersions[i], ".")
-		jParts := strings.Split(numericVersions[j], ".")
-
-		if len(iParts) < 2 || len(jParts) < 2 {
-			return numericVersions[i] < numericVersions[j]
-		}
-
-		iMajor, _ := strconv.Atoi(iParts[0])
-		jMajor, _ := strconv.Atoi(jParts[0])
-		if iMajor != jMajor {
-			return iMajor < jMajor
-		}
-
-		iMinor, _ := strconv.Atoi(iParts[1])
-		jMinor, _ := strconv.Atoi(jParts[1])
-		return iMinor < jMinor
+		return lineLess(numericVersions[i], numericVersions[j])
 	})
 
 	result := []string{msrv}
@@ -273,6 +227,21 @@ func filterVersionsFromMSRV(msrv string, allVersions []string) []string {
 	result = append(result, specialVersions...)
 
 	return result
+}
+
+// lineLess orders release lines numerically by major, then minor,
+// and falls back to text order for a line that does not parse.
+func lineLess(a, b string) bool {
+	aMajor, aMinor, aOK := parseMajorMinor(a)
+	bMajor, bMinor, bOK := parseMajorMinor(b)
+	switch {
+	case !aOK || !bOK:
+		return a < b
+	case aMajor != bMajor:
+		return aMajor < bMajor
+	default:
+		return aMinor < bMinor
+	}
 }
 
 // generateRustVersionMatrixFromEdition pairs an edition with the first
