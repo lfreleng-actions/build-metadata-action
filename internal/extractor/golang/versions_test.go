@@ -203,7 +203,7 @@ func TestGoMatrixJSONRecordedLive(t *testing.T) {
 // as it did before the module, so 1.27 stays in the matrix.
 func TestGoMatrixJSONLaggingManifest(t *testing.T) {
 	up := supportedtest.NewGoUpstream(t)
-	up.ServeGoManifest(supportedtest.GoManifestLagging)
+	up.ServeManifest(supportedtest.GoManifestLagging)
 	useResolver(t, supported.Settings{
 		Timeout:          time.Second,
 		EndOfLifeBaseURL: up.URL,
@@ -221,7 +221,7 @@ func TestGoMatrixJSONLaggingManifest(t *testing.T) {
 // before the module.
 func TestGoMatrixJSONStaleLifecycle(t *testing.T) {
 	up := supportedtest.NewGoUpstream(t)
-	up.ServeGoReleases(supportedtest.GoReleasesStale)
+	up.ServeReleases(supportedtest.GoReleasesStale)
 	useResolver(t, supported.Settings{
 		Timeout:          time.Second,
 		EndOfLifeBaseURL: up.URL,
@@ -244,12 +244,12 @@ func TestGoMatrixJSONBrokenManifest(t *testing.T) {
 		name    string
 		breakIt func(*supportedtest.Upstream)
 	}{
-		{"not found", func(u *supportedtest.Upstream) { u.FailGoManifest(http.StatusNotFound) }},
-		{"malformed", func(u *supportedtest.Upstream) { u.ServeGoManifest("<html>not json</html>") }},
+		{"not found", func(u *supportedtest.Upstream) { u.FailManifest(http.StatusNotFound) }},
+		{"malformed", func(u *supportedtest.Upstream) { u.ServeManifest("<html>not json</html>") }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			up := supportedtest.NewGoUpstream(t)
-			up.ServeGoReleases(supportedtest.GoReleasesNewer)
+			up.ServeReleases(supportedtest.GoReleasesNewer)
 			tt.breakIt(up)
 			useResolver(t, supported.Settings{
 				Timeout:          time.Second,
@@ -291,7 +291,7 @@ func TestGenerateGoVersionMatrixEmptyReportFallsBackToSnapshot(t *testing.T) {
 // go 1.24 when endoflife.date answers HTTP 200 with no release.
 func TestGoMatrixJSONEmptyUpstreamReleases(t *testing.T) {
 	up := supportedtest.NewGoUpstream(t)
-	up.ServeGoReleases(supportedtest.GoReleasesEmpty)
+	up.ServeReleases(supportedtest.GoReleasesEmpty)
 	useResolver(t, supported.Settings{
 		Timeout:          time.Second,
 		EndOfLifeBaseURL: up.URL,

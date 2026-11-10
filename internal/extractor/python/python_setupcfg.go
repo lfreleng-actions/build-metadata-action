@@ -164,14 +164,14 @@ func applySetupCfgPythonMatrix(metadata *extractor.ProjectMetadata, cfg map[stri
 
 	// No python_requires declared but classifiers contain explicit
 	// Python version markers. Treat those as the authoritative matrix.
-	classifierVersions := derivePythonVersionsFromClassifiers(classifiers)
+	classifierVersions, eol := derivePythonVersionsFromClassifiers(classifiers)
 	if len(classifierVersions) > 0 {
 		metadata.LanguageSpecific["version_matrix"] = classifierVersions
 		metadata.LanguageSpecific["matrix_json"] = fmt.Sprintf(`{"python-version": [%s]}`,
 			strings.Join(quoteStrings(classifierVersions), ", "))
 		metadata.LanguageSpecific["build_version"] = classifierVersions[len(classifierVersions)-1]
 		metadata.LanguageSpecific["requires_python_source"] = "classifiers"
-		emitEOLOutputs(metadata, classifierVersions)
+		emitEOLOutputs(metadata, classifierVersions, eol)
 	}
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/lfreleng-actions/build-metadata-action/internal/supported"
-	"github.com/lfreleng-actions/supported-versions-action/pkg/catalog"
 )
 
 // goTool is the catalog id of Go in the supported-versions module.
@@ -18,9 +17,7 @@ const goTool = "go"
 
 // MatrixResolver answers matrix questions for a tool. A
 // *supported.Resolver satisfies it; tests inject a recorded report.
-type MatrixResolver interface {
-	Matrix(ctx context.Context, tool, constraint string) (supported.Report, error)
-}
+type MatrixResolver = supported.MatrixResolver
 
 // activeResolver resolves the Go matrix. The CLI entry point
 // (`cmd/build-metadata/run.go`) installs one built from the action
@@ -51,19 +48,7 @@ func SetResolver(r MatrixResolver) {
 // whole report when the manifest answers 404 or does not parse, which
 // would otherwise discard valid lifecycle data for the snapshot.
 func NewResolver(s supported.Settings) (*supported.Resolver, error) {
-	cat, err := supported.CatalogWithoutSource(goTool, supported.SourceActionsManifest)
-	if err != nil {
-		return nil, err
-	}
-	s.Catalog = cat
-	override := catalog.PolicyOverride{}
-	if s.Override != nil {
-		override = *s.Override
-	}
-	admit := catalog.AdmitReleased
-	override.Admit = &admit
-	s.Override = &override
-	return supported.New(s)
+	return supported.NewReleased(goTool, s)
 }
 
 // newSnapshotResolver builds a resolver that reads the module's
@@ -196,9 +181,8 @@ func normalizeGoVersion(version string) string {
 }
 
 // compareGoVersionStrings compares two major.minor Go version strings.
-// Returns -1, 0, or 1. A local copy of the comparator used by the
-// Python extractor's policy.go, duplicated for the same reason: to keep
-// this file free of cross-extractor dependencies.
+// Returns -1, 0, or 1. Kept local to keep this file free of
+// cross-extractor dependencies.
 func compareGoVersionStrings(v1, v2 string) int {
 	var maj1, min1, maj2, min2 int
 	_, _ = fmt.Sscanf(v1, "%d.%d", &maj1, &min1)

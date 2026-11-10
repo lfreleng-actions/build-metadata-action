@@ -289,6 +289,38 @@ All project types provide these standardized outputs:
 | `python_matrix_json`     | CI matrix configuration as JSON          |
 | `python_dependencies`    | Runtime dependencies                     |
 
+The action derives the Python version matrix through the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, which reads live [endoflife.date](https://endoflife.date/python)
+data and the `actions/python-versions` manifest. The project's
+`requires-python` (or `python_requires`, or Poetry's `python`
+dependency) constraint selects from the supported lines; PEP 440 and
+the Poetry caret and tilde forms all parse. A Python release enters
+the matrix once `actions/setup-python` can install a stable build of
+it, and a new line needs no release of this action.
+End-of-life lines stay in the matrix and appear in
+`python_eol_versions`. When the manifest is unreachable, times out,
+does not parse or lists no stable build, the action retries from
+endoflife.date alone,
+admitting a line once released, so a line newer than the cached or
+embedded manifest stays in the matrix. When the upstream is unreachable or
+answers with unusable data, the module's embedded snapshot applies
+instead. When `python_offline_mode` is `true`, the embedded snapshot
+alone applies: the action ignores release data an earlier step cached
+on the runner, and the matrix stays reproducible.
+
+The module reads constraints as PEP 440 does. Excluding one patch
+release, as in `>=3.11,!=3.15.1`, keeps the 3.15 line in the matrix,
+where earlier releases of this action dropped the whole line; write
+`!=3.15.*` to exclude it.
+
+The module reads the endoflife.date v1 API from a fixed root, so the
+`BUILD_METADATA_PYTHON_EOL_API_URL` environment variable, which
+pointed the previous resolver at a mirror of the v0 `python.json`
+endpoint, no longer applies. When still set, it draws a warning and
+the action reads the public endpoint, falling back to the embedded
+snapshot if the runner cannot reach it.
+
 #### Java (Maven)
 
 | Output                       | Description                       |
