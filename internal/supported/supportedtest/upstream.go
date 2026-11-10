@@ -118,6 +118,7 @@ type Upstream struct {
 	requests       atomic.Int64
 	status         atomic.Int64
 	manifestStatus atomic.Int64
+	manifestStall  atomic.Int64
 
 	releasesPath string
 	manifestPath string
@@ -194,6 +195,13 @@ func (u *Upstream) FailManifest(status int) {
 	u.manifestStatus.Store(int64(status))
 }
 
+// StallManifest makes later requests for the tool's manifest alone
+// wait d, or until the client gives up, before answering, as a manifest
+// host that times out would; zero restores prompt answers.
+func (u *Upstream) StallManifest(d time.Duration) {
+	u.manifestStall.Store(int64(d))
+}
+
 // Fail makes every later request answer status, as an outage would;
 // zero restores the recorded responses.
 func (u *Upstream) Fail(status int) {
@@ -244,6 +252,13 @@ func newUpstream(t *testing.T, u *Upstream) *Upstream {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(u.currentReleases()))
 		case u.manifestPath:
+			if stall := time.Duration(u.manifestStall.Load()); stall > 0 {
+				select {
+				case <-r.Context().Done():
+					return
+				case <-time.After(stall):
+				}
+			}
 			if status := u.manifestStatus.Load(); status != 0 {
 				w.WriteHeader(int(status))
 				return
@@ -283,6 +298,15 @@ func CacheGoReleases(t *testing.T, body string, fetchedAt time.Time) {
 func CacheMalformedPythonReleases(t *testing.T, fetchedAt time.Time) {
 	t.Helper()
 	CacheResponse(t, DefaultPythonReleasesURL, "<html>not json</html>", fetchedAt)
+}
+
+// CacheManifest stores body as an HTTP 200 answer for the tool's
+// manifest on u in the cache cache.Open resolves, fetched at
+// fetchedAt, as an earlier online step would have left it. Point
+// $SUPPORTED_VERSIONS_CACHE_DIR at a test directory first.
+func (u *Upstream) CacheManifest(t *testing.T, body string, fetchedAt time.Time) {
+	t.Helper()
+	CacheResponse(t, u.URL+u.manifestPath, body, fetchedAt)
 }
 
 // CacheResponse stores body as an HTTP 200 answer for rawURL in the

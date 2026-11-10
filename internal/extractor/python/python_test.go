@@ -409,9 +409,9 @@ func TestGeneratePythonVersionMatrix(t *testing.T) {
 			expected:       []string{"3.11"},
 		},
 		{
-			name:           "==3.10.* (below baseline, no match)",
+			name:           "==3.10.* (below baseline, widened)",
 			requiresPython: "==3.10.*",
-			expected:       nil,
+			expected:       []string{"3.11", "3.12", "3.13", "3.14", "3.15"},
 		},
 		{
 			name:           ">=3.11,<3.14,!=3.12",
@@ -422,7 +422,7 @@ func TestGeneratePythonVersionMatrix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, _ := generatePythonVersionMatrix(tt.requiresPython, nil)
+			result, _, _ := generatePythonVersionMatrix(tt.requiresPython)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

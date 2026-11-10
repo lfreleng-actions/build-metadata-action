@@ -13,56 +13,50 @@ import (
 	"strings"
 
 	"github.com/lfreleng-actions/build-metadata-action/internal/extractor"
-	"github.com/lfreleng-actions/build-metadata-action/internal/pyversions"
+	"github.com/lfreleng-actions/build-metadata-action/internal/supported"
 )
-
-// isSupportedPythonVersion returns true when v (in `X.Y` form) is part of
-// the set of Python versions this action's matrix generator may emit. It
-// consults the *active policy*'s SupportedSet (not the static
-// `supportedPythonVersions` slice) so the classifier-derived matrix path
-// agrees with the constraint-solver path even when the policy was widened
-// from the live endoflife.date response. In offline mode the active
-// policy's SupportedSet is seeded from `supportedPythonVersions` so the
-// behaviour is identical to the previous static check.
-func isSupportedPythonVersion(v string) bool {
-	supported := ActivePolicy().SupportedSet
-	if len(supported) == 0 {
-		supported = supportedPythonVersions
-	}
-	for _, s := range supported {
-		if s == v {
-			return true
-		}
-	}
-	return false
-}
 
 // derivePythonVersionsFromClassifiers extracts Python `X.Y` versions from
 // PEP-301 trove classifiers. Returns a deduplicated, version-sorted list
-// filtered to the set of versions allowed by the active policy (the live
-// supported set in online mode, or `supportedPythonVersions` offline);
-// EOL versions remain visible in the matrix and are surfaced via the
-// `python_eol_versions` outputs rather than being silently dropped here.
-func derivePythonVersionsFromClassifiers(classifiers []string) []string {
+// filtered to the supported matrix the supported-versions module
+// resolves with no constraint, together with the lines that report
+// marks end-of-life; EOL versions remain visible in the matrix and are
+// surfaced via the `python_eol_versions` outputs rather than being
+// silently dropped here.
+func derivePythonVersionsFromClassifiers(classifiers []string) ([]string, map[string]bool) {
 	re := regexp.MustCompile(`Programming Language\s*::\s*Python\s*::\s*(\d+\.\d+)`)
-	seen := make(map[string]struct{})
-	var versions []string
+	var declared []string
 	for _, c := range classifiers {
 		if matches := re.FindStringSubmatch(c); len(matches) > 1 {
-			v := matches[1]
-			if !isSupportedPythonVersion(v) {
-				continue
-			}
-			if _, ok := seen[v]; !ok {
-				seen[v] = struct{}{}
-				versions = append(versions, v)
-			}
+			declared = append(declared, matches[1])
+		}
+	}
+	if len(declared) == 0 {
+		return nil, nil
+	}
+	supportedSet, eol, status := generatePythonVersionMatrix("")
+	if status != matrixEmptyConstraint || len(supportedSet) == 0 {
+		return nil, nil
+	}
+	allowed := make(map[string]bool, len(supportedSet))
+	for _, v := range supportedSet {
+		allowed[v] = true
+	}
+	seen := make(map[string]struct{})
+	var versions []string
+	for _, v := range declared {
+		if !allowed[v] {
+			continue
+		}
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			versions = append(versions, v)
 		}
 	}
 	sort.Slice(versions, func(i, j int) bool {
 		return compareVersions(versions[i], versions[j]) < 0
 	})
-	return versions
+	return versions, eol
 }
 
 // propagateFallbackPythonMatrix copies python-version-related metadata
@@ -107,10 +101,10 @@ func propagateFallbackPythonMatrix(metadata, fallbackMetadata *extractor.Project
 // matrix unchanged. The fallback emits requires_python_fallback=true so
 // downstream consumers can surface a warning to the user.
 //
-// applyFallbackPythonMatrix sets the matrix to the policy's supported
-// set when no Python version signal could be derived from the project
-// itself. This is the "static-fallback" path; downstream consumers can
-// detect it via `python_requires_python_source = "static-fallback"`.
+// applyFallbackPythonMatrix sets the matrix to the supported set when
+// no Python version signal could be derived from the project itself.
+// This is the "static-fallback" path; downstream consumers can detect
+// it via `python_requires_python_source = "static-fallback"`.
 //
 // EOL filtering is NOT applied here: build-metadata-action is purely
 // informational about EOL status. EOL versions remain in the matrix and
@@ -130,11 +124,10 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 		return
 	}
 
-	policy := ActivePolicy()
 	// requiresPython is empty in this path, so the generator always
 	// reports matrixEmptyConstraint and returns the supported set
 	// verbatim; bail out defensively on anything else or an empty set.
-	fallback, status := generatePythonVersionMatrix("", policy.SupportedSet)
+	fallback, eol, status := generatePythonVersionMatrix("")
 	if status != matrixEmptyConstraint || len(fallback) == 0 {
 		return
 	}
@@ -144,7 +137,7 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 		strings.Join(quoteStrings(fallback), ", "))
 	metadata.LanguageSpecific["build_version"] = fallback[len(fallback)-1]
 	metadata.LanguageSpecific["requires_python_fallback"] = true
-	emitEOLOutputs(metadata, fallback)
+	emitEOLOutputs(metadata, fallback, eol)
 	// Mark the source of the resulting matrix so downstream consumers can
 	// tell a fallback guess apart from a matrix derived from
 	// `requires-python` or trove classifiers. Only set when no upstream
@@ -159,16 +152,22 @@ func applyFallbackPythonMatrix(metadata *extractor.ProjectMetadata, source strin
 }
 
 // emitEOLOutputs writes the `eol_versions` and `eol_versions_present`
-// language-specific fields for the supplied matrix. It is safe to call
+// language-specific fields for the supplied matrix, listing the matrix
+// entries eol holds, in matrix order. It is safe to call
 // from every code path that sets `version_matrix`; it always emits the
 // keys (with empty/false values when no EOL versions are present) so
 // downstream `if:` predicates have a stable value to read regardless of
 // which extractor branch produced the matrix.
-func emitEOLOutputs(metadata *extractor.ProjectMetadata, matrix []string) {
+func emitEOLOutputs(metadata *extractor.ProjectMetadata, matrix []string, eol map[string]bool) {
 	if metadata == nil || metadata.LanguageSpecific == nil {
 		return
 	}
-	eolHits := detectEOLInMatrix(matrix, ActivePolicy())
+	var eolHits []string
+	for _, v := range matrix {
+		if eol[v] {
+			eolHits = append(eolHits, v)
+		}
+	}
 	metadata.LanguageSpecific["eol_versions"] = strings.Join(eolHits, " ")
 	metadata.LanguageSpecific["eol_versions_present"] = len(eolHits) > 0
 }
@@ -177,7 +176,8 @@ func emitEOLOutputs(metadata *extractor.ProjectMetadata, matrix []string) {
 // every code path that has a non-empty `requires-python` style constraint
 // in hand. It:
 //
-//  1. Generates the matrix scoped to the active policy's supported set.
+//  1. Generates the matrix the supported-versions module resolves for
+//     the constraint.
 //  2. Surfaces the set of EOL Python versions present in the matrix
 //     via `eol_versions` / `eol_versions_present`, leaving the matrix
 //     itself unchanged. Downstream consumers (e.g. python-build-action)
@@ -188,18 +188,17 @@ func emitEOLOutputs(metadata *extractor.ProjectMetadata, matrix []string) {
 // without a special-case wrapper. build-metadata-action is not
 // opinionated about failing the workflow on EOL hits.
 func resolveAndEmitMatrix(metadata *extractor.ProjectMetadata, requiresPython, source string) error {
-	policy := ActivePolicy()
-	matrix, status := generatePythonVersionMatrix(requiresPython, policy.SupportedSet)
+	matrix, eol, status := generatePythonVersionMatrix(requiresPython)
 	debugf("[DEBUG] Generated matrix: %v (len=%d, status=%d)\n", matrix, len(matrix), status)
 
 	effectiveSource := source
 	switch status {
 	case matrixNoMatch:
 		// Constraint parsed cleanly but no supported Python satisfies
-		// it (e.g. `<3.10` or `>=4.0`). Widen to the policy supported
-		// set so the workflow still has something to build against,
-		// and tag the situation so downstream consumers can detect it.
-		matrix = append([]string(nil), policy.SupportedSet...)
+		// it (e.g. `>=4.0`). The module has already widened the matrix
+		// to the supported set so the workflow still has something to
+		// build against; tag the situation so downstream consumers can
+		// detect it.
 		effectiveSource = "out-of-range-fallback"
 		msg := fmt.Sprintf(
 			"Project requires-python %q matches no supported Python; "+
@@ -243,26 +242,9 @@ func resolveAndEmitMatrix(metadata *extractor.ProjectMetadata, requiresPython, s
 	// so downstream consumers can implement their own fail-fast policy.
 	// `eol_versions` is space-separated; `eol_versions_present` is the
 	// boolean shortcut for workflow `if:` predicates.
-	emitEOLOutputs(metadata, matrix)
+	emitEOLOutputs(metadata, matrix, eol)
 	return nil
 }
-
-// supportedPythonVersions is the static, offline-safe default set of
-// Python versions this action knows how to emit. It seeds the policy's
-// SupportedSet in offline mode and acts as a fallback whenever the live
-// endoflife.date lookup fails. At runtime the matrix generators consult
-// `ActivePolicy().SupportedSet` (which may be wider in online mode
-// because it includes EOL cycles for informational surfacing), so both
-// the requires-python constraint path and the PEP-301 classifier path
-// agree on which versions are buildable for the run in question.
-//
-// The slice is initialised from `pyversions.GetFallbackVersions()` so
-// the supported range is controlled by the single set of baseline /
-// latest constants in `internal/pyversions/eol.go`. To bump either
-// bound (e.g. drop an EOL version, add a freshly released minor) edit
-// `baselineMinor` / `latestMinor` over there; the rest of the extractor
-// follows automatically.
-var supportedPythonVersions = pyversions.GetFallbackVersions()
 
 // matrixStatus encodes how generatePythonVersionMatrix arrived at its
 // returned slice. resolveAndEmitMatrix branches on this to tag
@@ -283,59 +265,54 @@ const (
 	// should tag the source as "parse-error-fallback".
 	matrixParseError
 	// matrixNoMatch -- the constraint parsed cleanly but no supported
-	// version satisfied it. The returned matrix is nil; callers should
-	// widen to the supported set and tag the source as
-	// "out-of-range-fallback".
+	// version satisfied it. The returned matrix is the supported set,
+	// widened by the supported-versions module; callers should tag the
+	// source as "out-of-range-fallback".
 	matrixNoMatch
 )
 
 // generatePythonVersionMatrix generates a list of Python versions from
-// a requires-python specifier, scoped to the supplied supported set.
-//
-// The function is a thin wrapper around `pyversions.ResolveVersions` so
-// build-metadata-action benefits from the full PEP 440 / Poetry caret
-// constraint solver that previously lived only in the dormant
-// `internal/pyversions` package.
+// a requires-python specifier, as the supported-versions module
+// resolves it (see resolvePythonReport). The module parses PEP 440 and
+// the Poetry caret and tilde forms. It also returns the lines the
+// report marks end-of-life.
 //
 // Return-value contract:
 //
 //   - matrixOK: constraint satisfied, len(matrix) > 0.
 //   - matrixEmptyConstraint: caller passed no constraint; matrix is the
-//     supplied supported set verbatim.
+//     supported set.
 //   - matrixParseError: constraint failed to parse; matrix is the
 //     supported set as a defensive fallback and a `::warning::` is
 //     emitted to stderr so the user sees the parse failure.
 //   - matrixNoMatch: constraint parsed cleanly but no supported version
-//     satisfies it (e.g. `<3.10` or `>=4.0`); matrix is nil and the
-//     caller MUST widen explicitly.
+//     satisfies it (e.g. `>=4.0`); matrix is the supported set the
+//     module widened to.
 //
-// When `supported` is empty the package-level `supportedPythonVersions`
-// slice is used.
-func generatePythonVersionMatrix(requiresPython string, supported []string) ([]string, matrixStatus) {
-	if len(supported) == 0 {
-		supported = supportedPythonVersions
-	}
+// The matrix is empty when no resolver, not even the embedded
+// snapshot, yields a report.
+func generatePythonVersionMatrix(requiresPython string) ([]string, map[string]bool, matrixStatus) {
+	status := matrixOK
 	if requiresPython == "" {
-		return append([]string(nil), supported...), matrixEmptyConstraint
+		status = matrixEmptyConstraint
 	}
-	versions, err := pyversions.ResolveVersions(requiresPython, supported)
-	if err != nil {
-		// Use the typed sentinel from the pyversions package so callers
-		// detect the no-match case via errors.Is rather than substring
-		// matching, which would silently change behaviour if the error
-		// wording in pyversions ever drifted.
-		if errors.Is(err, pyversions.ErrNoVersionsMatch) {
-			return nil, matrixNoMatch
-		}
+	rep, err := resolvePythonReport(requiresPython)
+	if errors.Is(err, supported.ErrConstraintSyntax) {
 		fmt.Fprintf(os.Stderr,
 			"::warning::Could not parse requires-python %q (%v); using supported set as fallback\n",
 			requiresPython, err)
-		return append([]string(nil), supported...), matrixParseError
+		rep, err = resolvePythonReport("")
+		status = matrixParseError
 	}
-	if len(versions) == 0 {
-		return nil, matrixNoMatch
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Failed to resolve supported Python versions (%v); emitting no matrix\n", err)
+		return nil, nil, status
 	}
-	return versions, matrixOK
+	if status == matrixOK && rep.Constraint != nil && rep.Constraint.Outcome == supported.OutcomeOutOfRangeFallback {
+		status = matrixNoMatch
+	}
+	return append([]string(nil), rep.Matrix.Versions...), eolLines(rep), status
 }
 
 // compareVersions compares two version strings (e.g., "3.9" vs "3.11")

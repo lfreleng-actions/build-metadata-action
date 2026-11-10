@@ -181,9 +181,8 @@ func normalizeGoVersion(version string) string {
 }
 
 // compareGoVersionStrings compares two major.minor Go version strings.
-// Returns -1, 0, or 1. A local copy of the comparator used by the
-// Python extractor's policy.go, duplicated for the same reason: to keep
-// this file free of cross-extractor dependencies.
+// Returns -1, 0, or 1. Kept local to keep this file free of
+// cross-extractor dependencies.
 func compareGoVersionStrings(v1, v2 string) int {
 	var maj1, min1, maj2, min2 int
 	_, _ = fmt.Sscanf(v1, "%d.%d", &maj1, &min1)

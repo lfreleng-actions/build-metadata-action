@@ -57,13 +57,13 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 		}
 	} else if classifiers := extractSetupPyClassifiers(text); len(classifiers) > 0 {
 		metadata.LanguageSpecific["classifiers"] = classifiers
-		if classifierVersions := derivePythonVersionsFromClassifiers(classifiers); len(classifierVersions) > 0 {
+		if classifierVersions, eol := derivePythonVersionsFromClassifiers(classifiers); len(classifierVersions) > 0 {
 			metadata.LanguageSpecific["version_matrix"] = classifierVersions
 			metadata.LanguageSpecific["matrix_json"] = fmt.Sprintf(`{"python-version": [%s]}`,
 				strings.Join(quoteStrings(classifierVersions), ", "))
 			metadata.LanguageSpecific["build_version"] = classifierVersions[len(classifierVersions)-1]
 			metadata.LanguageSpecific["requires_python_source"] = "classifiers"
-			emitEOLOutputs(metadata, classifierVersions)
+			emitEOLOutputs(metadata, classifierVersions, eol)
 		}
 	}
 

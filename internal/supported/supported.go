@@ -56,6 +56,29 @@ type MatrixResolver interface {
 // versions manifest, such as actions/go-versions.
 const SourceActionsManifest = snapshot.TypeActionsManifest
 
+// SourceEndOfLife is the catalog source type of endoflife.date
+// lifecycle data.
+const SourceEndOfLife = snapshot.TypeEndOfLife
+
+// SourceEntry says where one catalog source's facts in a report came
+// from.
+type SourceEntry = versions.SourceEntry
+
+// Kind says where a report's release facts came from.
+type Kind = versions.Kind
+
+// Report source kinds, from the freshest to the worst: facts fetched
+// just now, read from a cache entry younger than its maximum age, read
+// from an older cache entry because the upstream failed, read from the
+// snapshot embedded in the module, and a source nothing could supply.
+const (
+	KindLive        = versions.KindLive
+	KindCache       = versions.KindCache
+	KindStale       = versions.KindStale
+	KindSnapshot    = versions.KindSnapshot
+	KindUnavailable = versions.KindUnavailable
+)
+
 // CatalogWithoutSource returns the module's embedded catalog with
 // every source of sourceType removed from tool, a catalog id. A
 // resolver given it never reads that source for tool, so the source's

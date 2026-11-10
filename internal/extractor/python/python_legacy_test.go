@@ -407,7 +407,7 @@ func TestLegacy_DerivePythonVersionsFromClassifiers(t *testing.T) {
 		"Operating System :: OS Independent",
 		"Programming Language :: Python :: 3 :: Only",
 	}
-	result := derivePythonVersionsFromClassifiers(input)
+	result, _ := derivePythonVersionsFromClassifiers(input)
 	assert.Equal(t, []string{"3.11", "3.12"}, result)
 }
 
@@ -690,12 +690,12 @@ func TestLegacy_SetupPyScmNoVersionIsUnresolved(t *testing.T) {
 }
 
 // TestLegacy_ClassifierFiltersOutOfRangeVersions confirms that Python
-// versions declared in trove classifiers that fall outside the active
-// policy's SupportedSet (in the default offline policy: anything below
-// the baseline floor, which today excludes 2.x and 3.6-3.10) are filtered
-// out of the classifier-derived matrix. EOL filtering proper is handled
-// separately by the policy and surfaced via the `python_eol_versions`
-// outputs; this test covers the supported-range filter only.
+// versions declared in trove classifiers that fall outside the supported
+// set (in the embedded snapshot: anything below the 3.11 floor, which
+// excludes 2.x and 3.6-3.10) are filtered out of the classifier-derived
+// matrix. End-of-life lines inside the set are kept and surfaced via the
+// `python_eol_versions` outputs; this test covers the supported-range
+// filter only.
 func TestLegacy_ClassifierFiltersOutOfRangeVersions(t *testing.T) {
 	input := []string{
 		"Programming Language :: Python :: 2",
@@ -707,9 +707,9 @@ func TestLegacy_ClassifierFiltersOutOfRangeVersions(t *testing.T) {
 		"Programming Language :: Python :: 3.10",
 		"Programming Language :: Python :: 3.11",
 	}
-	result := derivePythonVersionsFromClassifiers(input)
+	result, _ := derivePythonVersionsFromClassifiers(input)
 	assert.Equal(t, []string{"3.11"}, result,
-		"classifier-derived matrices must drop versions outside the active policy's SupportedSet")
+		"classifier-derived matrices must drop versions outside the supported set")
 }
 
 // TestLegacy_SetupPyPbrFalsePositive guards against the regex-prefix

@@ -24,7 +24,7 @@ func goResolverNow() time.Time {
 // resolver built from cfg, with the clock fixed.
 func goResolverMatrix(t *testing.T, cfg runConfig, noCache bool) []string {
 	t.Helper()
-	s := goResolverSettings(cfg)
+	s := resolverSettings(cfg)
 	s.NoCache = noCache
 	s.Now = goResolverNow
 	r, err := golang.NewResolver(s)
@@ -48,7 +48,7 @@ func TestGoResolverSettingsOfflineIgnoresCache(t *testing.T) {
 	supportedtest.CacheGoReleases(t, supportedtest.GoReleasesNewer, goResolverNow())
 	cfg := runConfig{pythonOffline: true, pythonTimeout: time.Second}
 
-	s := goResolverSettings(cfg)
+	s := resolverSettings(cfg)
 	if !s.Offline || !s.NoCache {
 		t.Fatalf("offline settings = %+v, want Offline and NoCache", s)
 	}
@@ -66,7 +66,7 @@ func TestGoResolverSettingsOfflineIgnoresCache(t *testing.T) {
 // inputs: the runner cache stays in use and the timeout and retry
 // budget pass through.
 func TestGoResolverSettingsOnline(t *testing.T) {
-	s := goResolverSettings(runConfig{pythonTimeout: 7 * time.Second, pythonRetries: 3})
+	s := resolverSettings(runConfig{pythonTimeout: 7 * time.Second, pythonRetries: 3})
 	if s.Offline || s.NoCache {
 		t.Errorf("online settings = %+v, want neither Offline nor NoCache", s)
 	}
@@ -75,24 +75,30 @@ func TestGoResolverSettingsOnline(t *testing.T) {
 	}
 }
 
-// TestWarnLegacyGoEOLAPIURL checks that a set
-// BUILD_METADATA_GO_EOL_API_URL draws a warning naming it, and an
-// unset one draws none.
-func TestWarnLegacyGoEOLAPIURL(t *testing.T) {
-	var unset strings.Builder
-	warnLegacyGoEOLAPIURL(func(string) string { return "" }, &unset)
-	if unset.Len() != 0 {
-		t.Errorf("warning with the variable unset: %q", unset.String())
-	}
-
-	var set strings.Builder
-	warnLegacyGoEOLAPIURL(func(name string) string {
-		if name == legacyGoEOLAPIURLEnv {
-			return "https://mirror.example/api/go.json"
+// TestWarnLegacyEOLAPIURL checks that a set
+// BUILD_METADATA_GO_EOL_API_URL or BUILD_METADATA_PYTHON_EOL_API_URL
+// draws a warning naming it, and an unset one draws none.
+func TestWarnLegacyEOLAPIURL(t *testing.T) {
+	for _, tc := range []struct{ env, language string }{
+		{legacyGoEOLAPIURLEnv, "Go"},
+		{legacyPythonEOLAPIURLEnv, "Python"},
+	} {
+		var unset strings.Builder
+		warnLegacyEOLAPIURL(func(string) string { return "" }, &unset, tc.env, tc.language)
+		if unset.Len() != 0 {
+			t.Errorf("%s: warning with the variable unset: %q", tc.env, unset.String())
 		}
-		return ""
-	}, &set)
-	if !strings.Contains(set.String(), "[WARNING] "+legacyGoEOLAPIURLEnv) {
-		t.Errorf("warning = %q, want one naming %s", set.String(), legacyGoEOLAPIURLEnv)
+
+		var set strings.Builder
+		warnLegacyEOLAPIURL(func(name string) string {
+			if name == tc.env {
+				return "https://mirror.example/api/eol.json"
+			}
+			return ""
+		}, &set, tc.env, tc.language)
+		if !strings.Contains(set.String(), "[WARNING] "+tc.env) ||
+			!strings.Contains(set.String(), tc.language+" versions") {
+			t.Errorf("warning = %q, want one naming %s and %s", set.String(), tc.env, tc.language)
+		}
 	}
 }

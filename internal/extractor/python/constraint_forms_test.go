@@ -15,26 +15,19 @@ import (
 // existed as integration cases in `python-supported-versions-action`
 // (the now-superseded shell action). They drive the full extractor
 // pipeline end-to-end, so coverage is not just at the constraint
-// solver level (already in `internal/pyversions/constraints_test.go`)
-// but also through the pyproject.toml / setup.cfg / setup.py readers,
+// solver level (in the supported-versions module) but also through the pyproject.toml / setup.cfg / setup.py readers,
 // the source-taxonomy decoration, and matrix emission.
 //
 // Each table row mirrors a fixture from
 // `tests/scripts/unit/test_constraint_utils.sh` in the shell action's
 // repo so the Go suite is functionally a strict superset.
 
-// withOfflinePolicy installs an offline policy with the action's static
-// supported set so each test runs deterministically without hitting the
-// live endoflife.date API.
-func withOfflinePolicy(t *testing.T) {
+// withSnapshot installs no resolver, so the embedded snapshot,
+// read at the fixed clock TestMain sets, answers and each test runs
+// deterministically without hitting the live endoflife.date API.
+func withSnapshot(t *testing.T) {
 	t.Helper()
-	prev := ActivePolicy()
-	SetActivePolicy(&Policy{
-		Offline:      true,
-		SupportedSet: append([]string(nil), supportedPythonVersions...),
-		EOLVersions:  map[string]bool{},
-	})
-	t.Cleanup(func() { SetActivePolicy(prev) })
+	useResolvers(t, nil, nil)
 }
 
 // TestConstraintForms_PyProject covers every PEP 440 / Poetry
@@ -104,7 +97,7 @@ func TestConstraintForms_PyProject(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			withOfflinePolicy(t)
+			withSnapshot(t)
 			pyproject := "[project]\n" +
 				"name = \"constraint-test\"\n" +
 				"version = \"1.0\"\n" +
@@ -156,7 +149,7 @@ func TestConstraintForms_PoetryCaret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			withOfflinePolicy(t)
+			withSnapshot(t)
 			pyproject := "[tool.poetry]\n" +
 				"name = \"poetry-test\"\n" +
 				"version = \"0.1.0\"\n" +
@@ -208,7 +201,7 @@ func TestConstraintForms_SetupCfg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			withOfflinePolicy(t)
+			withSnapshot(t)
 			cfg := "[metadata]\n" +
 				"name = cfg-constraint-test\n" +
 				"version = 1.0\n" +
@@ -262,7 +255,7 @@ func TestConstraintForms_SetupPy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			withOfflinePolicy(t)
+			withSnapshot(t)
 			tmpDir := createTempProject(t, map[string]string{
 				"setup.py": tt.setup,
 			})
@@ -280,16 +273,53 @@ func TestConstraintForms_SetupPy(t *testing.T) {
 	}
 }
 
+// TestConstraintForms_PatchExclusion pins the two outputs that differ
+// from v0.12.0. Its solver cut `!=X.Y.Z` to `!=X.Y`, dropping the
+// whole line, and could not parse `!=X.Y.*`. The module follows PEP
+// 440: excluding one patch release keeps the line, whose newest
+// release actions/setup-python installs, and `!=X.Y.*` drops the line.
+func TestConstraintForms_PatchExclusion(t *testing.T) {
+	tests := []struct {
+		requires string
+		matrix   []string
+		build    string
+	}{
+		{">=3.11,!=3.15.1", []string{"3.11", "3.12", "3.13", "3.14", "3.15"}, "3.15"},
+		{">=3.11,!=3.12.0", []string{"3.11", "3.12", "3.13", "3.14", "3.15"}, "3.15"},
+		{">=3.11,!=3.12.*", []string{"3.11", "3.13", "3.14", "3.15"}, "3.15"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.requires, func(t *testing.T) {
+			withSnapshot(t)
+			tmpDir := createTempProject(t, map[string]string{
+				"pyproject.toml": "[project]\nname = \"excl\"\nversion = \"1.0\"\n" +
+					"requires-python = \"" + tt.requires + "\"\n",
+			})
+			t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+			metadata, err := NewExtractor().Extract(tmpDir)
+			require.NoError(t, err)
+
+			ls := metadata.LanguageSpecific
+			assert.Equal(t, tt.matrix, ls["version_matrix"])
+			assert.Equal(t, tt.build, ls["build_version"])
+			assert.Equal(t, "requires-python", ls["requires_python_source"])
+			assert.NotContains(t, ls, "requires_python_fallback")
+		})
+	}
+}
+
 // TestConstraintForms_OutOfRangeResolution covers the shell action's
 // "no matching versions" cases: a constraint that resolves to an empty
 // matrix after intersecting with supported versions falls back to the
-// static supported set (so consumers always get a runnable matrix) AND
+// supported set (so consumers always get a runnable matrix) AND
 // surfaces the situation via `requires_python_source =
 // "out-of-range-fallback"` plus a ::warning::, so downstream callers
 // can detect that the matrix is wider than the project actually
 // requested.
 func TestConstraintForms_OutOfRangeResolution(t *testing.T) {
-	withOfflinePolicy(t)
+	withSnapshot(t)
 	pyproject := "[project]\n" +
 		"name = \"out-of-range\"\n" +
 		"version = \"1.0\"\n" +
@@ -306,9 +336,8 @@ func TestConstraintForms_OutOfRangeResolution(t *testing.T) {
 
 	got, _ := metadata.LanguageSpecific["version_matrix"].([]string)
 	// `>=4.0` matches no supported Python; the matrix widens to the
-	// policy's supported set rather than emitting an unrunnable empty
-	// matrix.
-	assert.Equal(t, supportedPythonVersions, got)
+	// supported set rather than emitting an unrunnable empty matrix.
+	assert.Equal(t, snapshotMatrix, got)
 	assert.Equal(t, "out-of-range-fallback",
 		metadata.LanguageSpecific["requires_python_source"],
 		"source must record that the matrix was widened beyond the project's constraint")
@@ -318,7 +347,7 @@ func TestConstraintForms_OutOfRangeResolution(t *testing.T) {
 // 3.10, which is below the supported baseline: no supported version
 // satisfies it, so the matrix widens and the source records the fallback.
 func TestConstraintForms_EOLMinorOnlyFallsBack(t *testing.T) {
-	withOfflinePolicy(t)
+	withSnapshot(t)
 	pyproject := "[project]\n" +
 		"name = \"eol-only\"\n" +
 		"version = \"1.0\"\n" +
@@ -334,7 +363,7 @@ func TestConstraintForms_EOLMinorOnlyFallsBack(t *testing.T) {
 	require.NoError(t, err)
 
 	got, _ := metadata.LanguageSpecific["version_matrix"].([]string)
-	assert.Equal(t, supportedPythonVersions, got)
+	assert.Equal(t, snapshotMatrix, got)
 	assert.NotContains(t, got, "3.10")
 	assert.Equal(t, "out-of-range-fallback",
 		metadata.LanguageSpecific["requires_python_source"])
@@ -346,7 +375,7 @@ func TestConstraintForms_EOLMinorOnlyFallsBack(t *testing.T) {
 // PEP 621 wins -- requires-python must take precedence -- and the
 // source must be reported as "requires-python", not "poetry-dependencies".
 func TestConstraintForms_PoetryCaretBeatsRequiresPython(t *testing.T) {
-	withOfflinePolicy(t)
+	withSnapshot(t)
 	pyproject := "[project]\n" +
 		"name = \"hybrid\"\n" +
 		"version = \"1.0\"\n" +

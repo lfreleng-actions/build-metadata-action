@@ -94,14 +94,12 @@ inputs:
   python_offline_mode:
     description: >-
       When 'true', Python and Go version resolution skips the live
-      endoflife.date consultation. The Python extractor uses the
-      action's static supported-version list (3.11 through 3.15 at the
-      time of writing); the Go extractor uses the
-      supported-versions-action module's embedded snapshot alone,
-      ignoring release data an earlier step cached. Useful for
-      hermetic builds or when the runner has no outbound network
-      access. Default 'false' so the extractors benefit from live EOL
-      data.
+      endoflife.date and actions versions manifest consultation. Both
+      extractors use the supported-versions-action module's embedded
+      snapshot alone, ignoring release data an earlier step cached.
+      Useful for hermetic builds or when the runner has no outbound
+      network access. Default 'false' so the extractors benefit from
+      live release data.
     required: false
     default: "false"
 
@@ -318,7 +316,12 @@ outputs:
     value: ${{ steps.extract.outputs.python_versioning_type }}
 
   python_matrix_json:
-    description: "Python version matrix as JSON"
+    description: >-
+      Python version matrix as JSON, e.g. {"python-version": ["3.12",
+      "3.13"]}: the supported Python lines the project's constraint
+      allows, as the supported-versions-action module resolves them. A
+      line enters the supported set once actions/setup-python can
+      install a stable build of it.
     value: ${{ steps.extract.outputs.python_matrix_json }}
 
   python_build_version:
@@ -349,7 +352,7 @@ outputs:
         "poetry-dependencies" - derived from
           [tool.poetry.dependencies].python in pyproject.toml;
         "static-fallback" - no version signal was found and the action
-          fell back to its hard-coded supported set;
+          fell back to the supported set;
         "out-of-range-fallback" - the constraint parsed cleanly but
           matched no Python version supported by this action (e.g.
           requires-python = ">=4.0"); the action widened the matrix to
@@ -377,13 +380,14 @@ outputs:
   python_eol_versions:
     description: >-
       Space-separated list of Python versions in the resolved matrix
-      that the live endoflife.date API marks as end-of-life. Versions
-      below the action's baseline floor (see pyversions.Baseline()) can
-      never appear here because they are not in the supported set in
-      the first place; this output surfaces matrix versions that have
-      reached EOL since they entered the supported set. Empty when
-      offline mode is selected, when the live API is unreachable, or
-      when no EOL version intersects the matrix. Consumers (typically
+      that the release data marks as end-of-life: the live
+      endoflife.date data, or the supported-versions-action module's
+      embedded snapshot when offline or when the live data is
+      unavailable. Versions below the module's Python floor can never
+      appear here because they are not in the supported set in the
+      first place; this output surfaces matrix versions that have
+      reached EOL since they entered the supported set. Empty when no
+      EOL version intersects the matrix. Consumers (typically
       python-build-action) can branch on this to warn, strip, or fail
       their own build steps.
     value: ${{ steps.extract.outputs.python_eol_versions }}
