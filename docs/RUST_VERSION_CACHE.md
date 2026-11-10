@@ -3,145 +3,116 @@ SPDX-License-Identifier: Apache-2.0
 SPDX-FileCopyrightText: 2025 The Linux Foundation
 -->
 
-# Rust Version Caching Implementation
+# Rust Version Resolution and Caching
 
 ## Overview
 
-The Rust version fetching mechanism now includes an in-memory cache with a
-72-hour TTL to avoid unnecessary network calls and improve performance.
+The Rust extractor resolves the release lines behind
+`rust_rust_version_matrix` and `rust_matrix_json` through the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, by way of `internal/supported`, as the Python and Go
+extractors do. The module holds the Rust policy as catalog data: the
+six newest release lines, then the `stable` label. It keeps the older
+five lines although upstream supports the newest alone
+(`eol_behaviour: allow`), so they draw no end-of-life warning.
 
-## Why 72 Hours?
+The action asks the module for the unconstrained matrix and applies
+the MSRV itself, with `filterVersionsFromMSRV`: the MSRV first, the
+newer lines ascending, then `stable`. A patch-level MSRV such as
+`1.97.0` does not repeat its own line, an MSRV newer than every line
+yields the MSRV and `stable`, and a malformed MSRV leaves the lines
+unfiltered, newest first as the previous resolver listed them, then
+`stable`. Without an MSRV, the edition picks the first release
+supporting it; that mapping does not consult the module.
 
-- **Rust Release Cycle**: Rust releases a new stable version every 6 weeks
-  (42 days)
-- **Cache Duration**: 72 hours (3 days) is conservative and ensures:
-  - CI/CD pipeline runs reuse the same cached data
-  - The cache refreshes well before new Rust versions become available
-  - Network issues don't impact build reliability for 3 days
-  - Performance improvement for projects with 10+ Rust packages
+## Sources
 
-## Implementation Details
+The module reads two upstreams for Rust:
 
-### Cache Structure
+- [endoflife.date](https://endoflife.date/rust), through its v1 API at
+  `https://endoflife.date/api/v1/products/rust/`, for the release
+  lines, their dates and their newest patches
+- The stable channel manifest at
+  `https://static.rust-lang.org/dist/channel-rust-stable.toml`, for
+  the release rustup installs as `stable`; every line up to its line
+  is installable
 
-```go
-var rustVersionCache struct {
-    sync.RWMutex
-    versions   []string
-    fetchedAt  time.Time
-    cacheTTL   time.Duration
-}
-```
+The `python_eol_timeout` and `python_eol_max_retries` inputs bound each
+request, as they do for Python and Go.
 
-### Thread Safety
+## Cache
 
-The cache uses `sync.RWMutex` to ensure thread-safe access:
+Responses go to the runner cache the module shares between every
+resolver in a job, a directory chosen in this order:
 
-- **Read operations** (`RLock`): Concurrent goroutines can read simultaneously
-- **Write operations** (`Lock`): Exclusive access for cache updates
+1. `$SUPPORTED_VERSIONS_CACHE_DIR`
+2. `$RUNNER_TEMP/supported-versions` under GitHub Actions
+3. `supported-versions` in the user cache directory
 
-### Cache Flow
+A cached channel manifest serves for up to 72 hours without network,
+as it changes once per release; endoflife.date responses serve for up
+to six hours. The cache outlives the process, so later steps of the
+same job reuse what an earlier step fetched. When the cache will not
+open, the action warns and resolves without one.
 
-1. **Cache Hit** (within TTL):
-   - Return cached versions
-   - No network call made
+## Fallbacks
 
-2. **Cache Miss** (expired or empty):
-   - Fetch from `https://static.rust-lang.org/dist/channel-rust-stable.toml`
-   - Parse stable version
-   - Generate version range (last 6 minor versions + "stable")
-   - Store in cache with current timestamp
-   - Return versions
+- **Upstream failure**: When a source is unreachable, times out or
+  answers with an error status, the module serves an older cached
+  response, else the snapshot embedded in the module, for that source
+  alone, and the action warns that it could not fetch live Rust
+  release data. A report can mix sources: live lifecycle data with the
+  snapshot's stable release, for one.
+- **Unusable data**: When the module fails the report (a body that
+  does not parse, cached or fresh) or the report holds no release line
+  (an empty release list), the action warns and resolves again from
+  the embedded snapshot alone, without the cache, so a malformed cached
+  response cannot defeat the fallback.
+- **Offline**: When `python_offline_mode` is `true`, the resolver reads
+  the embedded snapshot alone and skips the cache, so release data an
+  earlier online step cached cannot change the matrix.
+- **No data at all**: When even the snapshot yields no release line,
+  the matrix is the MSRV and `stable`. The action never estimates a
+  release the data does not list.
 
-3. **Network Failure** (unreachable, non-200, timeout, unparsable):
-   - Estimate the current stable release from the release train (see
-     below) and generate the same range from it
-   - Don't update the cache (preserve old data if available)
+## Differences From the Previous Resolver
 
-### Offline Fallback
+The previous resolver read the stable channel alone, kept it in a
+72-hour in-process cache, and when the fetch failed estimated the
+current release from Rust's six-week release train. The module
+changes the numeric lines in two cases, by design:
 
-Rust ships a stable minor release every six weeks. The fallback starts
-from a verified anchor (1.99.0, released on 2026-10-01), adds one minor
-release for every full six weeks since, and counts a release once its
-day has passed. An offline runner gets the same shape of matrix as an
-online one, without a hand-maintained list that goes stale between
-releases. Should the release train ever slip, the estimate can name a
-release that is not yet out; moving the anchor to a newer verified
-release corrects it.
-
-## Benefits
-
-### Performance
-
-- **First call**: 5-second network timeout (same as before)
-- **Later calls**: <1ms (in-memory cache)
-- **Monorepo benefit**: Analyzing 10 Rust packages makes 1 network call
-  instead of 10
-
-### Reliability
-
-- 72-hour window protects against temporary network issues
-- The release-train fallback ensures builds never fail due to network
-  problems
-- Cache persists for the lifetime of the process
-
-### Freshness
-
-- Cache expires every 3 days
-- Well within Rust's 6-week release cycle
-- Ensures CI/CD tests against current Rust versions
+- **Offline or during an outage**, the lines are the snapshot's
+  recorded facts, not a prediction. A runner offline six weeks after
+  the module's snapshot sees the snapshot's newest line, where the
+  release-train estimate would have named one more.
+- **A new release the channel serves before endoflife.date lists it**
+  stays out of the numeric lines until endoflife.date catches up;
+  `stable` covers it meanwhile. With 1.100.0 on the channel and
+  endoflife.date still at 1.99, an MSRV of 1.97 gives
+  `["1.97", "1.98", "1.99", "stable"]` where the previous resolver gave
+  `["1.97", "1.98", "1.99", "1.100", "stable"]`.
 
 ## Testing
 
-Comprehensive test coverage includes:
+Tests never reach the real upstreams. `internal/supported/supportedtest`
+serves recorded endoflife.date and channel responses from `httptest`,
+pointed at through `supported.Settings.EndOfLifeBaseURL` and
+`RustBaseURL`, and can seed the runner cache in a temporary directory.
 
-1. **TestRustVersionCaching**: Verifies cache population and reuse
-2. **TestRustVersionCacheExpiration**: Verifies TTL behavior
-3. **TestRustVersionCacheConcurrency**: Verifies thread-safe access
-4. **TestRustVersionMatrixFromChannelManifest** and
-   **TestRustVersionMatrixOffline**: Serve the manifest from a local
-   server, or fail it, to check both paths without network access
-5. **TestFallbackStableVersionFollowsTheReleaseTrain**: Verifies the
-   release-train estimate
-
-All tests pass with both successful and failed network scenarios.
-
-## Cache Lifetime
-
-The cache exists during the GitHub Action execution:
-
-- **Single project**: Cache helps when the action runs more than once
-- **Monorepo**: Cache benefits all Rust packages in the repository
-- **Workflow**: Cache doesn't persist across workflow runs (intentional -
-  keeps data fresh)
-
-## Comparison with Other Approaches
-
-<!-- markdownlint-disable MD013 -->
-
-| Approach          | Duration      | Pros             | Cons                      |
-| ----------------- | ------------- | ---------------- | ------------------------- |
-| No cache          | N/A           | Always fresh     | Slow, network dependent   |
-| 1-hour cache      | 1 hour        | Fresh            | Less performance benefit  |
-| **72-hour cache** | **3 days**    | **Fresh & fast** | **Recommended**           |
-| 1-week cache      | 7 days        | Fast             | May miss new releases     |
-| Persistent cache  | Until cleared | Fast             | Requires cache management |
-
-<!-- markdownlint-enable MD013 -->
-
-## Future Enhancements
-
-Potential improvements (not yet implemented):
-
-1. **Persistent disk cache**: Store in `~/.cache/build-metadata-action/`
-2. **Environment override**: `RUST_VERSION_CACHE_TTL=24h`
-3. **Cache warming**: Pre-fetch on action startup
-4. **Metrics**: Log cache hit/miss rates
+- `internal/supported/rust_test.go` covers a live report, a channel
+  ahead of the lifecycle data, and an outage, a failing channel and a
+  stalled channel with their warnings.
+- `internal/extractor/rust/rust_versions_test.go` checks the emitted
+  `matrix_json` for each MSRV form and edition, from the snapshot, from
+  recorded live data, from a new line, and under outage, malformed or
+  empty data and a malformed cache, with fixed clocks and injected
+  resolvers for the last-resort paths.
+- `cmd/build-metadata/rust_resolver_test.go` checks that offline mode
+  ignores a seeded cache.
 
 ## Related Files
 
 - Implementation: `internal/extractor/rust/rust_versions.go`
-- Tests: `internal/extractor/rust/rust_test.go` and
-  `internal/extractor/rust/rust_versions_test.go`
-- Fallback anchor: `fallbackAnchorMinor` and `fallbackAnchorDate` in
-  `rust_versions.go`
+- Shared resolver: `internal/supported/supported.go`
+- Wiring: `configureRustResolver` in `cmd/build-metadata/run.go`

@@ -89,14 +89,15 @@ inputs:
 
   # ===================================================================
   # Supported-version inputs (named for Python, but they govern the
-  # version resolution of Python and Go)
+  # version resolution of Python, Go and Rust)
   # ===================================================================
   python_offline_mode:
     description: >-
-      When 'true', Python and Go version resolution skips the live
-      endoflife.date and actions versions manifest consultation. Both
-      extractors use the supported-versions-action module's embedded
-      snapshot alone, ignoring release data an earlier step cached.
+      When 'true', Python, Go and Rust version resolution skips the
+      live endoflife.date, actions versions manifest and Rust stable
+      channel consultation. The extractors use the
+      supported-versions-action module's embedded snapshot alone,
+      ignoring release data an earlier step cached.
       Useful for hermetic builds or when the runner has no outbound
       network access. Default 'false' so the extractors benefit from
       live release data.
@@ -105,15 +106,15 @@ inputs:
 
   python_eol_timeout:
     description: >-
-      Upstream release-data HTTP timeout in seconds, for Python and Go
-      (online mode only)
+      Upstream release-data HTTP timeout in seconds, for Python, Go
+      and Rust (online mode only)
     required: false
     default: "5"
 
   python_eol_max_retries:
     description: >-
-      Upstream release-data HTTP retry budget, for Python and Go
-      (online mode only). Set to '0'
+      Upstream release-data HTTP retry budget, for Python, Go and
+      Rust (online mode only). Set to '0'
       to opt out of retries entirely (a single attempt with no retry
       on failure). Values are integers; negative values are treated
       as the documented default ('2').
@@ -713,9 +714,10 @@ outputs:
 
   rust_rust_version_matrix:
     description: >-
-      Comma-separated Rust versions to test against: the MSRV, the six
-      latest stable minor releases at or above it, and "stable". With
-      no MSRV, the first release supporting the edition and "stable"
+      Comma-separated Rust versions to test against: the MSRV, those
+      of the six latest release lines the supported-versions-action
+      module resolves that are newer than it, and "stable". With no
+      MSRV, the first release supporting the edition and "stable"
     value: ${{ steps.extract.outputs.rust_rust_version_matrix }}
 
   rust_matrix_json:
