@@ -526,11 +526,28 @@ from the `package.json` `workspaces` field and from
 
 <!-- markdownlint-enable MD013 -->
 
-The action derives the Go version matrix from live
-[endoflife.date](https://endoflife.date/go) data: it selects the
-supported (non-EOL) Go releases at or above the version declared in
-`go.mod`. When the API is unreachable, a static fallback list of the
-supported releases applies instead.
+The action derives the Go version matrix through the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, which reads live [endoflife.date](https://endoflife.date/go)
+data: it selects the supported (non-EOL) Go releases at or above the
+version declared in `go.mod`. When the upstream is unreachable or
+answers with unusable data, the module's embedded snapshot applies
+instead. When `python_offline_mode` is `true`, the embedded snapshot
+alone applies: the action ignores release data an earlier step
+cached on the runner, so the matrix stays reproducible. The
+`python_offline_mode`, `python_eol_timeout` and
+`python_eol_max_retries` inputs govern Go resolution too. A Go
+release enters the matrix once endoflife.date lists it, even before
+`actions/go-versions` has a build of it. A release older than the
+oldest one the embedded snapshot supports stays out, even when live
+data has not yet marked it end-of-life.
+
+The module reads the endoflife.date v1 API from a fixed root, so the
+`BUILD_METADATA_GO_EOL_API_URL` environment variable, which pointed
+the previous resolver at a mirror of the v0 `go.json` endpoint, no
+longer applies. When still set, it draws a warning and the action
+reads the public endpoint, falling back to the embedded snapshot if
+the runner cannot reach it.
 
 #### Rust
 
