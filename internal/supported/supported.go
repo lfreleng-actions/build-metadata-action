@@ -125,7 +125,8 @@ func NewReleased(tool string, s Settings) (*Resolver, error) {
 
 // Settings configure a Resolver. They come from the action inputs
 // python_offline_mode, python_eol_timeout and python_eol_max_retries,
-// which govern every language resolved through this package.
+// which govern every language resolved through this package: Python,
+// Go and Rust.
 type Settings struct {
 	// Offline never touches the network: release facts come from the
 	// runner cache or the snapshot embedded in the module.
@@ -154,6 +155,9 @@ type Settings struct {
 	// ManifestBaseURL overrides the root of the actions versions
 	// manifests. It exists for tests.
 	ManifestBaseURL string
+	// RustBaseURL overrides the Rust distribution root the stable
+	// channel manifest is read from. It exists for tests.
+	RustBaseURL string
 }
 
 // Resolver resolves version matrices through the module.
@@ -206,6 +210,7 @@ func New(s Settings) (*Resolver, error) {
 		Now:              s.Now,
 		EndOfLifeBaseURL: s.EndOfLifeBaseURL,
 		ManifestBaseURL:  s.ManifestBaseURL,
+		RustBaseURL:      s.RustBaseURL,
 	})
 	if err != nil {
 		if c != nil {

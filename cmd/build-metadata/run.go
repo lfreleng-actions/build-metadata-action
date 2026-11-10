@@ -25,7 +25,7 @@ import (
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/php"
 	python "github.com/lfreleng-actions/build-metadata-action/internal/extractor/python"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/ruby"
-	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/rust"
+	rust "github.com/lfreleng-actions/build-metadata-action/internal/extractor/rust"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/scala"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/swift"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/terraform"
@@ -105,18 +105,19 @@ func detectProjectType(ctx *appContext, metadata *Metadata, cfg runConfig) strin
 	return projectType
 }
 
-// configureExtractorPolicies wires up the Python and Go extractor
-// resolvers from action inputs. This is deferred until after project
-// type detection so that non-Python / non-Go projects never pay the
-// endoflife.date network round-trip (nor surface unrelated EOL-fetch
-// warnings) just to satisfy defaults they will never use.
+// configureExtractorPolicies wires up the Python, Go and Rust
+// extractor resolvers from action inputs. This is deferred until after
+// project type detection so that other projects never pay the
+// upstream round-trips (nor surface unrelated fetch warnings) just to
+// satisfy defaults they will never use.
 func configureExtractorPolicies(projectType string, cfg runConfig) {
-	language := normalizeProjectTypeToLanguage(projectType)
-	if language == "python" {
+	switch normalizeProjectTypeToLanguage(projectType) {
+	case "python":
 		configurePythonResolvers(cfg)
-	}
-	if language == "go" {
+	case "go":
 		configureGoResolver(cfg)
+	case "rust":
+		configureRustResolver(cfg)
 	}
 }
 
@@ -147,6 +148,24 @@ func configureGoResolver(cfg runConfig) {
 		return
 	}
 	golang.SetResolver(r)
+}
+
+// configureRustResolver builds the supported-versions resolver once,
+// with the module's Rust policy, and installs it into the Rust
+// extractor. The python_offline_mode, python_eol_timeout and
+// python_eol_max_retries inputs govern it too. The module falls back
+// to its embedded snapshot when an upstream is unreachable, so offline
+// runners degrade gracefully. The resolver lives until the process
+// exits, which releases its cache.
+func configureRustResolver(cfg runConfig) {
+	r, err := rust.NewResolver(resolverSettings(cfg))
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Failed to build the supported-versions resolver (%v); resolving Rust versions offline\n", err)
+		rust.SetResolver(nil)
+		return
+	}
+	rust.SetResolver(r)
 }
 
 // configurePythonResolvers builds the Python extractor's
@@ -180,11 +199,11 @@ func newPythonResolvers(s supported.Settings) (primary, lifecycle python.MatrixR
 }
 
 // resolverSettings maps the action inputs onto the supported-versions
-// resolver settings the Python and Go extractors share. Offline mode
-// also skips the runner cache: the module serves cached release facts
-// of any age when offline, so a cache filled by an earlier online step
-// would otherwise change the matrix, and offline mode promises the
-// embedded snapshot alone.
+// resolver settings the Python, Go and Rust extractors share. Offline
+// mode also skips the runner cache: the module serves cached release
+// facts of any age when offline, so a cache filled by an earlier
+// online step would otherwise change the matrix, and offline mode
+// promises the embedded snapshot alone.
 func resolverSettings(cfg runConfig) supported.Settings {
 	return supported.Settings{
 		Offline: cfg.pythonOffline,

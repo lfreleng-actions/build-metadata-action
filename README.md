@@ -914,16 +914,29 @@ the MSRV, the six most recent stable minor releases at or above it, and
 `stable`. With no MSRV it falls back to the first release supporting the
 edition, then `stable`.
 
-- **Primary**: Reads the current stable release from
-  `https://static.rust-lang.org/dist/channel-rust-stable.toml`
-  - 5-second timeout prevents workflow delays
-  - Cached for 72 hours within one run
-- **Fallback**: When that fetch fails, estimates the current stable
-  release from Rust's six-week release train, counted from a verified
-  release (1.99.0, 2026-10-01)
-  - Ensures CI/CD reliability during network issues or API downtime
-  - Produces the same matrix shape as the live path, without a
-    hand-maintained list going stale
+The release lines come from the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, which applies its Rust policy: the six newest release lines,
+then `stable`. The action keeps the lines newer than the MSRV, so an
+MSRV newer than every line yields the MSRV and `stable` alone, and a
+malformed MSRV leaves the six lines unfiltered, newest first, then
+`stable`.
+
+- **Live**: The module reads release lines from
+  [endoflife.date](https://endoflife.date/rust) and the current stable
+  release from
+  `https://static.rust-lang.org/dist/channel-rust-stable.toml`, through
+  the runner cache the Python and Go resolvers share. The
+  `python_eol_timeout` and `python_eol_max_retries` inputs bound each
+  request. A release the stable channel serves before endoflife.date
+  lists it joins the numeric lines once endoflife.date does;
+  `stable` covers it meanwhile.
+- **Fallback**: When an upstream is unreachable or answers with data
+  the module cannot use, the module's embedded snapshot supplies the
+  release facts the module recorded at release, with a warning.
+  The action never estimates releases the data does not list.
+- **Offline**: When `python_offline_mode` is `true`, the embedded
+  snapshot alone applies, ignoring release data an earlier step cached.
 
 See [Rust version caching](docs/RUST_VERSION_CACHE.md) for details.
 
