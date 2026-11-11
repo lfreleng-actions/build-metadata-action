@@ -89,15 +89,15 @@ inputs:
 
   # ===================================================================
   # Supported-version inputs (named for Python, but they govern the
-  # version resolution of Python, Go and Rust)
+  # version resolution of Python, Go, Rust, Node.js and Java)
   # ===================================================================
   python_offline_mode:
     description: >-
-      When 'true', Python, Go and Rust version resolution skips the
-      live endoflife.date, actions versions manifest and Rust stable
-      channel consultation. The extractors use the
-      supported-versions-action module's embedded snapshot alone,
-      ignoring release data an earlier step cached.
+      When 'true', Python, Go, Rust, Node.js and Java version
+      resolution skips the live endoflife.date, actions versions
+      manifest, Rust stable channel and Adoptium consultation. The
+      extractors use the supported-versions-action module's embedded
+      snapshot alone, ignoring release data an earlier step cached.
       Useful for hermetic builds or when the runner has no outbound
       network access. Default 'false' so the extractors benefit from
       live release data.
@@ -106,15 +106,15 @@ inputs:
 
   python_eol_timeout:
     description: >-
-      Upstream release-data HTTP timeout in seconds, for Python, Go
-      and Rust (online mode only)
+      Upstream release-data HTTP timeout in seconds, for Python, Go,
+      Rust, Node.js and Java (online mode only)
     required: false
     default: "5"
 
   python_eol_max_retries:
     description: >-
-      Upstream release-data HTTP retry budget, for Python, Go and
-      Rust (online mode only). Set to '0'
+      Upstream release-data HTTP retry budget, for Python, Go, Rust,
+      Node.js and Java (online mode only). Set to '0'
       to opt out of retries entirely (a single attempt with no retry
       on failure). Values are integers; negative values are treated
       as the documented default ('2').
@@ -476,6 +476,23 @@ outputs:
     description: "Whether project uses TypeScript"
     value: ${{ steps.extract.outputs.javascript_has_typescript }}
 
+  # Node.js matrix outputs carry the runtime's name, not the
+  # javascript_ prefix of the other JavaScript outputs.
+  node_matrix_json:
+    description: >-
+      Node.js version test matrix as JSON for JavaScript and TypeScript
+      projects, ready for workflow matrix strategies (e.g.
+      {"node-version": ["22", "24", "26"]}): the supported Node.js LTS
+      lines that package.json engines.node, or else .nvmrc or
+      .node-version, admits. Named node_*, not javascript_*
+    value: ${{ steps.extract.outputs.node_matrix_json }}
+
+  node_latest:
+    description: >-
+      Newest supported Node.js release line in node_matrix_json (e.g.
+      26), not a full patch version. Named node_*, not javascript_*
+    value: ${{ steps.extract.outputs.node_latest }}
+
   # Language-Specific Outputs (Java/Maven)
   java_group_id:
     description: "Java/Maven group ID"
@@ -534,6 +551,21 @@ outputs:
       Where the Java version was detected (e.g. maven.compiler.release,
       maven-compiler-plugin/release, module:<name>, toolchain)
     value: ${{ steps.extract.outputs.java_version_source }}
+
+  java_matrix_json:
+    description: >-
+      Java version test matrix as JSON for Maven and Gradle projects,
+      ready for workflow matrix strategies (e.g.
+      {"java-version": ["21", "25"]}): the supported Java LTS lines,
+      from 17, at or above java_version. Unconstrained when
+      java_version is empty or does not parse
+    value: ${{ steps.extract.outputs.java_matrix_json }}
+
+  java_latest:
+    description: >-
+      Newest supported Java release line in java_matrix_json (e.g. 25),
+      not a full version
+    value: ${{ steps.extract.outputs.java_latest }}
 
   java_frameworks:
     description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"

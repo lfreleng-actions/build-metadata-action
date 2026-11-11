@@ -93,6 +93,7 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	applyGradleStructure(gradleProject, metadata)
 	applyGradleWrapper(projectPath, metadata)
 	applyGradleVersioningType(metadata)
+	applyJavaVersionMatrix(metadata)
 
 	return metadata, nil
 }
