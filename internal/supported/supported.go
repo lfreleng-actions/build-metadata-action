@@ -15,10 +15,13 @@ package supported
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lfreleng-actions/supported-versions-action/pkg/cache"
@@ -50,6 +53,19 @@ const StatusEOL = release.StatusEOL
 // satisfies it; tests inject a recorded report.
 type MatrixResolver interface {
 	Matrix(ctx context.Context, tool, constraint string) (Report, error)
+}
+
+// MatrixRequest is the module's description of the project a matrix
+// is for, re-exported so callers need not import pkg/versions. Its
+// Constraint wins over detection; with none, ProjectDir names where
+// the module detects one from the tool's catalog constraint files.
+type MatrixRequest = versions.MatrixRequest
+
+// ProjectMatrixResolver answers matrix questions for a tool and a
+// project request. A *Resolver satisfies it; tests inject a recorded
+// report.
+type ProjectMatrixResolver interface {
+	MatrixFor(ctx context.Context, tool string, req MatrixRequest) (Report, error)
 }
 
 // SourceActionsManifest is the catalog source type of an actions
@@ -126,7 +142,7 @@ func NewReleased(tool string, s Settings) (*Resolver, error) {
 // Settings configure a Resolver. They come from the action inputs
 // python_offline_mode, python_eol_timeout and python_eol_max_retries,
 // which govern every language resolved through this package: Python,
-// Go and Rust.
+// Go, Rust, Node.js and Java.
 type Settings struct {
 	// Offline never touches the network: release facts come from the
 	// runner cache or the snapshot embedded in the module.
@@ -158,6 +174,9 @@ type Settings struct {
 	// RustBaseURL overrides the Rust distribution root the stable
 	// channel manifest is read from. It exists for tests.
 	RustBaseURL string
+	// AdoptiumBaseURL overrides the Adoptium API root Java's available
+	// releases are read from. It exists for tests.
+	AdoptiumBaseURL string
 }
 
 // Resolver resolves version matrices through the module.
@@ -211,6 +230,7 @@ func New(s Settings) (*Resolver, error) {
 		EndOfLifeBaseURL: s.EndOfLifeBaseURL,
 		ManifestBaseURL:  s.ManifestBaseURL,
 		RustBaseURL:      s.RustBaseURL,
+		AdoptiumBaseURL:  s.AdoptiumBaseURL,
 	})
 	if err != nil {
 		if c != nil {
@@ -227,7 +247,14 @@ func New(s Settings) (*Resolver, error) {
 // embedded snapshot raise a warning, since they mean the upstream
 // could not be reached.
 func (r *Resolver) Matrix(ctx context.Context, tool, constraint string) (Report, error) {
-	rep, err := r.resolver.Matrix(ctx, tool, versions.MatrixRequest{Constraint: constraint})
+	return r.MatrixFor(ctx, tool, MatrixRequest{Constraint: constraint})
+}
+
+// MatrixFor resolves the matrix of tool, a catalog id or alias, for
+// the project req describes: an explicit constraint, or a project
+// directory the module detects one in. It warns as Matrix does.
+func (r *Resolver) MatrixFor(ctx context.Context, tool string, req MatrixRequest) (Report, error) {
+	rep, err := r.resolver.Matrix(ctx, tool, req)
 	if err != nil {
 		return rep, err
 	}
@@ -235,6 +262,63 @@ func (r *Resolver) Matrix(ctx context.Context, tool, constraint string) (Report,
 		warnf("Could not fetch live %s release data; using %s data", rep.Name, rep.Source.Kind)
 	}
 	return rep, nil
+}
+
+// ResolveWithFallback resolves the matrix of tool for req through
+// primary, then through the resolver newSnapshot builds when primary
+// is nil, fails, or yields an empty matrix, warning through warn before
+// the retry; a nil warn uses the package warnings writer. newSnapshot
+// should read the module's embedded snapshot alone; a
+// resolver it returns that is an io.Closer is closed afterwards. An
+// error wrapping ErrConstraintSyntax returns at once: the snapshot
+// would reject the same constraint text. An empty snapshot matrix is
+// an error.
+func ResolveWithFallback(ctx context.Context, tool string, req MatrixRequest,
+	primary ProjectMatrixResolver, newSnapshot func() (ProjectMatrixResolver, error),
+	warn func(format string, args ...any),
+) (Report, error) {
+	if warn == nil {
+		warn = warnf
+	}
+	if primary != nil {
+		rep, err := primary.MatrixFor(ctx, tool, req)
+		switch {
+		case errors.Is(err, ErrConstraintSyntax):
+			return rep, err
+		case err != nil:
+			warn("Failed to resolve %s versions (%v); retrying from the embedded snapshot", tool, err)
+		case len(rep.Matrix.Versions) == 0:
+			warn("Resolved no %s versions; retrying from the embedded snapshot", tool)
+		default:
+			return rep, nil
+		}
+	}
+	snapshot, err := newSnapshot()
+	if err != nil {
+		return Report{}, err
+	}
+	if c, ok := snapshot.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
+	rep, err := snapshot.MatrixFor(ctx, tool, req)
+	if err != nil {
+		return rep, err
+	}
+	if len(rep.Matrix.Versions) == 0 {
+		return rep, fmt.Errorf("supported: the embedded snapshot holds no supported %s line", tool)
+	}
+	return rep, nil
+}
+
+// MatrixJSON renders the matrix of rep as a workflow matrix object,
+// e.g. {"node-version": ["22", "24"]}, in the form the action's
+// *_matrix_json outputs use.
+func MatrixJSON(rep Report) string {
+	quoted := make([]string, len(rep.Matrix.Versions))
+	for i, v := range rep.Matrix.Versions {
+		quoted[i] = strconv.Quote(v)
+	}
+	return fmt.Sprintf("{%s: [%s]}", strconv.Quote(rep.Matrix.Key), strings.Join(quoted, ", "))
 }
 
 // Close releases the cache the resolver holds open. The resolver is

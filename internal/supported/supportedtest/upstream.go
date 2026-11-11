@@ -146,7 +146,121 @@ var DefaultRustReleasesURL = defaultReleasesURL(rustReleasesPath)
 // channel manifest from when no base URL is overridden.
 var DefaultRustChannelURL = (&url.URL{Scheme: "https", Host: "static.rust-lang.org", Path: rustChannelPath}).String()
 
+// NodeReleases is an endoflife.date v1 response for the nodejs
+// product, built from the release facts the module's snapshot
+// recorded on 2026-11-06 and trimmed to the newest seven lines: the
+// LTS lines 22, 24 and 26 are supported and 20 has reached
+// end-of-life.
+const NodeReleases = `{"schema_version":"1.2.0","result":{"name":"nodejs","releases":[
+{"name":"26","releaseDate":"2026-05-05","isLts":true,"isEoas":false,"eoasFrom":"2027-10-27","isEol":false,"eolFrom":"2029-04-30","latest":{"name":"26.13.0","date":"2026-10-28"}},
+{"name":"25","releaseDate":"2025-10-15","isLts":false,"isEoas":true,"eoasFrom":"2026-04-01","isEol":true,"eolFrom":"2026-06-01","latest":{"name":"25.9.0","date":"2026-04-01"}},
+{"name":"24","releaseDate":"2025-05-06","isLts":true,"isEoas":true,"eoasFrom":"2026-10-20","isEol":false,"eolFrom":"2028-04-30","latest":{"name":"24.22.2","date":"2026-10-28"}},
+{"name":"23","releaseDate":"2024-10-16","isLts":false,"isEoas":true,"eoasFrom":"2025-04-01","isEol":true,"eolFrom":"2025-06-01","latest":{"name":"23.11.1","date":"2025-05-14"}},
+{"name":"22","releaseDate":"2024-04-24","isLts":true,"isEoas":true,"eoasFrom":"2025-10-21","isEol":false,"eolFrom":"2027-04-30","latest":{"name":"22.23.4","date":"2026-10-21"}},
+{"name":"21","releaseDate":"2023-10-17","isLts":false,"isEoas":true,"eoasFrom":"2024-04-01","isEol":true,"eolFrom":"2024-06-01","latest":{"name":"21.7.3","date":"2024-04-10"}},
+{"name":"20","releaseDate":"2023-04-18","isLts":true,"isEoas":true,"eoasFrom":"2024-10-22","isEol":true,"eolFrom":"2026-04-30","latest":{"name":"20.20.2","date":"2026-03-24"}}
+]}}`
+
+// NodeManifest is the actions/node-versions manifest, built from the
+// same snapshot and trimmed to the newest stable build of each LTS
+// line above.
+const NodeManifest = `[
+{"version":"26.13.0","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"24.22.2","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"22.23.4","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"20.20.2","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
+]`
+
+// NodeReleasesNewer is NodeReleases as endoflife.date might answer it
+// once the embedded snapshot lags: a hypothetical LTS line 28 is
+// released and 22 has reached end-of-life, so the supported lines are
+// 24, 26 and 28.
+const NodeReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"nodejs","releases":[
+{"name":"28","releaseDate":"2026-11-03","isLts":true,"isEoas":false,"eoasFrom":"2028-10-20","isEol":false,"eolFrom":"2030-04-30","latest":{"name":"28.0.0","date":"2026-11-03"}},
+{"name":"26","releaseDate":"2026-05-05","isLts":true,"isEoas":false,"eoasFrom":"2027-10-27","isEol":false,"eolFrom":"2029-04-30","latest":{"name":"26.13.0","date":"2026-10-28"}},
+{"name":"24","releaseDate":"2025-05-06","isLts":true,"isEoas":true,"eoasFrom":"2026-10-20","isEol":false,"eolFrom":"2028-04-30","latest":{"name":"24.22.2","date":"2026-10-28"}},
+{"name":"22","releaseDate":"2024-04-24","isLts":true,"isEoas":true,"eoasFrom":"2025-10-21","isEol":true,"eolFrom":"2026-11-03","latest":{"name":"22.23.4","date":"2026-10-21"}}
+]}}`
+
+// NodeManifestNewer is NodeManifest once a stable build of the
+// hypothetical line 28 has landed.
+const NodeManifestNewer = `[
+{"version":"28.0.0","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"26.13.0","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"24.22.2","stable":true,"files":[{"platform":"linux","arch":"x64"}]},
+{"version":"22.23.4","stable":true,"files":[{"platform":"linux","arch":"x64"}]}
+]`
+
+// NodeReleasesEmpty is an endoflife.date v1 response for the nodejs
+// product that lists no release, as a degraded upstream might answer.
+const NodeReleasesEmpty = `{"schema_version":"1.2.0","result":{"name":"nodejs","releases":[]}}`
+
+// DefaultNodeReleasesURL is the endoflife.date URL the module reads
+// the nodejs product from when no base URL is overridden.
+var DefaultNodeReleasesURL = defaultReleasesURL(nodeReleasesPath)
+
+// DefaultNodeManifestURL is the URL the module reads the
+// actions/node-versions manifest from when no base URL is overridden.
+var DefaultNodeManifestURL = (&url.URL{Scheme: "https", Host: "raw.githubusercontent.com", Path: nodeManifestPath}).String()
+
+// JavaReleases is an endoflife.date v1 response for the
+// eclipse-temurin product, built from the release facts the module's
+// snapshot recorded on 2026-11-06 and trimmed to the lines from 11:
+// the LTS lines 17, 21 and 25 are supported from the catalog floor of
+// 17.
+const JavaReleases = `{"schema_version":"1.2.0","result":{"name":"eclipse-temurin","releases":[
+{"name":"27","releaseDate":"2026-09-22","isLts":false,"isEol":false,"eolFrom":"2027-03-23","latest":{"name":"27.0.1.0.2+1","date":"2026-10-24"}},
+{"name":"26","releaseDate":"2026-03-23","isLts":false,"isEol":true,"eolFrom":"2026-09-22","latest":{"name":"26.0.2.1+1","date":"2026-08-25"}},
+{"name":"25","releaseDate":"2025-09-22","isLts":true,"isEol":false,"eolFrom":"2031-09-30","latest":{"name":"25.0.5+8","date":"2026-10-22"}},
+{"name":"24","releaseDate":"2025-03-20","isLts":false,"isEol":true,"eolFrom":"2025-09-22","latest":{"name":"24.0.2+12","date":"2025-07-17"}},
+{"name":"21","releaseDate":"2023-10-10","isLts":true,"isEol":false,"eolFrom":"2029-12-31","latest":{"name":"21.0.13+9","date":"2026-10-22"}},
+{"name":"17","releaseDate":"2021-09-22","isLts":true,"isEol":false,"eolFrom":"2027-10-31","latest":{"name":"17.0.21+9","date":"2026-10-22"}},
+{"name":"11","releaseDate":"2021-08-01","isLts":true,"isEol":false,"eolFrom":"2027-10-31","latest":{"name":"11.0.33+10","date":"2026-11-04"}}
+]}}`
+
+// AdoptiumReleases is the Adoptium available_releases answer for the
+// same snapshot: every feature release with a Temurin build.
+const AdoptiumReleases = `{"available_lts_releases":[8,11,17,21,25],` +
+	`"available_releases":[8,11,16,17,18,19,20,21,22,23,24,25,26,27],` +
+	`"most_recent_feature_release":27,"most_recent_feature_version":28,` +
+	`"most_recent_lts":25,"tip_version":28}`
+
+// JavaReleasesNewer is JavaReleases as endoflife.date might answer it
+// once the embedded snapshot lags: a hypothetical LTS line 29 is
+// released, so the supported lines are 17, 21, 25 and 29.
+const JavaReleasesNewer = `{"schema_version":"1.2.0","result":{"name":"eclipse-temurin","releases":[
+{"name":"29","releaseDate":"2026-11-03","isLts":true,"isEol":false,"eolFrom":"2034-09-30","latest":{"name":"29.0.0+1","date":"2026-11-03"}},
+{"name":"27","releaseDate":"2026-09-22","isLts":false,"isEol":false,"eolFrom":"2027-03-23","latest":{"name":"27.0.1.0.2+1","date":"2026-10-24"}},
+{"name":"25","releaseDate":"2025-09-22","isLts":true,"isEol":false,"eolFrom":"2031-09-30","latest":{"name":"25.0.5+8","date":"2026-10-22"}},
+{"name":"21","releaseDate":"2023-10-10","isLts":true,"isEol":false,"eolFrom":"2029-12-31","latest":{"name":"21.0.13+9","date":"2026-10-22"}},
+{"name":"17","releaseDate":"2021-09-22","isLts":true,"isEol":false,"eolFrom":"2027-10-31","latest":{"name":"17.0.21+9","date":"2026-10-22"}}
+]}}`
+
+// AdoptiumReleasesNewer is AdoptiumReleases once a Temurin build of
+// the hypothetical line 29 has landed.
+const AdoptiumReleasesNewer = `{"available_lts_releases":[8,11,17,21,25,29],` +
+	`"available_releases":[8,11,17,21,25,27,29],` +
+	`"most_recent_feature_release":29,"most_recent_feature_version":30,` +
+	`"most_recent_lts":29,"tip_version":30}`
+
+// JavaReleasesEmpty is an endoflife.date v1 response for the
+// eclipse-temurin product that lists no release, as a degraded
+// upstream might answer.
+const JavaReleasesEmpty = `{"schema_version":"1.2.0","result":{"name":"eclipse-temurin","releases":[]}}`
+
+// DefaultJavaReleasesURL is the endoflife.date URL the module reads
+// the eclipse-temurin product from when no base URL is overridden.
+var DefaultJavaReleasesURL = defaultReleasesURL(javaReleasesPath)
+
+// DefaultAdoptiumURL is the URL the module reads Adoptium's available
+// releases from when no base URL is overridden.
+var DefaultAdoptiumURL = (&url.URL{Scheme: "https", Host: "api.adoptium.net", Path: adoptiumPath}).String()
+
 const (
+	nodeReleasesPath   = "/products/nodejs/"
+	nodeManifestPath   = "/actions/node-versions/main/versions-manifest.json"
+	javaReleasesPath   = "/products/eclipse-temurin/"
+	adoptiumPath       = "/v3/info/available_releases"
 	rustReleasesPath   = "/products/rust/"
 	rustChannelPath    = "/dist/channel-rust-stable.toml"
 	goReleasesPath     = "/products/go/"
@@ -160,12 +274,15 @@ func defaultReleasesURL(path string) string {
 }
 
 // Upstream is a test server standing in for endoflife.date and one
-// more source of a tool, serving that tool's release facts. For Go and
-// Python the second source is the actions versions manifest: use URL
-// as both Settings.EndOfLifeBaseURL and Settings.ManifestBaseURL. For
-// Rust it is the stable channel manifest: use URL as both
-// Settings.EndOfLifeBaseURL and Settings.RustBaseURL. The manifest
-// methods act on the second source either way.
+// more source of a tool, serving that tool's release facts. For Go,
+// Python and Node.js the second source is the actions versions
+// manifest: use URL as both Settings.EndOfLifeBaseURL and
+// Settings.ManifestBaseURL. For Rust it is the stable channel
+// manifest: use URL as both Settings.EndOfLifeBaseURL and
+// Settings.RustBaseURL. For Java it is the Adoptium available
+// releases: use URL as both Settings.EndOfLifeBaseURL and
+// Settings.AdoptiumBaseURL. The manifest methods act on the second
+// source either way.
 type Upstream struct {
 	URL            string
 	requests       atomic.Int64
@@ -302,6 +419,32 @@ func NewRustUpstream(t *testing.T) *Upstream {
 		manifestPath: rustChannelPath,
 		releases:     RustReleases,
 		manifest:     RustChannel,
+	})
+}
+
+// NewNodeUpstream starts an Upstream serving NodeReleases and
+// NodeManifest, or the bodies ServeReleases and ServeManifest set; any
+// other path answers 404. The server stops when the test ends.
+func NewNodeUpstream(t *testing.T) *Upstream {
+	t.Helper()
+	return newUpstream(t, &Upstream{
+		releasesPath: nodeReleasesPath,
+		manifestPath: nodeManifestPath,
+		releases:     NodeReleases,
+		manifest:     NodeManifest,
+	})
+}
+
+// NewJavaUpstream starts an Upstream serving JavaReleases and
+// AdoptiumReleases, or the bodies ServeReleases and ServeManifest set;
+// any other path answers 404. The server stops when the test ends.
+func NewJavaUpstream(t *testing.T) *Upstream {
+	t.Helper()
+	return newUpstream(t, &Upstream{
+		releasesPath: javaReleasesPath,
+		manifestPath: adoptiumPath,
+		releases:     JavaReleases,
+		manifest:     AdoptiumReleases,
 	})
 }
 
