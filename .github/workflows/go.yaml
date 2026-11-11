@@ -1,0 +1,34 @@
+---
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+# Build, test, lint and audit the Go module with the organisation's
+# Go workflows
+name: 'Go 🐹'
+
+# No path filter: a change to this workflow or anything else under
+# .github/ must still run the Go tests
+# yamllint disable-line rule:truthy
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  build-test:
+    name: 'Build/Test'
+    permissions:
+      contents: read
+      pull-requests: read  # repository-metadata-action reads PR data
+    # yamllint disable-line rule:line-length
+    uses: lfreleng-actions/go-workflows/.github/workflows/build-test.yaml@c38bd66c2455b9290474cabb2d8dfa74bf01835c  # v0.8.0
+    with:
+      lint_version: 'v2.15.0'  # the version .pre-commit-config.yaml pins
