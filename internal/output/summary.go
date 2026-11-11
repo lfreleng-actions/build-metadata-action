@@ -382,6 +382,8 @@ func writeJavaRows(sb *strings.Builder, metadata map[string]interface{}) {
 		{"group_id", "Group ID", true},
 		{"artifact_id", "Artifact ID", true},
 		{"packaging", "Packaging", false},
+		{"matrix_json", "Java Matrix JSON", true},
+		{"latest", "Latest Java Line", false},
 	})
 }
 

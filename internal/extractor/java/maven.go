@@ -76,6 +76,7 @@ func (e *MavenExtractor) extractFromPOM(pomPath, projectPath string, metadata *e
 	applyPOMGeneratedSources(projectPath, resolvedPOM, metadata)
 	e.applyPOMJavaVersion(projectPath, resolvedPOM, metadata)
 	applyPOMVersioningType(metadata)
+	applyJavaVersionMatrix(metadata)
 
 	return nil
 }

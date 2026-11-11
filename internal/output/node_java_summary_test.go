@@ -24,3 +24,21 @@ func TestJSRowsShowTheNodeMatrix(t *testing.T) {
 		}
 	}
 }
+
+func TestJavaRowsShowTheJavaMatrix(t *testing.T) {
+	var sb strings.Builder
+	addLanguageSpecificToTable(&sb, "java-maven", map[string]interface{}{
+		"group_id":    "org.example",
+		"version":     "21",
+		"matrix_json": `{"java-version": ["21", "25"]}`,
+		"latest":      "25",
+	})
+	for _, want := range []string{
+		"| Java Matrix JSON | `{\"java-version\": [\"21\", \"25\"]}` |\n",
+		"| Latest Java Line | 25 |\n",
+	} {
+		if !strings.Contains(sb.String(), want) {
+			t.Errorf("rows %q lack %q", sb.String(), want)
+		}
+	}
+}

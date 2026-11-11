@@ -552,6 +552,21 @@ outputs:
       maven-compiler-plugin/release, module:<name>, toolchain)
     value: ${{ steps.extract.outputs.java_version_source }}
 
+  java_matrix_json:
+    description: >-
+      Java version test matrix as JSON for Maven and Gradle projects,
+      ready for workflow matrix strategies (e.g.
+      {"java-version": ["21", "25"]}): the supported Java LTS lines,
+      from 17, at or above java_version. Unconstrained when
+      java_version is empty or does not parse
+    value: ${{ steps.extract.outputs.java_matrix_json }}
+
+  java_latest:
+    description: >-
+      Newest supported Java release line in java_matrix_json (e.g. 25),
+      not a full version
+    value: ${{ steps.extract.outputs.java_latest }}
+
   java_frameworks:
     description: "Detected Java frameworks (Spring Boot, Quarkus, etc.)"
     value: ${{ steps.extract.outputs.java_frameworks }}
