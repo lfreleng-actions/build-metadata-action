@@ -18,26 +18,28 @@ func TestCollect(t *testing.T) {
 		for _, e := range originalEnv {
 			pair := splitEnv(e)
 			if len(pair) == 2 {
-				os.Setenv(pair[0], pair[1])
+				if err := os.Setenv(pair[0], pair[1]); err != nil {
+					t.Errorf("restoring %s: %v", pair[0], err)
+				}
 			}
 		}
 	}()
 
 	tests := []struct {
 		name     string
-		setupEnv func()
+		setupEnv func(t *testing.T)
 		validate func(*testing.T, *Metadata)
 	}{
 		{
 			name: "GitHub Actions environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITHUB_ACTIONS", "true")
-				os.Setenv("GITHUB_ACTOR", "testuser")
-				os.Setenv("GITHUB_REPOSITORY", "test/repo")
-				os.Setenv("GITHUB_WORKFLOW", "CI")
-				os.Setenv("RUNNER_OS", "Linux")
-				os.Setenv("RUNNER_ARCH", "X64")
+				t.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTOR", "testuser")
+				t.Setenv("GITHUB_REPOSITORY", "test/repo")
+				t.Setenv("GITHUB_WORKFLOW", "CI")
+				t.Setenv("RUNNER_OS", "Linux")
+				t.Setenv("RUNNER_ARCH", "X64")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -59,10 +61,10 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "GitLab CI environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITLAB_CI", "true")
-				os.Setenv("CI", "true")
+				t.Setenv("GITLAB_CI", "true")
+				t.Setenv("CI", "true")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -75,9 +77,9 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "CircleCI environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CIRCLECI", "true")
+				t.Setenv("CIRCLECI", "true")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -90,9 +92,9 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "Travis CI environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("TRAVIS", "true")
+				t.Setenv("TRAVIS", "true")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -105,9 +107,9 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "Jenkins environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("JENKINS_HOME", "/var/jenkins")
+				t.Setenv("JENKINS_HOME", "/var/jenkins")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -120,9 +122,9 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "Generic CI environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CI", "true")
+				t.Setenv("CI", "true")
 			},
 			validate: func(t *testing.T, m *Metadata) {
 				if !m.CI.IsCI {
@@ -135,7 +137,7 @@ func TestCollect(t *testing.T) {
 		},
 		{
 			name: "Local environment (no CI)",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
 			},
 			validate: func(t *testing.T, m *Metadata) {
@@ -151,7 +153,7 @@ func TestCollect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
+			tt.setupEnv(t)
 
 			metadata, err := Collect()
 			if err != nil {
@@ -175,31 +177,33 @@ func TestCollectCIEnvironment(t *testing.T) {
 		for _, e := range originalEnv {
 			pair := splitEnv(e)
 			if len(pair) == 2 {
-				os.Setenv(pair[0], pair[1])
+				if err := os.Setenv(pair[0], pair[1]); err != nil {
+					t.Errorf("restoring %s: %v", pair[0], err)
+				}
 			}
 		}
 	}()
 
 	tests := []struct {
 		name     string
-		setupEnv func()
+		setupEnv func(t *testing.T)
 		want     CIEnvironment
 	}{
 		{
 			name: "complete GitHub Actions environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITHUB_ACTIONS", "true")
-				os.Setenv("GITHUB_ACTION", "test-action")
-				os.Setenv("GITHUB_ACTOR", "octocat")
-				os.Setenv("GITHUB_REPOSITORY", "owner/repo")
-				os.Setenv("GITHUB_EVENT_NAME", "push")
-				os.Setenv("GITHUB_WORKFLOW", "Test Workflow")
-				os.Setenv("GITHUB_RUN_NUMBER", "42")
-				os.Setenv("GITHUB_RUN_ATTEMPT", "1")
-				os.Setenv("RUNNER_OS", "Linux")
-				os.Setenv("RUNNER_ARCH", "X64")
-				os.Setenv("RUNNER_NAME", "GitHub Actions 1")
+				t.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTION", "test-action")
+				t.Setenv("GITHUB_ACTOR", "octocat")
+				t.Setenv("GITHUB_REPOSITORY", "owner/repo")
+				t.Setenv("GITHUB_EVENT_NAME", "push")
+				t.Setenv("GITHUB_WORKFLOW", "Test Workflow")
+				t.Setenv("GITHUB_RUN_NUMBER", "42")
+				t.Setenv("GITHUB_RUN_ATTEMPT", "1")
+				t.Setenv("RUNNER_OS", "Linux")
+				t.Setenv("RUNNER_ARCH", "X64")
+				t.Setenv("RUNNER_NAME", "GitHub Actions 1")
 			},
 			want: CIEnvironment{
 				Platform:         "github",
@@ -218,7 +222,7 @@ func TestCollectCIEnvironment(t *testing.T) {
 		},
 		{
 			name: "minimal local environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
 			},
 			want: CIEnvironment{
@@ -230,7 +234,7 @@ func TestCollectCIEnvironment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
+			tt.setupEnv(t)
 
 			got := collectCIEnvironment()
 
@@ -281,35 +285,37 @@ func TestDetectSetupActions(t *testing.T) {
 		for _, e := range originalEnv {
 			pair := splitEnv(e)
 			if len(pair) == 2 {
-				os.Setenv(pair[0], pair[1])
+				if err := os.Setenv(pair[0], pair[1]); err != nil {
+					t.Errorf("restoring %s: %v", pair[0], err)
+				}
 			}
 		}
 	}()
 
 	tests := []struct {
 		name       string
-		setupEnv   func()
+		setupEnv   func(t *testing.T)
 		expectKeys []string
 	}{
 		{
 			name: "setup-python detected",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("pythonLocation", "/opt/hostedtoolcache/Python/3.9.0/x64")
+				t.Setenv("pythonLocation", "/opt/hostedtoolcache/Python/3.9.0/x64")
 			},
 			expectKeys: []string{"setup-python"},
 		},
 		{
 			name: "setup-java detected",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("JAVA_HOME", "/usr/lib/jvm/java-11")
+				t.Setenv("JAVA_HOME", "/usr/lib/jvm/java-11")
 			},
 			expectKeys: []string{"setup-java"},
 		},
 		{
 			name: "no setup actions",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
 			},
 			expectKeys: []string{},
@@ -318,7 +324,7 @@ func TestDetectSetupActions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
+			tt.setupEnv(t)
 
 			metadata := &Metadata{
 				SetupActions: make(map[string]SetupActionInfo),
@@ -448,18 +454,8 @@ func TestIsVersionLike(t *testing.T) {
 }
 
 func TestGetEnvironmentVariable(t *testing.T) {
-	// Save original environment
-	originalValue := os.Getenv("TEST_VAR")
-	defer func() {
-		if originalValue != "" {
-			os.Setenv("TEST_VAR", originalValue)
-		} else {
-			os.Unsetenv("TEST_VAR")
-		}
-	}()
-
 	testValue := "test_value_12345"
-	os.Setenv("TEST_VAR", testValue)
+	t.Setenv("TEST_VAR", testValue)
 
 	got := GetEnvironmentVariable("TEST_VAR")
 	if got != testValue {
@@ -474,19 +470,9 @@ func TestGetEnvironmentVariable(t *testing.T) {
 }
 
 func TestGetAllEnvironmentVariables(t *testing.T) {
-	// Save original environment
-	originalValue := os.Getenv("TEST_VAR_ALL")
-	defer func() {
-		if originalValue != "" {
-			os.Setenv("TEST_VAR_ALL", originalValue)
-		} else {
-			os.Unsetenv("TEST_VAR_ALL")
-		}
-	}()
-
 	testKey := "TEST_VAR_ALL"
 	testValue := "test_value_all"
-	os.Setenv(testKey, testValue)
+	t.Setenv(testKey, testValue)
 
 	env := GetAllEnvironmentVariables()
 
@@ -509,67 +495,69 @@ func TestIsCI(t *testing.T) {
 		for _, e := range originalEnv {
 			pair := splitEnv(e)
 			if len(pair) == 2 {
-				os.Setenv(pair[0], pair[1])
+				if err := os.Setenv(pair[0], pair[1]); err != nil {
+					t.Errorf("restoring %s: %v", pair[0], err)
+				}
 			}
 		}
 	}()
 
 	tests := []struct {
 		name     string
-		setupEnv func()
+		setupEnv func(t *testing.T)
 		want     bool
 	}{
 		{
 			name: "GitHub Actions",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTIONS", "true")
 			},
 			want: true,
 		},
 		{
 			name: "GitLab CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITLAB_CI", "true")
+				t.Setenv("GITLAB_CI", "true")
 			},
 			want: true,
 		},
 		{
 			name: "CircleCI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CIRCLECI", "true")
+				t.Setenv("CIRCLECI", "true")
 			},
 			want: true,
 		},
 		{
 			name: "Travis CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("TRAVIS", "true")
+				t.Setenv("TRAVIS", "true")
 			},
 			want: true,
 		},
 		{
 			name: "Jenkins",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("JENKINS_HOME", "/var/jenkins")
+				t.Setenv("JENKINS_HOME", "/var/jenkins")
 			},
 			want: true,
 		},
 		{
 			name: "Generic CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CI", "true")
+				t.Setenv("CI", "true")
 			},
 			want: true,
 		},
 		{
 			name: "Local environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
 			},
 			want: false,
@@ -578,7 +566,7 @@ func TestIsCI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
+			tt.setupEnv(t)
 
 			got := IsCI()
 			if got != tt.want {
@@ -596,67 +584,69 @@ func TestGetCIPlatform(t *testing.T) {
 		for _, e := range originalEnv {
 			pair := splitEnv(e)
 			if len(pair) == 2 {
-				os.Setenv(pair[0], pair[1])
+				if err := os.Setenv(pair[0], pair[1]); err != nil {
+					t.Errorf("restoring %s: %v", pair[0], err)
+				}
 			}
 		}
 	}()
 
 	tests := []struct {
 		name     string
-		setupEnv func()
+		setupEnv func(t *testing.T)
 		want     string
 	}{
 		{
 			name: "GitHub Actions",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTIONS", "true")
 			},
 			want: "github",
 		},
 		{
 			name: "GitLab CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("GITLAB_CI", "true")
+				t.Setenv("GITLAB_CI", "true")
 			},
 			want: "gitlab",
 		},
 		{
 			name: "CircleCI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CIRCLECI", "true")
+				t.Setenv("CIRCLECI", "true")
 			},
 			want: "circleci",
 		},
 		{
 			name: "Travis CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("TRAVIS", "true")
+				t.Setenv("TRAVIS", "true")
 			},
 			want: "travis",
 		},
 		{
 			name: "Jenkins",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("JENKINS_HOME", "/var/jenkins")
+				t.Setenv("JENKINS_HOME", "/var/jenkins")
 			},
 			want: "jenkins",
 		},
 		{
 			name: "Generic CI",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
-				os.Setenv("CI", "true")
+				t.Setenv("CI", "true")
 			},
 			want: "unknown",
 		},
 		{
 			name: "Local environment",
-			setupEnv: func() {
+			setupEnv: func(t *testing.T) {
 				os.Clearenv()
 			},
 			want: "local",
@@ -665,7 +655,7 @@ func TestGetCIPlatform(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupEnv()
+			tt.setupEnv(t)
 
 			got := GetCIPlatform()
 			if got != tt.want {

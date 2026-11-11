@@ -4,7 +4,6 @@
 package python
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,7 +48,6 @@ func TestLegacy_PbrSetupCfg(t *testing.T) {
 		"setup.py":         setupPy,
 		"requirements.txt": requirements,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -107,7 +105,6 @@ func TestLegacy_SetupCfgClassifiersDeriveMatrix(t *testing.T) {
 		"    Programming Language :: Python :: 3.12\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -132,7 +129,6 @@ func TestLegacy_SetupCfgAttrVersionIsDynamic(t *testing.T) {
 		"python_requires = >=3.9\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -150,7 +146,6 @@ func TestLegacy_SetupCfgFileVersionIsDynamic(t *testing.T) {
 		"version = file: VERSION\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -172,7 +167,6 @@ func TestLegacy_SetupCfgSetuptoolsScmInSetupRequires(t *testing.T) {
 		"python_requires = >=3.10\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -192,7 +186,6 @@ func TestLegacy_SetupCfgColonSeparator(t *testing.T) {
 		"python_requires: >=3.11\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -212,7 +205,6 @@ func TestLegacy_SetupPyPbrInSetupRequires(t *testing.T) {
 		"      pbr=True)\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -231,7 +223,6 @@ func TestLegacy_SetupPyUseScmVersion(t *testing.T) {
 		"      python_requires='>=3.10')\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -250,7 +241,6 @@ func TestLegacy_SetupPyVersioneer(t *testing.T) {
 		"      cmdclass=versioneer.get_cmdclass())\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -272,7 +262,6 @@ func TestLegacy_SetupPyClassifiersDeriveMatrix(t *testing.T) {
 		"      ])\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -290,7 +279,6 @@ func TestLegacy_BareSetupPyFallback(t *testing.T) {
 	setupPy := "from setuptools import setup\nsetup()\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -328,7 +316,6 @@ func TestLegacy_RequirementsTxtFallback(t *testing.T) {
 		"setup.cfg":        setupCfg,
 		"requirements.txt": requirements,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -349,7 +336,6 @@ func TestLegacy_PyProjectWithoutRequiresPythonFallback(t *testing.T) {
 		"version = \"1.0\"\n"
 
 	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -442,7 +428,6 @@ func TestLegacy_SetupCfgSectionWhitespace(t *testing.T) {
 		"python_requires = >=3.10\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -468,7 +453,6 @@ func TestLegacy_SetupPyInstallRequiresWins(t *testing.T) {
 		"setup.py":         setupPy,
 		"requirements.txt": requirements,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -494,7 +478,6 @@ func TestLegacy_SetupPyRequirementsTxtFallback(t *testing.T) {
 		"setup.py":         setupPy,
 		"requirements.txt": requirements,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -520,7 +503,6 @@ func TestLegacy_SetupCfgInstallRequiresSource(t *testing.T) {
 		"    click>=8.0\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -542,7 +524,6 @@ func TestLegacy_PyProjectDependenciesSource(t *testing.T) {
 		"dependencies = [\"requests>=2.31\", \"click>=8.0\"]\n"
 
 	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -567,7 +548,6 @@ func TestLegacy_SetupCfgPbrFalsePositive(t *testing.T) {
 		"    sphinx-pbr-theme>=1.0\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -606,7 +586,6 @@ func TestLegacy_SetupCfgAttrVersionClearsVersion(t *testing.T) {
 		"version = attr: attr_pkg.__version__\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -629,7 +608,6 @@ func TestLegacy_RequirementsTxtInlineComments(t *testing.T) {
 		"setup.cfg":        setupCfg,
 		"requirements.txt": requirements,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -679,7 +657,6 @@ func TestLegacy_SetupPyScmNoVersionIsUnresolved(t *testing.T) {
 		"      python_requires='>=3.10')\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -723,7 +700,6 @@ func TestLegacy_SetupPyPbrFalsePositive(t *testing.T) {
 		"      setup_requires=['sphinx-pbr-theme>=1.0'])\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -746,7 +722,6 @@ func TestLegacy_SetupPyScmFalsePositive(t *testing.T) {
 		"      setup_requires=['setuptools_scm_git_archive'])\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -764,7 +739,6 @@ func TestLegacy_SetupPyPbrRegression(t *testing.T) {
 		"      setup_requires=['pbr'])\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -798,7 +772,6 @@ func TestLegacy_PyProjectClassifierMatrixPropagates(t *testing.T) {
 		"pyproject.toml": pyproject,
 		"setup.cfg":      setupCfg,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -831,7 +804,6 @@ func TestLegacy_PoetryDependenciesPython(t *testing.T) {
 		"python = \"^3.11\"\n"
 
 	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
-	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -861,7 +833,6 @@ func TestSource_RequiresPython_FromPyProject(t *testing.T) {
 		"requires-python = \">=3.11\"\n"
 
 	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
-	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	metadata, err := NewExtractor().Extract(tmpDir)
 	require.NoError(t, err)
@@ -877,7 +848,6 @@ func TestSource_RequiresPython_FromSetupCfg(t *testing.T) {
 		"python_requires = >=3.11\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.cfg": setupCfg})
-	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	metadata, err := NewExtractor().Extract(tmpDir)
 	require.NoError(t, err)
@@ -891,7 +861,6 @@ func TestSource_RequiresPython_FromSetupPy(t *testing.T) {
 		"setup(name='src-py', version='1.0.0', python_requires='>=3.11')\n"
 
 	tmpDir := createTempProject(t, map[string]string{"setup.py": setupPy})
-	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	metadata, err := NewExtractor().Extract(tmpDir)
 	require.NoError(t, err)

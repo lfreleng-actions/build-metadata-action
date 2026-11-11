@@ -39,11 +39,7 @@ func TestDetect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			for path, content := range tt.files {
 				fullPath := filepath.Join(tmpDir, path)
@@ -80,11 +76,7 @@ func TestExtractBasic(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -174,11 +166,7 @@ func TestPackageManagerDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Create package.json
 			packageJSON := `{"name": "test", "version": "1.0.0"}`
@@ -223,11 +211,7 @@ func TestFrameworkDetection(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -349,11 +333,7 @@ func TestBuildToolDetection(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -398,11 +378,7 @@ func TestTestingFrameworkDetection(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -490,11 +466,7 @@ func TestTypeScriptDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			for path, content := range tt.files {
 				fullPath := filepath.Join(tmpDir, path)
@@ -516,12 +488,6 @@ func TestTypeScriptDetection(t *testing.T) {
 
 			if hasTypeScript != tt.expectedTypeScript {
 				t.Errorf("has_typescript = %v, expected %v", hasTypeScript, tt.expectedTypeScript)
-			}
-
-			if tt.expectedTypeScript {
-				// TypeScript detection is based on has_typescript flag
-				// The version would be in the raw dependencies map if we need it
-				// For now, just verify the flag is set correctly
 			}
 		})
 	}
@@ -568,11 +534,7 @@ func TestWorkspaceDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			pkgPath := filepath.Join(tmpDir, "package.json")
 			if err := os.WriteFile(pkgPath, []byte(tt.packageJSON), 0644); err != nil {
@@ -616,11 +578,7 @@ func TestDependencyCount(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -665,11 +623,7 @@ func TestScriptDetection(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {
@@ -749,11 +703,7 @@ func TestModuleTypeDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			pkgPath := filepath.Join(tmpDir, "package.json")
 			if err := os.WriteFile(pkgPath, []byte(tt.packageJSON), 0644); err != nil {
@@ -776,14 +726,10 @@ func TestModuleTypeDetection(t *testing.T) {
 
 // TestNoPackageJson tests behavior when no package.json exists
 func TestNoPackageJson(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	extractor := NewExtractor()
-	_, err = extractor.Extract(tmpDir)
+	_, err := extractor.Extract(tmpDir)
 	if err == nil {
 		t.Error("Expected error when no package.json exists, got nil")
 	}
@@ -817,11 +763,7 @@ func TestEngineNodeDetection(t *testing.T) {
   }
 }`
 
-	tmpDir, err := os.MkdirTemp("", "js-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	pkgPath := filepath.Join(tmpDir, "package.json")
 	if err := os.WriteFile(pkgPath, []byte(packageJSON), 0644); err != nil {

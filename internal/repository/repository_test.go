@@ -156,11 +156,7 @@ port=29418`,
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temp directory
-			tmpDir, err := os.MkdirTemp("", "repo-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Write .gitreview file
 			gitreviewPath := filepath.Join(tmpDir, ".gitreview")
@@ -204,13 +200,9 @@ port=29418`,
 
 func TestDetectGerritRepository_NoFile(t *testing.T) {
 	// Create temp directory without .gitreview
-	tmpDir, err := os.MkdirTemp("", "repo-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
-	_, err = detectGerritRepository(tmpDir)
+	_, err := detectGerritRepository(tmpDir)
 	if err == nil {
 		t.Error("detectGerritRepository() expected error when .gitreview missing, got nil")
 	}
@@ -322,11 +314,7 @@ func TestFormatForDisplay(t *testing.T) {
 
 func TestDetectRepository_Priority(t *testing.T) {
 	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "repo-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Test with only .gitreview (Gerrit should be detected)
 	gitreview := `[gerrit]
@@ -354,11 +342,7 @@ defaultbranch=main`
 
 func TestDetectRepository_Fallback(t *testing.T) {
 	// Create temp directory with no git setup
-	tmpDir, err := os.MkdirTemp("", "repo-test-fallback-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	info, err := DetectRepository(tmpDir)
 	if err != nil {

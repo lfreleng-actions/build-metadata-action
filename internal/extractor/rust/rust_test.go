@@ -40,11 +40,7 @@ func TestDetect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary directory
-			tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Create test files
 			for path, content := range tt.files {
@@ -81,11 +77,7 @@ homepage = "https://example.com"
 repository = "https://github.com/example/my-crate"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -152,11 +144,7 @@ criterion = "0.5"
 cc = "1.0"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -219,11 +207,7 @@ diesel = "2.0"
 clap = "4.0"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -269,11 +253,7 @@ edition = "2021"
 rust-version = "1.70"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -341,11 +321,7 @@ full = ["feature1", "feature2"]
 optional-dep = { version = "1.0", optional = true }
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -396,11 +372,7 @@ version = "1.0.0"
 edition = "2021"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -452,11 +424,7 @@ name = "app2"
 path = "src/bin/app2.rs"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -495,14 +463,10 @@ path = "src/bin/app2.rs"
 
 // TestNoCargoToml tests behavior when no Cargo.toml exists
 func TestNoCargoToml(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	extractor := NewExtractor()
-	_, err = extractor.Extract(tmpDir)
+	_, err := extractor.Extract(tmpDir)
 	if err == nil {
 		t.Error("Expected error when no Cargo.toml exists, got nil")
 	}
@@ -533,11 +497,7 @@ version = "1.0.0"
 edition = "2021"
 `
 
-	tmpDir, err := os.MkdirTemp("", "rust-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	cargoPath := filepath.Join(tmpDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
@@ -565,11 +525,7 @@ edition = "2021"
 // TestWorkspaceInheritance verifies that workspace inheritance is handled correctly
 func TestWorkspaceInheritance(t *testing.T) {
 	// Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "rust-workspace-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create a Cargo.toml with workspace inheritance
 	cargoToml := `[package]
