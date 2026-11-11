@@ -8,7 +8,7 @@ go 1.26.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/hashicorp/hcl/v2 v2.25.0
-	github.com/lfreleng-actions/supported-versions-action v0.1.0
+	github.com/lfreleng-actions/supported-versions-action v0.2.0
 	github.com/sethvargo/go-githubactions v1.4.0
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.43.0
