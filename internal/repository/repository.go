@@ -58,9 +58,10 @@ func detectGitHubRepository(projectPath string) (*RepositoryInfo, error) {
 				remoteName := parts[0]
 				remoteURL := parts[1]
 
-				if remoteName == "upstream" {
+				switch remoteName {
+				case "upstream":
 					upstreamURL = remoteURL
-				} else if remoteName == "origin" {
+				case "origin":
 					originURL = remoteURL
 				}
 			}
@@ -130,7 +131,7 @@ func detectGerritRepository(projectPath string) (*RepositoryInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf(".gitreview file not found: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var host, project string
 

@@ -108,7 +108,7 @@ func (e *Extractor) extractFromMixExs(path string, metadata *extractor.ProjectMe
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	state := &mixExsState{}

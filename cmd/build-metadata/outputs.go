@@ -176,7 +176,7 @@ func formatComplexValue(v interface{}) string {
 		return ""
 	}
 	switch reflect.ValueOf(v).Kind() {
-	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct, reflect.Ptr:
+	case reflect.Slice, reflect.Array, reflect.Map, reflect.Struct, reflect.Pointer:
 		if jsonBytes, err := json.Marshal(v); err == nil {
 			return string(jsonBytes)
 		}

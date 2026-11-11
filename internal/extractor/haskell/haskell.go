@@ -76,7 +76,8 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 
 	stackPath := filepath.Join(projectPath, "stack.yaml")
 	if _, err := os.Stat(stackPath); err == nil {
-		e.extractFromStack(stackPath, metadata)
+		// A stack.yaml that fails to parse does not stop extraction
+		_ = e.extractFromStack(stackPath, metadata)
 		if metadata.LanguageSpecific["build_tool"] == "" {
 			metadata.LanguageSpecific["build_tool"] = "Stack"
 		} else {
@@ -87,7 +88,8 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	// Check for package.yaml (hpack)
 	packageYamlPath := filepath.Join(projectPath, "package.yaml")
 	if _, err := os.Stat(packageYamlPath); err == nil {
-		e.extractFromPackageYaml(packageYamlPath, metadata)
+		// A package.yaml that fails to parse does not stop extraction
+		_ = e.extractFromPackageYaml(packageYamlPath, metadata)
 	}
 
 	return metadata, nil
@@ -160,7 +162,7 @@ func (e *Extractor) extractFromCabal(path string, metadata *extractor.ProjectMet
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var authors []string
 	var dependencies []string
@@ -208,7 +210,7 @@ func (e *Extractor) extractFromStack(path string, metadata *extractor.ProjectMet
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 
@@ -242,7 +244,7 @@ func (e *Extractor) extractFromPackageYaml(path string, metadata *extractor.Proj
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 
@@ -328,9 +330,4 @@ func extractGHCVersionFromResolver(resolver string) string {
 	}
 
 	return ""
-}
-
-// generateGHCVersionMatrix generates a matrix of GHC versions
-func generateGHCVersionMatrix(ghcVersion string) []string {
-	return []string{"9.4", "9.6", "9.8"}
 }

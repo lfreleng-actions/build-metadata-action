@@ -106,16 +106,14 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	// Try to extract from gemspec first
 	gemspecPath, err := e.findGemspec(projectPath)
 	if err == nil && gemspecPath != "" {
-		if err := e.extractFromGemspec(gemspecPath, metadata); err != nil {
-			// Continue with Gemfile if gemspec fails
-		}
+		// Continue with Gemfile if gemspec fails
+		_ = e.extractFromGemspec(gemspecPath, metadata)
 	}
 
 	gemfilePath := filepath.Join(projectPath, "Gemfile")
 	if _, err := os.Stat(gemfilePath); err == nil {
-		if err := e.extractFromGemfile(gemfilePath, metadata); err != nil {
-			// Non-fatal error, continue
-		}
+		// Non-fatal error, continue
+		_ = e.extractFromGemfile(gemfilePath, metadata)
 	}
 
 	rubyVersionPath := filepath.Join(projectPath, ".ruby-version")
@@ -157,7 +155,7 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	spec, err := parseGemspec(file)
 	if err != nil {
@@ -297,7 +295,7 @@ func (e *Extractor) extractFromGemfile(gemfilePath string, metadata *extractor.P
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	var (

@@ -40,11 +40,7 @@ func TestDetect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary directory
-			tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			// Create test files
 			for path, content := range tt.files {
@@ -80,11 +76,7 @@ require (
 )
 `
 
-	tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	goModPath := filepath.Join(tmpDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
@@ -338,11 +330,7 @@ exclude github.com/bad/module v1.0.0
 retract v1.0.0
 `
 
-	tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	goModPath := filepath.Join(tmpDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
@@ -426,11 +414,7 @@ require (
 )
 `
 
-	tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	goModPath := filepath.Join(tmpDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
@@ -515,11 +499,7 @@ func TestVersionMatrix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			goModContent := "module github.com/example/project\n\ngo " + tt.goVersion + "\n"
 
-			tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tmpDir)
+			tmpDir := t.TempDir()
 
 			goModPath := filepath.Join(tmpDir, "go.mod")
 			if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
@@ -567,11 +547,7 @@ go 1.21
 toolchain go1.21.5
 `
 
-	tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	goModPath := filepath.Join(tmpDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte(goModContent), 0644); err != nil {
@@ -592,14 +568,10 @@ toolchain go1.21.5
 
 // TestNoGoMod tests behavior when no go.mod exists
 func TestNoGoMod(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "go-extractor-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	extractor := NewExtractor()
-	_, err = extractor.Extract(tmpDir)
+	_, err := extractor.Extract(tmpDir)
 	if err == nil {
 		t.Error("Expected error when no go.mod exists, got nil")
 	}

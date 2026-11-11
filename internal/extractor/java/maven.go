@@ -328,16 +328,16 @@ func detectMavenFrameworks(plugins []Plugin, deps *Dependencies) []string {
 
 	for _, plugin := range plugins {
 		framework := ""
-		switch {
-		case plugin.ArtifactID == "spring-boot-maven-plugin":
+		switch plugin.ArtifactID {
+		case "spring-boot-maven-plugin":
 			framework = "Spring Boot"
-		case plugin.ArtifactID == "quarkus-maven-plugin":
+		case "quarkus-maven-plugin":
 			framework = "Quarkus"
-		case plugin.ArtifactID == "micronaut-maven-plugin":
+		case "micronaut-maven-plugin":
 			framework = "Micronaut"
-		case plugin.ArtifactID == "maven-compiler-plugin":
+		case "maven-compiler-plugin":
 			framework = "Maven Compiler"
-		case plugin.ArtifactID == "maven-surefire-plugin":
+		case "maven-surefire-plugin":
 			framework = "Maven Surefire"
 		}
 

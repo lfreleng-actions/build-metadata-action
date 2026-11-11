@@ -411,7 +411,7 @@ func TestExtractor_Extract_MissingFile(t *testing.T) {
 	e := NewExtractor()
 	_, err := e.Extract(dir)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Dockerfile not found")
+	assert.Contains(t, err.Error(), "no Dockerfile in")
 }
 
 func TestExtractor_Extract_MinimalDockerfile(t *testing.T) {

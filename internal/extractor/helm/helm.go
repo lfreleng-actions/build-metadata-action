@@ -72,7 +72,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	// Look for Chart.yaml
 	chartPath := filepath.Join(projectPath, "Chart.yaml")
 	if _, err := os.Stat(chartPath); err != nil {
-		return nil, fmt.Errorf("Chart.yaml not found in %s", projectPath)
+		return nil, fmt.Errorf("no Chart.yaml in %s", projectPath)
 	}
 
 	if err := e.extractFromChartYAML(chartPath, metadata); err != nil {

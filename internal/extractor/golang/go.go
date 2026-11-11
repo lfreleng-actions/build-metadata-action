@@ -209,7 +209,7 @@ func parseGoMod(path string) (*GoMod, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	goMod := &GoMod{
 		Dependencies: make(map[string]string),
@@ -483,7 +483,7 @@ func extractVersionFromProject(projectPath string) string {
 				}
 			}
 
-			file.Close()
+			_ = file.Close()
 
 			if found {
 				return version

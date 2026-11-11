@@ -426,7 +426,7 @@ func TestGenerateSuffix(t *testing.T) {
 
 		// Check charset (alphanumeric lowercase)
 		for _, c := range suffix {
-			if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 				t.Errorf("Suffix contains invalid character: %c", c)
 			}
 		}

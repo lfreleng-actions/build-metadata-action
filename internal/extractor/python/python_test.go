@@ -51,7 +51,6 @@ func TestPythonExtractor_Detect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := createTempProject(t, tt.files)
-			defer os.RemoveAll(tmpDir)
 
 			extractor := NewExtractor()
 			result := extractor.Detect(tmpDir)
@@ -89,7 +88,6 @@ build-backend = "setuptools.build_meta"
 	tmpDir := createTempProject(t, map[string]string{
 		"pyproject.toml": pyprojectContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -155,7 +153,6 @@ build-backend = "pdm.backend"
 	tmpDir := createTempProject(t, map[string]string{
 		"pyproject.toml": pyprojectContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -204,7 +201,6 @@ setup(
 	tmpDir := createTempProject(t, map[string]string{
 		"setup.py": setupPyContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -242,7 +238,6 @@ install_requires =
 	tmpDir := createTempProject(t, map[string]string{
 		"setup.cfg": setupCfgContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -272,7 +267,6 @@ version = {attr = "package.__version__"}
 	tmpDir := createTempProject(t, map[string]string{
 		"pyproject.toml": pyprojectContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -304,7 +298,6 @@ build-backend = "poetry.core.masonry.api"
 	tmpDir := createTempProject(t, map[string]string{
 		"pyproject.toml": pyprojectContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -536,7 +529,6 @@ build-backend = "setuptools.build_meta"
 			tmpDir := createTempProject(t, map[string]string{
 				"pyproject.toml": pyprojectContent,
 			})
-			defer os.RemoveAll(tmpDir)
 
 			extractor := NewExtractor()
 			metadata, err := extractor.Extract(tmpDir)
@@ -578,7 +570,6 @@ setup(
 		"pyproject.toml": pyprojectContent,
 		"setup.py":       setupPyContent,
 	})
-	defer os.RemoveAll(tmpDir)
 
 	extractor := NewExtractor()
 	metadata, err := extractor.Extract(tmpDir)
@@ -617,8 +608,7 @@ setup(
 
 // Helper function to create temporary test projects
 func createTempProject(t *testing.T, files map[string]string) string {
-	tmpDir, err := os.MkdirTemp("", "python-test-*")
-	require.NoError(t, err)
+	tmpDir := t.TempDir()
 
 	for filename, content := range files {
 		filePath := filepath.Join(tmpDir, filename)

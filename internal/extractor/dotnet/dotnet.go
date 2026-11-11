@@ -123,11 +123,7 @@ func (e *Extractor) Detect(projectPath string) bool {
 	}
 
 	propsMatches, _ := filepath.Glob(filepath.Join(projectPath, "*.props"))
-	if len(propsMatches) > 0 {
-		return true
-	}
-
-	return false
+	return len(propsMatches) > 0
 }
 
 // Extract extracts metadata from a .NET project
