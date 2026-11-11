@@ -52,7 +52,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	// Look for Dockerfile
 	dockerfilePath := filepath.Join(projectPath, "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err != nil {
-		return nil, fmt.Errorf("Dockerfile not found in %s", projectPath)
+		return nil, fmt.Errorf("no Dockerfile in %s", projectPath)
 	}
 
 	dockerMeta, err := e.parseDockerfile(dockerfilePath)

@@ -164,7 +164,8 @@ func (e *Extractor) parseTerraformBlock(block *hcl.Block, config *TerraformConfi
 		}
 
 		for _, innerBlock := range content.Blocks {
-			if innerBlock.Type == "required_providers" {
+			switch innerBlock.Type {
+			case "required_providers":
 				attrs, _ := innerBlock.Body.JustAttributes()
 				for name, attr := range attrs {
 					val, _ := attr.Expr.Value(nil)
@@ -176,7 +177,7 @@ func (e *Extractor) parseTerraformBlock(block *hcl.Block, config *TerraformConfi
 						}
 					}
 				}
-			} else if innerBlock.Type == "backend" {
+			case "backend":
 				if len(innerBlock.Labels) > 0 {
 					config.Backend = innerBlock.Labels[0]
 				}

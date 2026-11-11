@@ -76,7 +76,7 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 	// Look for Package.swift
 	packagePath := filepath.Join(projectPath, "Package.swift")
 	if _, err := os.Stat(packagePath); err != nil {
-		return nil, fmt.Errorf("Package.swift not found in %s", projectPath)
+		return nil, fmt.Errorf("no Package.swift in %s", projectPath)
 	}
 
 	manifest, err := e.parsePackageSwift(packagePath)
@@ -488,9 +488,10 @@ func applySwiftPackageType(manifest *PackageManifest, metadata *extractor.Projec
 	hasExecutable := false
 	hasLibrary := false
 	for _, p := range manifest.Products {
-		if p.Type == "executable" {
+		switch p.Type {
+		case "executable":
 			hasExecutable = true
-		} else if p.Type == "library" {
+		case "library":
 			hasLibrary = true
 		}
 	}

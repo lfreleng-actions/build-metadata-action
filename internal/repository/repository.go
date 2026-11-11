@@ -58,9 +58,10 @@ func detectGitHubRepository(projectPath string) (*RepositoryInfo, error) {
 				remoteName := parts[0]
 				remoteURL := parts[1]
 
-				if remoteName == "upstream" {
+				switch remoteName {
+				case "upstream":
 					upstreamURL = remoteURL
-				} else if remoteName == "origin" {
+				case "origin":
 					originURL = remoteURL
 				}
 			}
