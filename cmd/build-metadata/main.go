@@ -9,13 +9,6 @@ import (
 	"github.com/sethvargo/go-githubactions"
 )
 
-const (
-	// Action metadata
-	actionName        = "build-metadata-action"
-	actionVersion     = "1.0.0"
-	actionDescription = "Universal action to capture and display metadata related to project builds"
-)
-
 func main() {
 	action := githubactions.New()
 

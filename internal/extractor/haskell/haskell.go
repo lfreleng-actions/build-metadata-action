@@ -331,8 +331,3 @@ func extractGHCVersionFromResolver(resolver string) string {
 
 	return ""
 }
-
-// generateGHCVersionMatrix generates a matrix of GHC versions
-func generateGHCVersionMatrix(ghcVersion string) []string {
-	return []string{"9.4", "9.6", "9.8"}
-}
