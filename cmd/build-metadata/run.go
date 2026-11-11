@@ -20,7 +20,7 @@ import (
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/haskell"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/helm"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/java"
-	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/javascript"
+	javascript "github.com/lfreleng-actions/build-metadata-action/internal/extractor/javascript"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/julia"
 	_ "github.com/lfreleng-actions/build-metadata-action/internal/extractor/php"
 	python "github.com/lfreleng-actions/build-metadata-action/internal/extractor/python"
@@ -105,7 +105,7 @@ func detectProjectType(ctx *appContext, metadata *Metadata, cfg runConfig) strin
 	return projectType
 }
 
-// configureExtractorPolicies wires up the Python, Go and Rust
+// configureExtractorPolicies wires up the Python, Go, Rust and Node.js
 // extractor resolvers from action inputs. This is deferred until after
 // project type detection so that other projects never pay the
 // upstream round-trips (nor surface unrelated fetch warnings) just to
@@ -118,6 +118,8 @@ func configureExtractorPolicies(projectType string, cfg runConfig) {
 		configureGoResolver(cfg)
 	case "rust":
 		configureRustResolver(cfg)
+	case "javascript":
+		configureNodeResolver(cfg)
 	}
 }
 
@@ -168,6 +170,24 @@ func configureRustResolver(cfg runConfig) {
 	rust.SetResolver(r)
 }
 
+// configureNodeResolver builds the supported-versions resolver once,
+// with the module's Node.js policy, and installs it into the
+// JavaScript extractor. The python_offline_mode, python_eol_timeout
+// and python_eol_max_retries inputs govern it too. The module falls
+// back to its embedded snapshot when an upstream is unreachable, so
+// offline runners degrade gracefully. The resolver lives until the
+// process exits, which releases its cache.
+func configureNodeResolver(cfg runConfig) {
+	r, err := javascript.NewResolver(resolverSettings(cfg))
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"[WARNING] Failed to build the supported-versions resolver (%v); resolving Node.js versions offline\n", err)
+		javascript.SetResolver(nil)
+		return
+	}
+	javascript.SetResolver(r)
+}
+
 // configurePythonResolvers builds the Python extractor's
 // supported-versions resolvers once and installs them: the primary one
 // with the module's installable admission, and the lifecycle one it
@@ -199,7 +219,7 @@ func newPythonResolvers(s supported.Settings) (primary, lifecycle python.MatrixR
 }
 
 // resolverSettings maps the action inputs onto the supported-versions
-// resolver settings the Python, Go and Rust extractors share. Offline
+// resolver settings the Python, Go, Rust and Node.js extractors share. Offline
 // mode also skips the runner cache: the module serves cached release
 // facts of any age when offline, so a cache filled by an earlier
 // online step would otherwise change the matrix, and offline mode

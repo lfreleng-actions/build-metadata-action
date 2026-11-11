@@ -476,6 +476,23 @@ outputs:
     description: "Whether project uses TypeScript"
     value: ${{ steps.extract.outputs.javascript_has_typescript }}
 
+  # Node.js matrix outputs carry the runtime's name, not the
+  # javascript_ prefix of the other JavaScript outputs.
+  node_matrix_json:
+    description: >-
+      Node.js version test matrix as JSON for JavaScript and TypeScript
+      projects, ready for workflow matrix strategies (e.g.
+      {"node-version": ["22", "24", "26"]}): the supported Node.js LTS
+      lines that package.json engines.node, or else .nvmrc or
+      .node-version, admits. Named node_*, not javascript_*
+    value: ${{ steps.extract.outputs.node_matrix_json }}
+
+  node_latest:
+    description: >-
+      Newest supported Node.js release line in node_matrix_json (e.g.
+      26), not a full patch version. Named node_*, not javascript_*
+    value: ${{ steps.extract.outputs.node_latest }}
+
   # Language-Specific Outputs (Java/Maven)
   java_group_id:
     description: "Java/Maven group ID"

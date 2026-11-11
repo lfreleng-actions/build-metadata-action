@@ -130,14 +130,30 @@ func emitProjectMatchRepo(ctx *appContext, metadata *Metadata) {
 	}
 }
 
+// unprefixedOutputs lists, per normalized language, the
+// language-specific keys published under their own name rather than
+// with the language prefix. The Node.js matrix names the runtime, not
+// the javascript_ language, so it is node_matrix_json and node_latest.
+var unprefixedOutputs = map[string]map[string]bool{
+	"javascript": {"node_matrix_json": true, "node_latest": true},
+}
+
+// languageOutputKey returns the output name of a language-specific key.
+func languageOutputKey(language, key string) string {
+	if unprefixedOutputs[language][key] {
+		return key
+	}
+	return fmt.Sprintf("%s_%s", language, key)
+}
+
 // emitLanguageSpecificOutputs writes each language-specific value under
 // a prefix derived from the normalized base language, serializing
-// complex types to JSON.
+// complex types to JSON. Keys in unprefixedOutputs keep their own name.
 func emitLanguageSpecificOutputs(ctx *appContext, metadata *Metadata, projectType string) {
 	outputPrefix := normalizeProjectTypeToLanguage(projectType)
 
 	for key, value := range metadata.LanguageSpecific {
-		outputKey := fmt.Sprintf("%s_%s", outputPrefix, key)
+		outputKey := languageOutputKey(outputPrefix, key)
 
 		switch v := value.(type) {
 		case string:

@@ -372,6 +372,8 @@ func writeJSRows(sb *strings.Builder, metadata map[string]interface{}) {
 		{"package_manager_version", "Package Manager Version", false},
 		{"module_type", "Module Type", false},
 		{"requires_node", "Requires Node", false},
+		{"node_matrix_json", "Node.js Matrix JSON (node_matrix_json)", true},
+		{"node_latest", "Latest Node.js Line (node_latest)", false},
 	})
 }
 

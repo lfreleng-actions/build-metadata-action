@@ -119,6 +119,7 @@ func (e *Extractor) extractFromPackageJSON(path, projectPath string, metadata *e
 	applyPackageTooling(&pkg, metadata)
 	applyPackageVersioningType(&pkg, metadata)
 	applyPackageTypeScript(projectPath, &pkg, metadata)
+	applyNodeVersionMatrix(projectPath, metadata)
 
 	return nil
 }
