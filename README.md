@@ -327,6 +327,8 @@ snapshot if the runner cannot reach it.
 | ---------------------------- | --------------------------------- |
 | `java_version`               | JDK version                       |
 | `java_version_source`        | JDK version source                |
+| `java_matrix_json`           | Java version test matrix as JSON  |
+| `java_latest`                | Newest release line in the matrix |
 | `java_group_id`              | Maven groupId                     |
 | `java_artifact_id`           | Maven artifactId                  |
 | `java_packaging`             | Packaging type (jar, war, etc.)   |
@@ -450,6 +452,8 @@ came from (e.g. `maven.compiler.release`, `maven-compiler-plugin/release`,
 | ---------------------------- | ----------------------------------- |
 | `java_version`               | JDK version                         |
 | `java_version_source`        | JDK version source                  |
+| `java_matrix_json`           | Java version test matrix as JSON    |
+| `java_latest`                | Newest release line in the matrix   |
 | `java_group_id`              | Project group                       |
 | `java_artifact_id`           | Project name                        |
 | `java_build_dsl`             | Build DSL (groovy or kotlin)        |
@@ -462,6 +466,25 @@ For Gradle the action reads the level from the build file toolchain
 (`JavaLanguageVersion.of(N)`), then `source`/`targetCompatibility`
 (`JavaVersion.VERSION_N` or a bare/quoted literal), then
 `gradle.properties`; `java_version_source` reports the form detected.
+
+For Maven and Gradle projects alike, including the Gradle Kotlin DSL,
+`java_matrix_json` (e.g. `{"java-version": ["21", "25"]}`) holds the
+supported Java LTS lines, from 17, at or above `java_version`. The
+lines come from the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, which reads live [endoflife.date](https://endoflife.date/eclipse-temurin)
+Temurin data and the Adoptium API. The module reads `java_version` as
+"this release or newer" and accepts spellings such as `21`, `1.8`,
+`jdk-21` and `21.0.5+11`. With no `java_version`, or one the module
+cannot parse (with a warning), the matrix holds every supported LTS
+line. A level newer than every supported line widens to the full
+matrix, with the module's warning. `java_latest` is the newest release
+line in the matrix (e.g. `25`), not a full version. The Java
+resolver follows the Go one: the embedded snapshot applies when the
+upstream is unreachable or answers with unusable data, and the
+`python_offline_mode`, `python_eol_timeout` and
+`python_eol_max_retries` inputs govern Java resolution too. When no
+matrix resolves at all, both outputs stay empty with a warning.
 
 `java_gradle_version` comes from the wrapper's `distributionUrl`. This is
 the version the project asks to build with, which is a different fact
@@ -489,8 +512,34 @@ action reports nothing rather than guessing.
 | `javascript_requires_node`           | Node.js version range from `engines.node`                        |
 | `javascript_is_workspace`            | `true` for a workspace/monorepo                                  |
 | `javascript_has_typescript`          | `true` when the project uses TypeScript                          |
+| `node_matrix_json`                   | Node.js version test matrix as JSON (no `javascript_` prefix)    |
+| `node_latest`                        | Newest release line in that matrix (no `javascript_` prefix)     |
 
 <!-- markdownlint-enable MD013 -->
+
+The Node.js matrix outputs name the runtime, so they are
+`node_matrix_json` and `node_latest`, not `javascript_*`; every other
+JavaScript output keeps the `javascript_` prefix. For JavaScript and
+TypeScript projects with npm, Yarn, pnpm or Bun, `node_matrix_json`
+(e.g. `{"node-version": ["22", "24", "26"]}`) holds the supported
+Node.js LTS lines that `actions/setup-node` can install. The lines
+come from the
+[supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
+Go module, which reads live [endoflife.date](https://endoflife.date/nodejs)
+data and the `actions/node-versions` manifest. The `engines.node`
+range in `package.json` (also reported as `javascript_requires_node`)
+narrows the matrix: `>=24` keeps 24 and newer. Without `engines.node`,
+the module reads `.nvmrc`, then `.node-version`, which name one line.
+With no constraint, the matrix holds every supported LTS line. A range
+the module cannot parse draws a warning and yields the full matrix; a
+range newer than every supported line widens to the full matrix, with
+the module's warning. `node_latest` is the newest release line in the
+matrix (e.g. `26`), not a full version. The Node.js resolver follows
+the Go one: the embedded snapshot applies when the upstream is
+unreachable or answers with unusable data, and the
+`python_offline_mode`, `python_eol_timeout` and
+`python_eol_max_retries` inputs govern Node.js resolution too. When no
+matrix resolves at all, both outputs stay empty with a warning.
 
 The action takes the package manager from the `packageManager` field in
 `package.json`, then `devEngines.packageManager`, then the lockfiles
