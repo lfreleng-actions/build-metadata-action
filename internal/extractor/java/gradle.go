@@ -501,7 +501,7 @@ func (e *GradleExtractor) parseProperties(projectPath string, project *GradlePro
 	if err != nil {
 		return // Properties file is optional
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

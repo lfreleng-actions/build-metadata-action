@@ -130,7 +130,7 @@ func detectGerritRepository(projectPath string) (*RepositoryInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf(".gitreview file not found: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var host, project string
 

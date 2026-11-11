@@ -157,7 +157,7 @@ func (e *Extractor) extractFromGemspec(gemspecPath string, metadata *extractor.P
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	spec, err := parseGemspec(file)
 	if err != nil {
@@ -297,7 +297,7 @@ func (e *Extractor) extractFromGemfile(gemfilePath string, metadata *extractor.P
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	var (

@@ -176,7 +176,7 @@ func (e *Extractor) extractFromBuildSbt(path string, metadata *extractor.Project
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var dependencies []string
 	var scalaVersion string
@@ -246,7 +246,7 @@ func (e *Extractor) extractFromMill(path string, metadata *extractor.ProjectMeta
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 
