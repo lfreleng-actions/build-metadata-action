@@ -526,9 +526,9 @@ jobs:
           EXPECTED_TYPE: ${{ matrix.expected-type }}
           PROJECT_TYPE: ${{ matrix.project-type }}
           REPO: ${{ matrix.repo }}
-          PROJECT_NAME: ${{ steps.test.outputs.project-name }}
-          DETECTED_TYPE: ${{ steps.test.outputs.project-type }}
-          VERSION: ${{ steps.test.outputs.version }}
+          PROJECT_NAME: ${{ steps.test.outputs.project_name }}
+          DETECTED_TYPE: ${{ steps.test.outputs.project_type }}
+          VERSION: ${{ steps.test.outputs.project_version }}
           TEST_OUTCOME: ${{ steps.test.outcome }}
         run: |
           echo "🔍 Validating metadata extraction for $PROJECT_TYPE"
