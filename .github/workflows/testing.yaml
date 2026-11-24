@@ -723,6 +723,68 @@ jobs:
           fi
           exit "$fail"
 
+  ### Python: a Poetry-only pyproject.toml with no [project] table ###
+  test-python-poetry:
+    name: "Test: Poetry-only Python project"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Generate Poetry fixture"
+        shell: bash
+        run: |
+          set -euo pipefail
+          project="$GITHUB_WORKSPACE/poetry-fixtures/poetry-only"
+          mkdir -p "$project"
+          cat > "$project/pyproject.toml" <<'TOML'
+          [tool.poetry]
+          name = "poetry-only-project"
+          version = "1.2.3"
+
+          [tool.poetry.dependencies]
+          python = "^3.11"
+          TOML
+
+      - name: "Run on the Poetry fixture"
+        id: poetry
+        uses: $/
+        with:
+          path_prefix: poetry-fixtures/poetry-only
+          python_offline_mode: "true"
+          use_version_extract: "false"
+
+      - name: "Verify Poetry outputs"
+        shell: bash
+        env:
+          PROJECT_NAME: ${{ steps.poetry.outputs.project_name }}
+          PROJECT_VERSION: ${{ steps.poetry.outputs.project_version }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          check "Poetry project_name" "$PROJECT_NAME" "poetry-only-project"
+          check "Poetry project_version" "$PROJECT_VERSION" "1.2.3"
+          exit "$fail"
+
   ### Version metadata on pinned Linux Foundation projects ###
   test-lf-projects:
     name: "Test: ${{ matrix.repository }}"
@@ -864,7 +926,12 @@ jobs:
   test-summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
-    needs: [test-self, test-matrix, test-rust, test-lf-projects]
+    needs:
+      - test-self
+      - test-matrix
+      - test-rust
+      - test-python-poetry
+      - test-lf-projects
     if: always()
     permissions:
       contents: read
@@ -877,6 +944,7 @@ jobs:
           SELF_TEST: ${{ needs.test-self.result }}
           MATRIX_TEST: ${{ needs.test-matrix.result }}
           RUST_TEST: ${{ needs.test-rust.result }}
+          POETRY_TEST: ${{ needs.test-python-poetry.result }}
           LF_TEST: ${{ needs.test-lf-projects.result }}
         run: |
           # Count tests by checking job results
@@ -906,6 +974,12 @@ jobs:
               echo "| Rust Metadata | ✅ Passed |"
             else
               echo "| Rust Metadata | ❌ Failed |"
+            fi
+
+            if [ "$POETRY_TEST" = "success" ]; then
+              echo "| Poetry-only Python | ✅ Passed |"
+            else
+              echo "| Poetry-only Python | ❌ Failed |"
             fi
 
             if [ "$LF_TEST" = "success" ]; then
