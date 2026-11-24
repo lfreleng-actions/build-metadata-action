@@ -64,9 +64,9 @@ func (e *Extractor) extractFromPyProject(path string, metadata *extractor.Projec
 		return err
 	}
 
-	if metadata.Name != "" && pyproject.Project.Name != "" {
+	if metadata.Name != "" {
 		// Package name is project name with dashes replaced by underscores
-		packageName := strings.ReplaceAll(pyproject.Project.Name, "-", "_")
+		packageName := strings.ReplaceAll(metadata.Name, "-", "_")
 		metadata.LanguageSpecific["project_match_package"] = metadata.Name == packageName
 	}
 
@@ -250,7 +250,8 @@ func applyPyProjectLanguageSpecific(metadata *extractor.ProjectMetadata, pyproje
 }
 
 // applyPyProjectToolConfig records `[tool.*]` configuration for Poetry,
-// PDM, Hatch, and setuptools. It returns the Poetry Python constraint
+// PDM, Hatch, and setuptools. A `[tool.poetry]` name and version fill
+// in only what `[project]` left empty. It returns the Poetry Python constraint
 // (from `[tool.poetry.dependencies].python`), which is used as a matrix
 // source when no PEP 621 `requires-python` is declared.
 func applyPyProjectToolConfig(metadata *extractor.ProjectMetadata, pyproject PyProjectTOML) string {
@@ -261,6 +262,10 @@ func applyPyProjectToolConfig(metadata *extractor.ProjectMetadata, pyproject PyP
 	poetryPythonConstraint := ""
 	if poetry, ok := pyproject.Tool["poetry"].(map[string]interface{}); ok {
 		metadata.LanguageSpecific["poetry_config"] = true
+		if name, ok := poetry["name"].(string); ok && metadata.Name == "" {
+			metadata.Name = name
+			metadata.LanguageSpecific["package_name"] = name
+		}
 		if version, ok := poetry["version"].(string); ok && metadata.Version == "" {
 			metadata.Version = version
 			metadata.VersionSource = "pyproject.toml (poetry)"

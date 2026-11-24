@@ -820,6 +820,60 @@ func TestLegacy_PoetryDependenciesPython(t *testing.T) {
 		"build_version must be the newest entry in the resolved matrix")
 	assert.NotEqual(t, true, metadata.LanguageSpecific["requires_python_fallback"],
 		"poetry-derived matrices must not be flagged as fallback guesses")
+	assert.Equal(t, "poetry-only", metadata.Name,
+		"project name must come from [tool.poetry] when [project] is absent")
+	assert.Equal(t, "poetry-only", metadata.LanguageSpecific["package_name"])
+	assert.Equal(t, "0.1.0", metadata.Version)
+}
+
+// TestLegacy_PoetryNameYieldsToProject asserts that a `[project]` name
+// wins over a `[tool.poetry]` name when both tables declare one.
+func TestLegacy_PoetryNameYieldsToProject(t *testing.T) {
+	pyproject := "[project]\n" +
+		"name = \"pep621-name\"\n" +
+		"version = \"2.0.0\"\n" +
+		"\n" +
+		"[tool.poetry]\n" +
+		"name = \"poetry-name\"\n" +
+		"version = \"0.1.0\"\n"
+
+	tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
+
+	metadata, err := NewExtractor().Extract(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "pep621-name", metadata.Name)
+	assert.Equal(t, "pep621-name", metadata.LanguageSpecific["package_name"])
+	assert.Equal(t, "2.0.0", metadata.Version)
+}
+
+// TestLegacy_PoetryNameProjectMatchPackage asserts that a name taken
+// from `[tool.poetry]` sets project_match_package as a PEP 621 name does.
+func TestLegacy_PoetryNameProjectMatchPackage(t *testing.T) {
+	tests := []struct {
+		name          string
+		poetryName    string
+		expectedMatch bool
+	}{
+		{name: "underscored name", poetryName: "poetry_package", expectedMatch: true},
+		{name: "dashed name", poetryName: "poetry-package", expectedMatch: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pyproject := "[tool.poetry]\n" +
+				"name = \"" + tt.poetryName + "\"\n" +
+				"version = \"1.2.3\"\n"
+
+			tmpDir := createTempProject(t, map[string]string{"pyproject.toml": pyproject})
+
+			metadata, err := NewExtractor().Extract(tmpDir)
+			require.NoError(t, err)
+			assert.Equal(t, tt.poetryName, metadata.Name)
+			match, ok := metadata.LanguageSpecific["project_match_package"].(bool)
+			require.True(t, ok, "project_match_package should be set")
+			assert.Equal(t, tt.expectedMatch, match)
+		})
+	}
 }
 
 // TestSource_RequiresPython_FromPyProject asserts that a PEP 621
