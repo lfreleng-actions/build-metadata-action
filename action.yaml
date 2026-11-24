@@ -982,9 +982,29 @@ runs:
         ORIGINAL_DIR="$(pwd)"
         # Create temporary directory for the binary
         TEMP_BIN_DIR="$(mktemp -d)"
-        # Build the binary to temporary location
         cd "${ACTION_PATH}"
-        go build -buildvcs=false \
+        # Fetch modules first, retrying only this step: a module proxy
+        # error is often transient, a compile error never is. The
+        # caller's GOPROXY, GOPRIVATE, GONOSUMDB and GOFLAGS apply.
+        max_attempts=3
+        backoff=(5 15)
+        attempt=1
+        until go mod download; do
+          if [ "${attempt}" -ge "${max_attempts}" ]; then
+            echo "::error::go mod download failed after" \
+              "${max_attempts} attempts; see the errors above"
+            exit 1
+          fi
+          delay="${backoff[$((attempt - 1))]}"
+          echo "::warning::go mod download failed (attempt" \
+            "${attempt}/${max_attempts}); retrying in ${delay}s"
+          sleep "${delay}"
+          attempt=$((attempt + 1))
+        done
+        # Build once, offline: every module is now in the module
+        # cache, so a build that needs another one fails here instead
+        # of fetching it silently, and a compile error fails at once.
+        GOFLAGS=-mod=readonly GOPROXY=off go build -buildvcs=false \
           -o "${TEMP_BIN_DIR}/build-metadata" ./cmd/build-metadata
         # Return to the original working directory
         cd "${ORIGINAL_DIR}"
