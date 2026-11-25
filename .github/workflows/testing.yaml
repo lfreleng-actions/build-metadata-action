@@ -922,6 +922,133 @@ jobs:
           fi
           exit "$fail"
 
+  ### Go module download: retry a transient proxy error, then stop ###
+  test-go-download-retry:
+    name: "Test: Go module download retry"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a  # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A local module proxy that answers the first module request with
+      # a 500, then redirects every later one to proxy.golang.org,
+      # logging the status it gave each module request.
+      - name: "Start flaky module proxy"
+        shell: bash
+        run: |
+          set -euo pipefail
+          proxy_dir="$RUNNER_TEMP/flaky-proxy"
+          mkdir -p "$proxy_dir"
+          cat > "$proxy_dir/proxy.py" <<'PY'
+          import http.server
+          import sys
+          import threading
+
+          lock = threading.Lock()
+          state = {"failed": False}
+          log = open(sys.argv[2], "a", encoding="utf-8")
+
+
+          class Handler(http.server.BaseHTTPRequestHandler):
+              def do_GET(self):
+                  # Readiness probes do not touch the failure state
+                  if "/@v/" not in self.path:
+                      self.send_response(200)
+                      self.end_headers()
+                      return
+                  with lock:
+                      fail = not state["failed"]
+                      state["failed"] = True
+                      log.write(f"{500 if fail else 302} {self.path}\n")
+                      log.flush()
+                  if fail:
+                      self.send_error(500, "simulated proxy failure")
+                      return
+                  self.send_response(302)
+                  self.send_header(
+                      "Location", "https://proxy.golang.org" + self.path
+                  )
+                  self.end_headers()
+
+              def log_message(self, *args):
+                  pass
+
+
+          http.server.ThreadingHTTPServer(
+              ("127.0.0.1", int(sys.argv[1])), Handler
+          ).serve_forever()
+          PY
+          nohup python3 "$proxy_dir/proxy.py" 8765 "$proxy_dir/requests.log" \
+            > "$proxy_dir/server.log" 2>&1 &
+          for _ in $(seq 1 20); do
+            if curl -s -o /dev/null http://127.0.0.1:8765/; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "::error::Flaky module proxy did not start"
+          cat "$proxy_dir/server.log"
+          exit 1
+
+      # Each case uses an empty module cache so the download must fetch.
+      - name: "Run with one transient proxy failure"
+        id: flaky
+        continue-on-error: true
+        uses: $/
+        env:
+          GOPROXY: "http://127.0.0.1:8765"
+          GOMODCACHE: ${{ runner.temp }}/modcache-flaky
+
+      - name: "Run with the module proxy down"
+        id: down
+        continue-on-error: true
+        uses: $/
+        env:
+          # Nothing listens on the discard port, so every attempt fails
+          GOPROXY: "http://127.0.0.1:9"
+          GOMODCACHE: ${{ runner.temp }}/modcache-down
+
+      - name: "Verify retry and exhaustion"
+        shell: bash
+        env:
+          FLAKY_OUTCOME: ${{ steps.flaky.outcome }}
+          FLAKY_SUCCESS: ${{ steps.flaky.outputs.success }}
+          DOWN_OUTCOME: ${{ steps.down.outcome }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/flaky-proxy/requests.log"
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          failures="$(grep -c '^500 ' "$log" || true)"
+          redirects="$(grep -c '^302 ' "$log" || true)"
+          check "Proxy failed one request" "$failures" "1"
+          check "Download retried after the failure" \
+            "$([ "$redirects" -gt 0 ] && echo yes || echo no)" "yes"
+          check "Transient failure: action outcome" \
+            "$FLAKY_OUTCOME" "success"
+          check "Transient failure: success output" \
+            "$FLAKY_SUCCESS" "true"
+          check "Proxy down: action outcome" "$DOWN_OUTCOME" "failure"
+          exit "$fail"
+
   ### Summary Job ###
   test-summary:
     name: "Test Summary"
@@ -932,6 +1059,7 @@ jobs:
       - test-rust
       - test-python-poetry
       - test-lf-projects
+      - test-go-download-retry
     if: always()
     permissions:
       contents: read
@@ -946,6 +1074,7 @@ jobs:
           RUST_TEST: ${{ needs.test-rust.result }}
           POETRY_TEST: ${{ needs.test-python-poetry.result }}
           LF_TEST: ${{ needs.test-lf-projects.result }}
+          GO_DOWNLOAD_TEST: ${{ needs.test-go-download-retry.result }}
         run: |
           # Count tests by checking job results
 
@@ -986,6 +1115,12 @@ jobs:
               echo "| LF Project Versions | ✅ Passed |"
             else
               echo "| LF Project Versions | ❌ Failed |"
+            fi
+
+            if [ "$GO_DOWNLOAD_TEST" = "success" ]; then
+              echo "| Go Module Download Retry | ✅ Passed |"
+            else
+              echo "| Go Module Download Retry | ❌ Failed |"
             fi
 
             echo ""
