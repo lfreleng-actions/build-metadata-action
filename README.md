@@ -309,7 +309,9 @@ provider: the first of `setuptools-scm`, `hatch-vcs` and `pbr` that
 `requires` lists, or `pyproject-dynamic` when it lists none of them.
 The `setup.cfg` and `setup.py` readers report `pbr`,
 `setuptools-scm`, `versioneer`, `setuptools-dynamic` or
-`runtime-attr`.
+`runtime-attr`. In `setup.py` the provider comes from the keyword
+arguments of the `setup()` call that supplies `version`; a comment,
+a string or code outside the call never names one.
 
 For a Python project, `project_version` is the static version the
 project declares: `[project].version`, or failing that
