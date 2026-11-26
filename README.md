@@ -303,12 +303,13 @@ For a Python project, `project_version` is the static version the
 project declares: `[project].version`, or failing that
 `[tool.poetry].version`, in `pyproject.toml`; `version` under
 `[metadata]` in `setup.cfg`; or the `version` keyword of `setup()` in
-`setup.py`. `version_source` names that file. A project that declares
-no static version, such as one listing `version` in
-`[project].dynamic`, falls back to `version.properties`, then the
-latest git tag, then the commit; with `use_version_extract: false`
-it reports no version. `versioning_type` always equals
-`python_versioning_type`.
+`setup.py`, when the call starts a line and the value is one plain
+string literal with no backslash. `version_source` names that file.
+A project that declares no static version, such as one listing
+`version` in `[project].dynamic`, falls back to `version.properties`,
+then the latest git tag, then the commit; with
+`use_version_extract: false` it reports no version.
+`versioning_type` always equals `python_versioning_type`.
 
 The action derives the Python version matrix through the
 [supported-versions-action](https://github.com/lfreleng-actions/supported-versions-action)
