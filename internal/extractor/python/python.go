@@ -133,24 +133,33 @@ func (e *Extractor) Extract(projectPath string) (*extractor.ProjectMetadata, err
 }
 
 // extractViaPyProject runs the pyproject.toml extraction path. It returns
-// handled=true when pyproject.toml yielded usable metadata (a [project]
-// section or a recognised tool config) so the caller should stop, or
-// handled=false when the file lacked usable metadata and the caller
-// should fall through to setup.cfg/setup.py.
+// handled=true when pyproject.toml describes the project so the caller
+// should stop, or handled=false when the caller should fall through to
+// setup.cfg/setup.py. pyproject.toml describes the project when it
+// names it, through [project] or [tool.poetry], or when it holds a
+// recognised tool config and no setup.cfg or setup.py sits beside it.
 func (e *Extractor) extractViaPyProject(projectPath string, files pythonProjectFiles, metadata *extractor.ProjectMetadata) (bool, error) {
 	if err := e.extractFromPyProject(files.pyprojectPath, metadata); err != nil {
 		return false, fmt.Errorf("found pyproject.toml but failed to parse it: %w\n\nFiles found: %s\nFiles not found: %s\n\nThis error often occurs due to:\n- Invalid TOML syntax (check for merge conflict markers like <<<<<<<, =======, >>>>>>>)\n- Malformed data structures\n- Encoding issues",
 			err, strings.Join(files.filesFound, ", "), strings.Join(files.filesNotFound, ", "))
 	}
 
-	// Consider it valid if we have a [project] section OR tool-specific configs.
-	hasProjectSection := metadata.Name != ""
+	hasProjectName := metadata.Name != ""
 	hasToolConfig := metadata.LanguageSpecific["poetry_config"] == true ||
 		metadata.LanguageSpecific["pdm_config"] == true ||
 		metadata.LanguageSpecific["hatch_config"] == true ||
 		metadata.LanguageSpecific["setuptools_config"] == true
+	hasLegacyFile := files.setupCfgExists || files.setupPyExists
 
-	if !hasProjectSection && !hasToolConfig {
+	if !hasProjectName && (!hasToolConfig || hasLegacyFile) {
+		// The legacy file is the one source of the metadata; keep only
+		// what [build-system] supplies.
+		*metadata = extractor.ProjectMetadata{
+			LanguageSpecific: map[string]interface{}{
+				"build_backend":  metadata.LanguageSpecific["build_backend"],
+				"build_requires": metadata.LanguageSpecific["build_requires"],
+			},
+		}
 		return false, nil
 	}
 

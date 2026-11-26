@@ -263,6 +263,13 @@ func (s *formattedScanner) spec(j int) int {
 	return min(j, len(src))
 }
 
+// pyKeyword is one keyword argument of a call: its name and the tokens
+// of its value.
+type pyKeyword struct {
+	name  string
+	value []pyToken
+}
+
 // setupCallKeywords returns the keyword arguments of the first
 // setup(...) or <name>.setup(...) call in a setup.py source that
 // starts a logical line, at any indentation, and whose value is one
@@ -273,10 +280,25 @@ func (s *formattedScanner) spec(j int) int {
 // string literal never count. A source holding a string literal whose
 // end the lexer cannot place gives no keywords at all.
 func setupCallKeywords(src string) map[string]string {
+	keywords := map[string]string{}
+	for _, kw := range setupCallArguments(src) {
+		value := kw.value
+		if _, seen := keywords[kw.name]; !seen && len(value) == 1 && value[0].kind == pyString && value[0].plain &&
+			!strings.Contains(value[0].value, "\\") {
+			keywords[kw.name] = value[0].value
+		}
+	}
+	return keywords
+}
+
+// setupCallArguments returns, in order, every keyword argument of the
+// setup() call that setupCallKeywords reads, whatever its value, or
+// none when that function finds no call.
+func setupCallArguments(src string) []pyKeyword {
 	tokens := lexPython(src)
 	for _, tok := range tokens {
 		if tok.unsure {
-			return map[string]string{}
+			return nil
 		}
 	}
 	for i := 0; i+1 < len(tokens); i++ {
@@ -290,25 +312,22 @@ func setupCallKeywords(src string) map[string]string {
 		if lineStart > 0 && tokens[lineStart-1].kind != pyNewline {
 			continue
 		}
-		return callKeywords(tokens[i+2:])
+		return callArguments(tokens[i+2:])
 	}
-	return map[string]string{}
+	return nil
 }
 
-// callKeywords reads the arguments of a call whose opening parenthesis
-// precedes tokens, up to its closing parenthesis. An argument ends at
-// a comma outside brackets and outside a lambda's parameter list.
-func callKeywords(tokens []pyToken) map[string]string {
-	keywords := map[string]string{}
+// callArguments reads the keyword arguments of a call whose opening
+// parenthesis precedes tokens, up to its closing parenthesis. An
+// argument ends at a comma outside brackets and outside a lambda's
+// parameter list.
+func callArguments(tokens []pyToken) []pyKeyword {
+	var keywords []pyKeyword
 	addArgument := func(arg []pyToken) {
 		if len(arg) < 3 || arg[0].kind != pyName || arg[1].kind != pyOther || arg[1].text != "=" {
 			return
 		}
-		value := arg[2:]
-		if _, seen := keywords[arg[0].text]; !seen && len(value) == 1 && value[0].kind == pyString && value[0].plain &&
-			!strings.Contains(value[0].value, "\\") {
-			keywords[arg[0].text] = value[0].value
-		}
+		keywords = append(keywords, pyKeyword{name: arg[0].text, value: arg[2:]})
 	}
 	depth, lambdas, start := 0, 0, 0
 	for i, tok := range tokens {

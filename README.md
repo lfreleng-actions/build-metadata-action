@@ -291,13 +291,27 @@ All project types provide these standardized outputs:
 | `python_versioning_type`  | `static` or `dynamic`                     |
 | `python_dynamic_provider` | Provider of a dynamic version (see below) |
 
+One file supplies a Python project's metadata, and
+`python_metadata_source` names it: `pyproject.toml` when it names the
+project, in `[project]` or `[tool.poetry]`; otherwise `setup.cfg`;
+otherwise `setup.py`. A `pyproject.toml` that names no project still
+supplies the metadata when it holds a `[tool.poetry]`, `[tool.pdm]`,
+`[tool.hatch]` or `[tool.setuptools]` table and neither `setup.cfg`
+nor `setup.py` sits beside it; without such a table or a legacy file
+the action warns that it found no Python project and reports no
+Python metadata. When `setup.cfg` or `setup.py` supplies the metadata,
+`pyproject.toml` contributes its `[build-system]` table and nothing
+else.
+
 A dynamic version carries a `python_dynamic_provider`; a static one
 has none. For `pyproject.toml`, `[build-system].requires` names the
 provider: the first of `setuptools-scm`, `hatch-vcs` and `pbr` that
 `requires` lists, or `pyproject-dynamic` when it lists none of them.
 The `setup.cfg` and `setup.py` readers report `pbr`,
 `setuptools-scm`, `versioneer`, `setuptools-dynamic` or
-`runtime-attr`.
+`runtime-attr`. In `setup.py` the provider comes from the keyword
+arguments of the `setup()` call that supplies `version`; a comment,
+a string or code outside the call never names one.
 
 For a Python project, `project_version` is the static version the
 project declares: `[project].version`, or failing that
@@ -1086,7 +1100,6 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 <!-- markdownlint-disable MD013 -->
 - [version-extract-action](https://github.com/lfreleng-actions/version-extract-action) - Universal version extraction
-- [python-project-metadata-action](https://github.com/lfreleng-actions/python-project-metadata-action) - Python-specific metadata
 - [python-build-action](https://github.com/lfreleng-actions/python-build-action) - Python build automation
 <!-- markdownlint-enable MD013 -->
 
