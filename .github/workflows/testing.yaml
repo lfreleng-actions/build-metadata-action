@@ -785,6 +785,187 @@ jobs:
           check "Poetry project_version" "$PROJECT_VERSION" "1.2.3"
           exit "$fail"
 
+  ### Python: the declared version, provider and setup.py reads ###
+  test-python-versions:
+    name: "Test: Python project versions"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c  # v2.23.0
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Each fixture is its own git repository with one tag, v9.9.9,
+      # so the fallback for a dynamic version is deterministic.
+      - name: "Generate Python fixtures"
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$GITHUB_WORKSPACE/python-version-fixtures"
+
+          mkdir -p "$root/scripts"
+          cat > "$root/scripts/pyproject.toml" <<'TOML'
+          [project.scripts]
+          version = "pkg.cli:version"
+
+          [project]
+          name = "pkg"
+          version = "4.5.6"
+          TOML
+
+          mkdir -p "$root/version-file"
+          cat > "$root/version-file/pyproject.toml" <<'TOML'
+          [build-system]
+          requires = ["hatchling", "hatch-vcs"]
+          build-backend = "hatchling.build"
+
+          [project]
+          name = "dyn-hook"
+          dynamic = ["version"]
+
+          [tool.hatch.build.hooks.vcs]
+          version-file = "src/dyn_hook/_version.py"
+          TOML
+
+          mkdir -p "$root/setup-cfg"
+          cat > "$root/setup-cfg/setup.cfg" <<'CFG'
+          [metadata]
+          name = cfg-static
+          version = 1.2.3
+          CFG
+
+          mkdir -p "$root/scm"
+          cat > "$root/scm/pyproject.toml" <<'TOML'
+          [build-system]
+          requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
+          build-backend = "setuptools.build_meta"
+
+          [project]
+          name = "scm-project"
+          dynamic = ["version"]
+          TOML
+
+          mkdir -p "$root/setup-py"
+          cat > "$root/setup-py/setup.py" <<'PY'
+          from setuptools import setup
+
+          # setup(name="old-name", version="0.1")
+          min_python_version = "3.9"
+          setup(name="new-name", version="2.0.0")
+          PY
+
+          for dir in "$root"/*/; do
+            git -C "$dir" init -q
+            git -C "$dir" add -A
+            git -C "$dir" -c user.name=Fixture \
+              -c user.email=fixture@example.invalid \
+              -c commit.gpgsign=false commit -q -m "Fixture"
+            git -C "$dir" -c tag.gpgsign=false tag v9.9.9
+          done
+
+      - name: "Run on a version below a script named version"
+        id: scripts
+        uses: $/
+        with:
+          path_prefix: python-version-fixtures/scripts
+
+      - name: "Run on a dynamic version with a version-file"
+        id: vfile
+        uses: $/
+        with:
+          path_prefix: python-version-fixtures/version-file
+
+      - name: "Run on a setup.cfg static version"
+        id: setup_cfg
+        uses: $/
+        with:
+          path_prefix: python-version-fixtures/setup-cfg
+
+      - name: "Run on a setuptools-scm dynamic version"
+        id: scm
+        uses: $/
+        with:
+          path_prefix: python-version-fixtures/scm
+
+      - name: "Run on a setup.py with decoys"
+        id: setup_py
+        uses: $/
+        with:
+          path_prefix: python-version-fixtures/setup-py
+
+      - name: "Verify Python version outputs"
+        shell: bash
+        env:
+          SCRIPTS_VERSION: ${{ steps.scripts.outputs.project_version }}
+          SCRIPTS_SOURCE: ${{ steps.scripts.outputs.version_source }}
+          SCRIPTS_TYPE: ${{ steps.scripts.outputs.versioning_type }}
+          SCRIPTS_PY_TYPE: ${{ steps.scripts.outputs.python_versioning_type }}
+          VFILE_VERSION: ${{ steps.vfile.outputs.project_version }}
+          VFILE_SOURCE: ${{ steps.vfile.outputs.version_source }}
+          VFILE_TYPE: ${{ steps.vfile.outputs.versioning_type }}
+          VFILE_PY_TYPE: ${{ steps.vfile.outputs.python_versioning_type }}
+          VFILE_PROVIDER: ${{ steps.vfile.outputs.python_dynamic_provider }}
+          CFG_VERSION: ${{ steps.setup_cfg.outputs.project_version }}
+          CFG_SOURCE: ${{ steps.setup_cfg.outputs.version_source }}
+          CFG_TYPE: ${{ steps.setup_cfg.outputs.versioning_type }}
+          CFG_PY_TYPE: ${{ steps.setup_cfg.outputs.python_versioning_type }}
+          SCM_VERSION: ${{ steps.scm.outputs.project_version }}
+          SCM_SOURCE: ${{ steps.scm.outputs.version_source }}
+          SCM_TYPE: ${{ steps.scm.outputs.versioning_type }}
+          SCM_PROVIDER: ${{ steps.scm.outputs.python_dynamic_provider }}
+          PY_NAME: ${{ steps.setup_py.outputs.project_name }}
+          PY_VERSION: ${{ steps.setup_py.outputs.project_version }}
+          PY_SOURCE: ${{ steps.setup_py.outputs.version_source }}
+          PY_TYPE: ${{ steps.setup_py.outputs.versioning_type }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          check "scripts project_version" "$SCRIPTS_VERSION" "4.5.6"
+          check "scripts version_source" "$SCRIPTS_SOURCE" "pyproject.toml"
+          check "scripts versioning_type" "$SCRIPTS_TYPE" "static"
+          check "scripts python_versioning_type" "$SCRIPTS_PY_TYPE" "static"
+
+          check "version-file project_version" "$VFILE_VERSION" "9.9.9"
+          check "version-file version_source" "$VFILE_SOURCE" "git-tag"
+          check "version-file versioning_type" "$VFILE_TYPE" "dynamic"
+          check "version-file python_versioning_type" \
+            "$VFILE_PY_TYPE" "dynamic"
+          check "version-file python_dynamic_provider" \
+            "$VFILE_PROVIDER" "hatch-vcs"
+
+          check "setup.cfg project_version" "$CFG_VERSION" "1.2.3"
+          check "setup.cfg version_source" "$CFG_SOURCE" "setup.cfg"
+          check "setup.cfg versioning_type" "$CFG_TYPE" "static"
+          check "setup.cfg python_versioning_type" "$CFG_PY_TYPE" "static"
+
+          check "scm project_version" "$SCM_VERSION" "9.9.9"
+          check "scm version_source" "$SCM_SOURCE" "git-tag"
+          check "scm versioning_type" "$SCM_TYPE" "dynamic"
+          check "scm python_dynamic_provider" "$SCM_PROVIDER" "setuptools-scm"
+
+          check "setup.py project_name" "$PY_NAME" "new-name"
+          check "setup.py project_version" "$PY_VERSION" "2.0.0"
+          check "setup.py version_source" "$PY_SOURCE" "setup.py"
+          check "setup.py versioning_type" "$PY_TYPE" "static"
+          exit "$fail"
+
   ### Version metadata on pinned Linux Foundation projects ###
   test-lf-projects:
     name: "Test: ${{ matrix.repository }}"
@@ -1058,6 +1239,7 @@ jobs:
       - test-matrix
       - test-rust
       - test-python-poetry
+      - test-python-versions
       - test-lf-projects
       - test-go-download-retry
     if: always()
@@ -1073,6 +1255,7 @@ jobs:
           MATRIX_TEST: ${{ needs.test-matrix.result }}
           RUST_TEST: ${{ needs.test-rust.result }}
           POETRY_TEST: ${{ needs.test-python-poetry.result }}
+          PY_VERSIONS_TEST: ${{ needs.test-python-versions.result }}
           LF_TEST: ${{ needs.test-lf-projects.result }}
           GO_DOWNLOAD_TEST: ${{ needs.test-go-download-retry.result }}
         run: |
@@ -1109,6 +1292,12 @@ jobs:
               echo "| Poetry-only Python | ✅ Passed |"
             else
               echo "| Poetry-only Python | ❌ Failed |"
+            fi
+
+            if [ "$PY_VERSIONS_TEST" = "success" ]; then
+              echo "| Python Project Versions | ✅ Passed |"
+            else
+              echo "| Python Project Versions | ❌ Failed |"
             fi
 
             if [ "$LF_TEST" = "success" ]; then

@@ -327,7 +327,14 @@ func extractProjectMetadata(ctx *appContext, metadata *Metadata, projectType, ab
 	if projectMetadata.Name != "" {
 		metadata.Common.ProjectName = projectMetadata.Name
 	}
-	if projectMetadata.Version != "" && metadata.Common.ProjectVersion == "" {
+
+	// The Python extractor is the one reader of the Python project
+	// files: the version it reads there outranks the fallback that
+	// extractVersionInfo found, and its versioning type stands whichever
+	// source supplied the version. Other languages keep the version
+	// extractVersionInfo chose.
+	isPython := normalizeProjectTypeToLanguage(projectType) == "python"
+	if projectMetadata.Version != "" && (isPython || metadata.Common.ProjectVersion == "") {
 		metadata.Common.ProjectVersion = projectMetadata.Version
 		metadata.Common.VersionSource = projectMetadata.VersionSource
 	}
@@ -337,8 +344,9 @@ func extractProjectMetadata(ctx *appContext, metadata *Metadata, projectType, ab
 	// Extract versioning_type from language-specific metadata, but never
 	// clobber a value already derived from the actual version source
 	// chosen above (e.g. git fallback marking the version as dynamic
-	// when the manifest holds a placeholder).
-	if metadata.Common.VersioningType == "" {
+	// when the manifest holds a placeholder), except for Python, whose
+	// extractor decides it.
+	if metadata.Common.VersioningType == "" || isPython {
 		if versioningType, ok := projectMetadata.LanguageSpecific["versioning_type"].(string); ok {
 			metadata.Common.VersioningType = versioningType
 		} else {

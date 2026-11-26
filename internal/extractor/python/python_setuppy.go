@@ -21,8 +21,9 @@ func (e *Extractor) extractFromSetupPy(path string, metadata *extractor.ProjectM
 
 	text := string(content)
 
-	metadata.Name = extractSetupPyField(text, "name")
-	metadata.Version = extractSetupPyField(text, "version")
+	call := setupCallKeywords(text)
+	metadata.Name = strings.TrimSpace(call["name"])
+	metadata.Version = strings.TrimSpace(call["version"])
 	metadata.Description = extractSetupPyField(text, "description")
 	metadata.License = extractSetupPyField(text, "license")
 	metadata.Homepage = extractSetupPyField(text, "url")
