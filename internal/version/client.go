@@ -97,7 +97,10 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 
 	switch {
 	case strings.HasPrefix(projectType, "python"):
-		return extractPythonVersion(projectPath)
+		// The Python extractor is the one reader of pyproject.toml,
+		// setup.cfg and setup.py; a static version it finds replaces
+		// this fallback (extractProjectMetadata in cmd/build-metadata).
+		return extractFallback(projectPath)
 	case strings.HasPrefix(projectType, "javascript"), strings.HasPrefix(projectType, "typescript"):
 		return extractJavaScriptVersion(projectPath)
 	case strings.HasPrefix(projectType, "java"), projectType == "kotlin-gradle":
@@ -311,36 +314,6 @@ func newPropertiesVersion(version string) *VersionInfo {
 // continue down the fallback chain (version.properties, then git).
 func isPlaceholderVersion(version string) bool {
 	return version == "" || version == "0.0.0"
-}
-
-// extractPythonVersion extracts version from Python projects
-func extractPythonVersion(projectPath string) (*VersionInfo, error) {
-	// Try pyproject.toml first
-	pyprojectPath := filepath.Join(projectPath, "pyproject.toml")
-	if _, err := os.Stat(pyprojectPath); err == nil {
-		content, err := os.ReadFile(pyprojectPath)
-		if err == nil {
-			// Simple regex-like search for version = "X.Y.Z"
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
-					parts := strings.Split(line, "=")
-					if len(parts) == 2 {
-						version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-						return &VersionInfo{
-							Version:   version,
-							Source:    "pyproject.toml",
-							IsDynamic: strings.Contains(string(content), "dynamic") && strings.Contains(string(content), "version"),
-						}, nil
-					}
-				}
-			}
-		}
-	}
-
-	// Fall back to version.properties then git
-	return extractFallback(projectPath)
 }
 
 // extractJavaScriptVersion extracts version from JavaScript/Node.js projects
