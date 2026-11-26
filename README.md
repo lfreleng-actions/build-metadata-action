@@ -291,6 +291,18 @@ All project types provide these standardized outputs:
 | `python_versioning_type`  | `static` or `dynamic`                     |
 | `python_dynamic_provider` | Provider of a dynamic version (see below) |
 
+One file supplies a Python project's metadata, and
+`python_metadata_source` names it: `pyproject.toml` when it names the
+project, in `[project]` or `[tool.poetry]`; otherwise `setup.cfg`;
+otherwise `setup.py`. A `pyproject.toml` that names no project still
+supplies the metadata when it holds a `[tool.poetry]`, `[tool.pdm]`,
+`[tool.hatch]` or `[tool.setuptools]` table and neither `setup.cfg`
+nor `setup.py` sits beside it; without such a table or a legacy file
+the action warns that it found no Python project and reports no
+Python metadata. When `setup.cfg` or `setup.py` supplies the metadata,
+`pyproject.toml` contributes its `[build-system]` table and nothing
+else.
+
 A dynamic version carries a `python_dynamic_provider`; a static one
 has none. For `pyproject.toml`, `[build-system].requires` names the
 provider: the first of `setuptools-scm`, `hatch-vcs` and `pbr` that
