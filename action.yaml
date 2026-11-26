@@ -333,7 +333,8 @@ outputs:
     description: >-
       When versioning_type is dynamic, identifies the provider responsible
       for resolving the version at build time (pbr, setuptools-scm,
-      versioneer, setuptools-dynamic, runtime-attr).
+      hatch-vcs, versioneer, setuptools-dynamic, runtime-attr,
+      pyproject-dynamic).
     value: ${{ steps.extract.outputs.python_dynamic_provider }}
 
   python_requires_python_fallback:

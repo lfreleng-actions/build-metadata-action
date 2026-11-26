@@ -234,6 +234,7 @@ func applyPyProjectLanguageSpecific(metadata *extractor.ProjectMetadata, pyproje
 	for _, field := range pyproject.Project.Dynamic {
 		if field == "version" {
 			metadata.LanguageSpecific["versioning_type"] = "dynamic"
+			metadata.LanguageSpecific["dynamic_provider"] = pyprojectDynamicProvider(pyproject.BuildSystem.Requires)
 			isDynamic = true
 			break
 		}
@@ -247,6 +248,32 @@ func applyPyProjectLanguageSpecific(metadata *extractor.ProjectMetadata, pyproje
 		metadata.LanguageSpecific["dependency_count"] = len(pyproject.Project.Dependencies)
 		metadata.LanguageSpecific["dependencies_source"] = "pyproject.toml"
 	}
+}
+
+// pyprojectProviders lists, in precedence order, the build requirements
+// that name the provider of a dynamic pyproject.toml version.
+var pyprojectProviders = []string{"setuptools-scm", "hatch-vcs", "pbr"}
+
+// distributionNameSeparators matches the runs of separators PEP 503
+// folds into one hyphen when it normalises a distribution name.
+var distributionNameSeparators = regexp.MustCompile(`[-_.]+`)
+
+// pyprojectDynamicProvider returns the provider of a dynamic version
+// from [build-system].requires: the first of pyprojectProviders that a
+// requirement names, compared as normalised distribution names, or
+// "pyproject-dynamic" when none does.
+func pyprojectDynamicProvider(requires []string) string {
+	names := make(map[string]bool, len(requires))
+	for _, requirement := range requires {
+		name := distributionNameSeparators.ReplaceAllString(extractRequirementName(requirement), "-")
+		names[name] = true
+	}
+	for _, provider := range pyprojectProviders {
+		if names[provider] {
+			return provider
+		}
+	}
+	return "pyproject-dynamic"
 }
 
 // applyPyProjectToolConfig records `[tool.*]` configuration for Poetry,

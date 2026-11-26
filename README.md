@@ -279,15 +279,25 @@ All project types provide these standardized outputs:
 
 #### Python
 
-| Output                   | Description                              |
-| ------------------------ | ---------------------------------------- |
-| `python_version`         | Python interpreter version               |
-| `python_package_name`    | Distribution package name                |
-| `python_requires_python` | Required Python version range            |
-| `python_build_backend`   | Build backend (setuptools, poetry, etc.) |
-| `python_metadata_source` | Source file (pyproject.toml, etc.)       |
-| `python_matrix_json`     | CI matrix configuration as JSON          |
-| `python_dependencies`    | Runtime dependencies                     |
+| Output                    | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `python_version`          | Python interpreter version                |
+| `python_package_name`     | Distribution package name                 |
+| `python_requires_python`  | Required Python version range             |
+| `python_build_backend`    | Build backend (setuptools, poetry, etc.)  |
+| `python_metadata_source`  | Source file (pyproject.toml, etc.)        |
+| `python_matrix_json`      | CI matrix configuration as JSON           |
+| `python_dependencies`     | Runtime dependencies                      |
+| `python_versioning_type`  | `static` or `dynamic`                     |
+| `python_dynamic_provider` | Provider of a dynamic version (see below) |
+
+A dynamic version carries a `python_dynamic_provider`; a static one
+has none. For `pyproject.toml`, `[build-system].requires` names the
+provider: the first of `setuptools-scm`, `hatch-vcs` and `pbr` that
+`requires` lists, or `pyproject-dynamic` when it lists none of them.
+The `setup.cfg` and `setup.py` readers report `pbr`,
+`setuptools-scm`, `versioneer`, `setuptools-dynamic` or
+`runtime-attr`.
 
 For a Python project, `project_version` is the static version the
 project declares: `[project].version`, or failing that
