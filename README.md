@@ -1100,7 +1100,6 @@ Apache License 2.0 - see [LICENSE](LICENSE) for details.
 
 <!-- markdownlint-disable MD013 -->
 - [version-extract-action](https://github.com/lfreleng-actions/version-extract-action) - Universal version extraction
-- [python-project-metadata-action](https://github.com/lfreleng-actions/python-project-metadata-action) - Python-specific metadata
 - [python-build-action](https://github.com/lfreleng-actions/python-build-action) - Python build automation
 <!-- markdownlint-enable MD013 -->
 
