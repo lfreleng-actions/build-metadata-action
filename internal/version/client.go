@@ -108,7 +108,10 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 	case strings.HasPrefix(projectType, "go"):
 		return extractGoVersion(projectPath)
 	case strings.HasPrefix(projectType, "rust"):
-		return extractRustVersion(projectPath)
+		// The Rust extractor is the one reader of Cargo.toml; a version
+		// it finds replaces this fallback (extractProjectMetadata in
+		// cmd/build-metadata).
+		return extractFallback(projectPath)
 	default:
 		return extractFallback(projectPath)
 	}
@@ -430,86 +433,5 @@ func extractGoVersion(projectPath string) (*VersionInfo, error) {
 	// The /vX suffix in module paths (e.g., github.com/moby/moby/v2) is not a version
 	// It's a major version indicator for Go module resolution
 	// Always fall back to version.properties / git tags for Go projects
-	return extractFallback(projectPath)
-}
-
-// extractRustVersion extracts version from Rust Cargo.toml
-func extractRustVersion(projectPath string) (*VersionInfo, error) {
-	cargoPath := filepath.Join(projectPath, "Cargo.toml")
-	content, err := os.ReadFile(cargoPath)
-	if err != nil {
-		return extractFallback(projectPath)
-	}
-
-	// Simple TOML parsing for version = "X.Y.Z"
-	// Note: This is a basic parser that handles common cases but may not handle all TOML features
-	lines := strings.Split(string(content), "\n")
-	inPackage := false
-	inWorkspacePackage := false
-	workspaceVersion := ""
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Track sections
-		if line == "[package]" {
-			inPackage = true
-			inWorkspacePackage = false
-			continue
-		}
-		if line == "[workspace.package]" {
-			inPackage = false
-			inWorkspacePackage = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") && line != "[package]" && line != "[workspace.package]" {
-			inPackage = false
-			inWorkspacePackage = false
-			continue
-		}
-
-		// Extract workspace version if in [workspace.package] section
-		if inWorkspacePackage && strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				workspaceVersion = strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-			}
-		}
-
-		// Extract version from [package] section
-		if inPackage && strings.HasPrefix(line, "version") {
-			// Check if it's a workspace reference like: version.workspace = true
-			if strings.Contains(line, ".workspace") {
-				// This is a workspace reference, use the workspace version if we found it
-				if workspaceVersion != "" {
-					isDynamic := workspaceVersion == "0.0.0" || workspaceVersion == "0.1.0-dev"
-					return &VersionInfo{
-						Version:   workspaceVersion,
-						Source:    "Cargo.toml",
-						IsDynamic: isDynamic,
-					}, nil
-				}
-				// If we haven't found workspace version yet, continue searching
-				continue
-			}
-
-			// Regular version = "X.Y.Z" format
-			if strings.Contains(line, "=") {
-				parts := strings.SplitN(line, "=", 2)
-				if len(parts) == 2 {
-					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					if version != "true" && version != "false" && version != "" {
-						isDynamic := version == "0.0.0" || version == "0.1.0-dev"
-						return &VersionInfo{
-							Version:   version,
-							Source:    "Cargo.toml",
-							IsDynamic: isDynamic,
-						}, nil
-					}
-				}
-			}
-		}
-	}
-
 	return extractFallback(projectPath)
 }

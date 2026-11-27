@@ -784,6 +784,17 @@ An output is empty when `Cargo.toml` does not set the value. Fields
 inherited with `{ workspace = true }` resolve against
 `[workspace.package]` in the same manifest.
 
+For a Rust project, `project_version` is the version `Cargo.toml`
+declares: `version` under `[package]`, or the `[workspace.package]`
+version of the same manifest when the package inherits it or the
+manifest has no `[package]` table. `version_source` is `Cargo.toml`.
+`0.0.0` and `0.1.0-dev` are `dynamic`; any other declared version is
+`static`. A manifest that does not parse, a `[package]` that sets no
+version, or a package inheriting a version its manifest does not
+hold, declares no version: it falls back to `version.properties`,
+then the latest git tag, then the commit, and with
+`use_version_extract: false` it reports no version.
+
 `rust_msrv` and `rust_rust_version` both carry the MSRV, the oldest
 Rust release the project declares support for. Neither reports a
 compiler: the action runs no Rust toolchain to produce its outputs.

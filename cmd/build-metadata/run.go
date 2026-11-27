@@ -328,7 +328,7 @@ func extractProjectMetadata(ctx *appContext, metadata *Metadata, projectType, ab
 		metadata.Common.ProjectName = projectMetadata.Name
 	}
 
-	// The Python and Gradle extractors are the one reader of their
+	// The Python, Gradle and Rust extractors are the one reader of their
 	// project files: the version they read there outranks the fallback
 	// that extractVersionInfo found. Other languages keep the version
 	// extractVersionInfo chose.
@@ -363,7 +363,7 @@ func extractProjectMetadata(ctx *appContext, metadata *Metadata, projectType, ab
 // fallback.
 func extractorReadsVersion(extractorName string) bool {
 	switch extractorName {
-	case "python", "java-gradle":
+	case "python", "java-gradle", "rust-cargo":
 		return true
 	}
 	return false
@@ -372,7 +372,8 @@ func extractorReadsVersion(extractorName string) bool {
 // extractorVersioningType returns the versioning type the named
 // extractor decides, and whether it decides one. The Python extractor
 // always does. The Gradle extractor does when the project declares or
-// computes its version; one that declares none keeps the fallback's.
+// computes its version, and the Rust extractor when it declares one;
+// a project that declares none keeps the fallback's.
 func extractorVersioningType(extractorName string, projectMetadata *extractor.ProjectMetadata) (string, bool) {
 	versioningType, _ := projectMetadata.LanguageSpecific["versioning_type"].(string)
 	switch extractorName {
@@ -385,6 +386,14 @@ func extractorVersioningType(extractorName string, projectMetadata *extractor.Pr
 		if projectMetadata.Version != "" || versioningType == "dynamic" {
 			return versioningType, true
 		}
+	case "rust-cargo":
+		if projectMetadata.Version == "" {
+			return "", false
+		}
+		if rust.IsDynamicVersion(projectMetadata.Version) {
+			return "dynamic", true
+		}
+		return "static", true
 	}
 	return "", false
 }
