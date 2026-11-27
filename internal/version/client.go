@@ -350,9 +350,10 @@ func extractJavaScriptVersion(projectPath string) (*VersionInfo, error) {
 func extractJavaVersion(projectPath, projectType string) (*VersionInfo, error) {
 	if strings.Contains(projectType, "maven") {
 		return extractMavenVersion(projectPath)
-	} else if strings.Contains(projectType, "gradle") {
-		return extractGradleVersion(projectPath)
 	}
+	// The Gradle extractor is the one reader of the build script and
+	// gradle.properties; a version it finds there replaces this
+	// fallback (extractProjectMetadata in cmd/build-metadata).
 	return extractFallback(projectPath)
 }
 
@@ -421,45 +422,6 @@ func newMavenVersion(version string) *VersionInfo {
 
 func isMavenDynamicVersion(version string) bool {
 	return strings.Contains(version, "$\u007b") || strings.Contains(version, "SNAPSHOT")
-}
-
-// extractGradleVersion extracts version from Gradle build files
-func extractGradleVersion(projectPath string) (*VersionInfo, error) {
-	// Kotlin DSL first, matching GradleExtractor.detectBuildFile and the
-	// detector itself, which ranks kotlin-gradle above java-gradle when
-	// both scripts are present. The order is only observable during a DSL
-	// migration, when a project carries both -- and that is exactly when
-	// disagreeing would be worst: the common project_version would come
-	// from the Groovy script while every java_* value came from the Kotlin
-	// one, describing two different files as one project.
-	buildFiles := []string{"build.gradle.kts", "build.gradle"}
-
-	for _, buildFile := range buildFiles {
-		buildPath := filepath.Join(projectPath, buildFile)
-		content, err := os.ReadFile(buildPath)
-		if err != nil {
-			continue
-		}
-
-		// Simple search for version = "X.Y.Z" or version = 'X.Y.Z'
-		lines := strings.Split(string(content), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
-				parts := strings.Split(line, "=")
-				if len(parts) == 2 {
-					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					return &VersionInfo{
-						Version:   version,
-						Source:    buildFile,
-						IsDynamic: false,
-					}, nil
-				}
-			}
-		}
-	}
-
-	return extractFallback(projectPath)
 }
 
 // extractGoVersion extracts version from Go modules
