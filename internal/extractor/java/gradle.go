@@ -33,6 +33,12 @@ type GradleProject struct {
 	Version     string
 	Description string
 
+	// VersionSource names the file that declares Version.
+	// VersionComputed records that the script sets the version from
+	// something other than a plain string literal.
+	VersionSource   string
+	VersionComputed bool
+
 	// Dependencies
 	Dependencies []GradleDependency
 	Plugins      []GradlePlugin
@@ -92,7 +98,7 @@ func (e *GradleExtractor) Extract(projectPath string) (*extractor.ProjectMetadat
 	e.applyGradlePlugins(gradleProject, metadata)
 	applyGradleStructure(gradleProject, metadata)
 	applyGradleWrapper(projectPath, metadata)
-	applyGradleVersioningType(metadata)
+	applyGradleVersioningType(gradleProject, metadata)
 	applyJavaVersionMatrix(metadata)
 
 	return metadata, nil
@@ -104,7 +110,7 @@ func (e *GradleExtractor) applyGradleCore(project *GradleProject, metadata *extr
 	metadata.Name = project.Name
 	metadata.Version = project.Version
 	metadata.Description = project.Description
-	metadata.VersionSource = project.BuildFile
+	metadata.VersionSource = project.VersionSource
 
 	metadata.LanguageSpecific["group_id"] = project.Group
 	metadata.LanguageSpecific["artifact_id"] = project.Name
@@ -190,12 +196,10 @@ func applyGradleStructure(project *GradleProject, metadata *extractor.ProjectMet
 	}
 }
 
-// applyGradleVersioningType marks versions dynamic when they are SNAPSHOTs or
-// reference project.version / rootProject.version placeholders.
-func applyGradleVersioningType(metadata *extractor.ProjectMetadata) {
-	if strings.Contains(metadata.Version, "SNAPSHOT") ||
-		strings.Contains(metadata.Version, "project.version") ||
-		strings.Contains(metadata.Version, "rootProject.version") {
+// applyGradleVersioningType marks the version dynamic when the script
+// computes it or the declared version is a SNAPSHOT, as Maven's is.
+func applyGradleVersioningType(project *GradleProject, metadata *extractor.ProjectMetadata) {
+	if project.VersionComputed || strings.Contains(metadata.Version, "SNAPSHOT") {
 		metadata.LanguageSpecific["versioning_type"] = "dynamic"
 	} else {
 		metadata.LanguageSpecific["versioning_type"] = "static"
@@ -238,7 +242,14 @@ func (e *GradleExtractor) parseGradleBuild(buildFile string, isKotlin bool) (*Gr
 
 	project.Group = e.extractGradleProperty(text, "group", isKotlin)
 
-	project.Version = e.extractGradleProperty(text, "version", isKotlin)
+	version, kind := readGradleScriptVersion(text, isKotlin)
+	switch kind {
+	case scriptVersionLiteral:
+		project.Version = version
+		project.VersionSource = project.BuildFile
+	case scriptVersionComputed:
+		project.VersionComputed = true
+	}
 
 	project.Description = e.extractGradleProperty(text, "description", isKotlin)
 
@@ -519,14 +530,17 @@ func (e *GradleExtractor) parseProperties(projectPath string, project *GradlePro
 			value := strings.TrimSpace(parts[1])
 			project.Properties[key] = value
 
-			// Override project properties if defined in gradle.properties
-			if key == "version" && project.Version == "" {
-				project.Version = value
-			}
 			if key == "group" && project.Group == "" {
 				project.Group = value
 			}
 		}
+	}
+
+	// The last version key wins, as it does in Gradle. The script's own
+	// version statement, literal or computed, overrides gradle.properties.
+	if version := project.Properties["version"]; version != "" && project.VersionSource == "" && !project.VersionComputed {
+		project.Version = version
+		project.VersionSource = "gradle.properties"
 	}
 }
 

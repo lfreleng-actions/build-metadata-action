@@ -328,31 +328,74 @@ func extractProjectMetadata(ctx *appContext, metadata *Metadata, projectType, ab
 		metadata.Common.ProjectName = projectMetadata.Name
 	}
 
-	// The Python extractor is the one reader of the Python project
-	// files: the version it reads there outranks the fallback that
-	// extractVersionInfo found, and its versioning type stands whichever
-	// source supplied the version. Other languages keep the version
+	// The Python, Gradle and Rust extractors are the one reader of their
+	// project files: the version they read there outranks the fallback
+	// that extractVersionInfo found. Other languages keep the version
 	// extractVersionInfo chose.
-	isPython := normalizeProjectTypeToLanguage(projectType) == "python"
-	if projectMetadata.Version != "" && (isPython || metadata.Common.ProjectVersion == "") {
+	readsVersion := extractorReadsVersion(extractorImpl.Name())
+	if projectMetadata.Version != "" && (readsVersion || metadata.Common.ProjectVersion == "") {
 		metadata.Common.ProjectVersion = projectMetadata.Version
 		metadata.Common.VersionSource = projectMetadata.VersionSource
 	}
 
 	metadata.LanguageSpecific = projectMetadata.LanguageSpecific
 
+	if versioningType, ok := extractorVersioningType(extractorImpl.Name(), projectMetadata); ok {
+		metadata.Common.VersioningType = versioningType
+		return
+	}
+
 	// Extract versioning_type from language-specific metadata, but never
 	// clobber a value already derived from the actual version source
 	// chosen above (e.g. git fallback marking the version as dynamic
-	// when the manifest holds a placeholder), except for Python, whose
-	// extractor decides it.
-	if metadata.Common.VersioningType == "" || isPython {
+	// when the manifest holds a placeholder).
+	if metadata.Common.VersioningType == "" {
 		if versioningType, ok := projectMetadata.LanguageSpecific["versioning_type"].(string); ok {
 			metadata.Common.VersioningType = versioningType
 		} else {
 			metadata.Common.VersioningType = "static"
 		}
 	}
+}
+
+// extractorReadsVersion reports whether the named extractor is the one
+// reader of its project's version, so a version it reads outranks the
+// fallback.
+func extractorReadsVersion(extractorName string) bool {
+	switch extractorName {
+	case "python", "java-gradle", "rust-cargo":
+		return true
+	}
+	return false
+}
+
+// extractorVersioningType returns the versioning type the named
+// extractor decides, and whether it decides one. The Python extractor
+// always does. The Gradle extractor does when the project declares or
+// computes its version, and the Rust extractor when it declares one;
+// a project that declares none keeps the fallback's.
+func extractorVersioningType(extractorName string, projectMetadata *extractor.ProjectMetadata) (string, bool) {
+	versioningType, _ := projectMetadata.LanguageSpecific["versioning_type"].(string)
+	switch extractorName {
+	case "python":
+		if versioningType == "" {
+			versioningType = "static"
+		}
+		return versioningType, true
+	case "java-gradle":
+		if projectMetadata.Version != "" || versioningType == "dynamic" {
+			return versioningType, true
+		}
+	case "rust-cargo":
+		if projectMetadata.Version == "" {
+			return "", false
+		}
+		if rust.IsDynamicVersion(projectMetadata.Version) {
+			return "dynamic", true
+		}
+		return "static", true
+	}
+	return "", false
 }
 
 // applyVersionProperties surfaces version.properties (the Linux

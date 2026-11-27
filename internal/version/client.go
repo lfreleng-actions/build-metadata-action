@@ -108,7 +108,10 @@ func extractBasic(projectPath, projectType string) (*VersionInfo, error) {
 	case strings.HasPrefix(projectType, "go"):
 		return extractGoVersion(projectPath)
 	case strings.HasPrefix(projectType, "rust"):
-		return extractRustVersion(projectPath)
+		// The Rust extractor is the one reader of Cargo.toml; a version
+		// it finds replaces this fallback (extractProjectMetadata in
+		// cmd/build-metadata).
+		return extractFallback(projectPath)
 	default:
 		return extractFallback(projectPath)
 	}
@@ -350,9 +353,10 @@ func extractJavaScriptVersion(projectPath string) (*VersionInfo, error) {
 func extractJavaVersion(projectPath, projectType string) (*VersionInfo, error) {
 	if strings.Contains(projectType, "maven") {
 		return extractMavenVersion(projectPath)
-	} else if strings.Contains(projectType, "gradle") {
-		return extractGradleVersion(projectPath)
 	}
+	// The Gradle extractor is the one reader of the build script and
+	// gradle.properties; a version it finds there replaces this
+	// fallback (extractProjectMetadata in cmd/build-metadata).
 	return extractFallback(projectPath)
 }
 
@@ -423,131 +427,11 @@ func isMavenDynamicVersion(version string) bool {
 	return strings.Contains(version, "$\u007b") || strings.Contains(version, "SNAPSHOT")
 }
 
-// extractGradleVersion extracts version from Gradle build files
-func extractGradleVersion(projectPath string) (*VersionInfo, error) {
-	// Kotlin DSL first, matching GradleExtractor.detectBuildFile and the
-	// detector itself, which ranks kotlin-gradle above java-gradle when
-	// both scripts are present. The order is only observable during a DSL
-	// migration, when a project carries both -- and that is exactly when
-	// disagreeing would be worst: the common project_version would come
-	// from the Groovy script while every java_* value came from the Kotlin
-	// one, describing two different files as one project.
-	buildFiles := []string{"build.gradle.kts", "build.gradle"}
-
-	for _, buildFile := range buildFiles {
-		buildPath := filepath.Join(projectPath, buildFile)
-		content, err := os.ReadFile(buildPath)
-		if err != nil {
-			continue
-		}
-
-		// Simple search for version = "X.Y.Z" or version = 'X.Y.Z'
-		lines := strings.Split(string(content), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
-				parts := strings.Split(line, "=")
-				if len(parts) == 2 {
-					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					return &VersionInfo{
-						Version:   version,
-						Source:    buildFile,
-						IsDynamic: false,
-					}, nil
-				}
-			}
-		}
-	}
-
-	return extractFallback(projectPath)
-}
-
 // extractGoVersion extracts version from Go modules
 func extractGoVersion(projectPath string) (*VersionInfo, error) {
 	// Go modules don't typically contain version information in go.mod
 	// The /vX suffix in module paths (e.g., github.com/moby/moby/v2) is not a version
 	// It's a major version indicator for Go module resolution
 	// Always fall back to version.properties / git tags for Go projects
-	return extractFallback(projectPath)
-}
-
-// extractRustVersion extracts version from Rust Cargo.toml
-func extractRustVersion(projectPath string) (*VersionInfo, error) {
-	cargoPath := filepath.Join(projectPath, "Cargo.toml")
-	content, err := os.ReadFile(cargoPath)
-	if err != nil {
-		return extractFallback(projectPath)
-	}
-
-	// Simple TOML parsing for version = "X.Y.Z"
-	// Note: This is a basic parser that handles common cases but may not handle all TOML features
-	lines := strings.Split(string(content), "\n")
-	inPackage := false
-	inWorkspacePackage := false
-	workspaceVersion := ""
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-
-		// Track sections
-		if line == "[package]" {
-			inPackage = true
-			inWorkspacePackage = false
-			continue
-		}
-		if line == "[workspace.package]" {
-			inPackage = false
-			inWorkspacePackage = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") && line != "[package]" && line != "[workspace.package]" {
-			inPackage = false
-			inWorkspacePackage = false
-			continue
-		}
-
-		// Extract workspace version if in [workspace.package] section
-		if inWorkspacePackage && strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				workspaceVersion = strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-			}
-		}
-
-		// Extract version from [package] section
-		if inPackage && strings.HasPrefix(line, "version") {
-			// Check if it's a workspace reference like: version.workspace = true
-			if strings.Contains(line, ".workspace") {
-				// This is a workspace reference, use the workspace version if we found it
-				if workspaceVersion != "" {
-					isDynamic := workspaceVersion == "0.0.0" || workspaceVersion == "0.1.0-dev"
-					return &VersionInfo{
-						Version:   workspaceVersion,
-						Source:    "Cargo.toml",
-						IsDynamic: isDynamic,
-					}, nil
-				}
-				// If we haven't found workspace version yet, continue searching
-				continue
-			}
-
-			// Regular version = "X.Y.Z" format
-			if strings.Contains(line, "=") {
-				parts := strings.SplitN(line, "=", 2)
-				if len(parts) == 2 {
-					version := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
-					if version != "true" && version != "false" && version != "" {
-						isDynamic := version == "0.0.0" || version == "0.1.0-dev"
-						return &VersionInfo{
-							Version:   version,
-							Source:    "Cargo.toml",
-							IsDynamic: isDynamic,
-						}, nil
-					}
-				}
-			}
-		}
-	}
-
 	return extractFallback(projectPath)
 }

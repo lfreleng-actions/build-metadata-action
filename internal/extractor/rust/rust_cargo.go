@@ -19,11 +19,12 @@ import (
 func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.ProjectMetadata) error {
 	var cargo CargoToml
 
-	if _, err := toml.DecodeFile(path, &cargo); err != nil {
+	md, err := toml.DecodeFile(path, &cargo)
+	if err != nil {
 		return fmt.Errorf("failed to parse Cargo.toml: %w", err)
 	}
 
-	applyCoreMetadata(&cargo, metadata)
+	applyCoreMetadata(&cargo, md.IsDefined("package"), metadata)
 	edition, rustVersion := applyPackageDetails(&cargo, metadata)
 	applyDependencyMetadata(&cargo, metadata)
 	applyProjectStructure(&cargo, metadata)
@@ -36,8 +37,9 @@ func (e *Extractor) extractFromCargoToml(path string, metadata *extractor.Projec
 
 // applyCoreMetadata maps the top-level package fields, resolving workspace
 // inheritance and rejecting non-semantic version markers so that a git-tag
-// fallback can be applied later.
-func applyCoreMetadata(cargo *CargoToml, metadata *extractor.ProjectMetadata) {
+// fallback can be applied later. hasPackage reports whether the manifest
+// holds a [package] table.
+func applyCoreMetadata(cargo *CargoToml, hasPackage bool, metadata *extractor.ProjectMetadata) {
 	metadata.Name = cargo.Package.Name
 
 	if os.Getenv("INPUT_VERBOSE") == "true" {
@@ -45,7 +47,7 @@ func applyCoreMetadata(cargo *CargoToml, metadata *extractor.ProjectMetadata) {
 		log.Printf("[DEBUG] Rust: Workspace.Package.Version=%s", cargo.Workspace.Package.Version)
 	}
 
-	version := getStringValue(cargo.Package.Version, cargo.Workspace.Package.Version)
+	version := packageVersion(cargo, hasPackage)
 
 	if os.Getenv("INPUT_VERBOSE") == "true" {
 		log.Printf("[DEBUG] Rust: getStringValue returned: '%s'", version)
@@ -240,6 +242,23 @@ func inheritedValue(value, workspaceDefault interface{}) interface{} {
 		return nil
 	}
 	return value
+}
+
+// packageVersion returns the version the manifest declares: that of
+// [package], or the [workspace.package] version when the package
+// inherits it or the manifest has no [package] table. A package that
+// sets no version does not inherit one; Cargo gives it 0.0.0.
+func packageVersion(cargo *CargoToml, hasPackage bool) string {
+	if hasPackage && cargo.Package.Version == nil {
+		return ""
+	}
+	return getStringValue(cargo.Package.Version, cargo.Workspace.Package.Version)
+}
+
+// IsDynamicVersion reports whether a declared Cargo version is a
+// placeholder that release tooling replaces, rather than the release.
+func IsDynamicVersion(version string) bool {
+	return version == "0.0.0" || version == "0.1.0-dev"
 }
 
 // getStringValue extracts a string from an interface{} that could be a string or workspace reference

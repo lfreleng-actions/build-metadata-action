@@ -966,6 +966,225 @@ jobs:
           check "setup.py versioning_type" "$PY_TYPE" "static"
           exit "$fail"
 
+  test-gradle-cargo-versions:
+    name: "Test: Gradle and Cargo project versions"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      # yamllint disable-line rule:line-length
+      - uses: step-security/harden-runner@aebdcf6156ab6691adf63218240e476564a1ed4c  # v2.23.0
+        with:
+          egress-policy: audit
+
+      - name: "Checkout repository"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Each fixture is its own git repository with one tag, v9.9.9,
+      # so the fallback for a computed version is deterministic.
+      - name: "Generate Gradle and Cargo fixtures"
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$GITHUB_WORKSPACE/gradle-cargo-version-fixtures"
+
+          mkdir -p "$root/g1"
+          cat > "$root/g1/build.gradle" <<'GRADLE'
+          version '1.2.3'
+          GRADLE
+
+          mkdir -p "$root/g4"
+          cat > "$root/g4/build.gradle" <<'GRADLE'
+          ext {
+              versionJunit = "5.10.0"
+          }
+          version = "2.1.0"
+          GRADLE
+
+          mkdir -p "$root/g7"
+          cat > "$root/g7/build.gradle" <<'GRADLE'
+          plugins {
+              id 'org.springframework.boot' version '3.2.0'
+          }
+          version = '2.1.0'
+          GRADLE
+
+          mkdir -p "$root/g13"
+          cat > "$root/g13/build.gradle" <<'GRADLE'
+          version = rootProject.version
+          GRADLE
+
+          mkdir -p "$root/g16"
+          cat > "$root/g16/build.gradle" <<'GRADLE'
+          plugins {
+              id 'java'
+          }
+          GRADLE
+          cat > "$root/g16/gradle.properties" <<'PROPS'
+          version=1.2.3
+          PROPS
+
+          mkdir -p "$root/c1"
+          cat > "$root/c1/Cargo.toml" <<'TOML'
+          [package]
+          name = "c1"
+          version = "1.2.3" # bump on release
+          TOML
+
+          mkdir -p "$root/c2"
+          cat > "$root/c2/Cargo.toml" <<'TOML'
+          [package]
+          name = "c2"
+          version = { workspace = true }
+
+          [workspace]
+
+          [workspace.package]
+          version = "1.2.3"
+          TOML
+
+          mkdir -p "$root/c6"
+          cat > "$root/c6/Cargo.toml" <<'TOML'
+          [workspace]
+          members = []
+
+          [workspace.package]
+          version = "1.2.3"
+          TOML
+
+          for dir in "$root"/*/; do
+            git -C "$dir" init -q
+            git -C "$dir" add -A
+            git -C "$dir" -c user.name=Fixture \
+              -c user.email=fixture@example.invalid \
+              -c commit.gpgsign=false commit -q -m "Fixture"
+            git -C "$dir" -c tag.gpgsign=false tag v9.9.9
+          done
+
+      - name: "Run on a Groovy command-form version"
+        id: g1
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/g1
+
+      - name: "Run on a version below versionJunit"
+        id: g4
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/g4
+
+      - name: "Run on a version below a plugin version, no extract"
+        id: g7
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/g7
+          use_version_extract: "false"
+
+      - name: "Run on a computed Gradle version"
+        id: g13
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/g13
+
+      - name: "Run on a gradle.properties version"
+        id: g16
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/g16
+
+      - name: "Run on a Cargo version with a trailing comment"
+        id: c1
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/c1
+
+      - name: "Run on an inherited Cargo version"
+        id: c2
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/c2
+
+      - name: "Run on a virtual Cargo workspace"
+        id: c6
+        uses: $/
+        with:
+          path_prefix: gradle-cargo-version-fixtures/c6
+
+      - name: "Verify Gradle and Cargo version outputs"
+        shell: bash
+        env:
+          G1_VERSION: ${{ steps.g1.outputs.project_version }}
+          G1_SOURCE: ${{ steps.g1.outputs.version_source }}
+          G1_TYPE: ${{ steps.g1.outputs.versioning_type }}
+          G4_VERSION: ${{ steps.g4.outputs.project_version }}
+          G4_SOURCE: ${{ steps.g4.outputs.version_source }}
+          G4_TYPE: ${{ steps.g4.outputs.versioning_type }}
+          G7_VERSION: ${{ steps.g7.outputs.project_version }}
+          G7_SOURCE: ${{ steps.g7.outputs.version_source }}
+          G7_TYPE: ${{ steps.g7.outputs.versioning_type }}
+          G13_VERSION: ${{ steps.g13.outputs.project_version }}
+          G13_SOURCE: ${{ steps.g13.outputs.version_source }}
+          G13_TYPE: ${{ steps.g13.outputs.versioning_type }}
+          G16_VERSION: ${{ steps.g16.outputs.project_version }}
+          G16_SOURCE: ${{ steps.g16.outputs.version_source }}
+          G16_TYPE: ${{ steps.g16.outputs.versioning_type }}
+          C1_VERSION: ${{ steps.c1.outputs.project_version }}
+          C1_SOURCE: ${{ steps.c1.outputs.version_source }}
+          C1_TYPE: ${{ steps.c1.outputs.versioning_type }}
+          C2_VERSION: ${{ steps.c2.outputs.project_version }}
+          C2_SOURCE: ${{ steps.c2.outputs.version_source }}
+          C2_TYPE: ${{ steps.c2.outputs.versioning_type }}
+          C6_VERSION: ${{ steps.c6.outputs.project_version }}
+          C6_SOURCE: ${{ steps.c6.outputs.version_source }}
+          C6_TYPE: ${{ steps.c6.outputs.versioning_type }}
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ "$2" = "$3" ]; then
+              echo "✅ $1"
+            else
+              echo "::error::$1: got '$2', want '$3'"
+              fail=1
+            fi
+          }
+
+          check "G1 project_version" "$G1_VERSION" "1.2.3"
+          check "G1 version_source" "$G1_SOURCE" "build.gradle"
+          check "G1 versioning_type" "$G1_TYPE" "static"
+
+          check "G4 project_version" "$G4_VERSION" "2.1.0"
+          check "G4 version_source" "$G4_SOURCE" "build.gradle"
+          check "G4 versioning_type" "$G4_TYPE" "static"
+
+          check "G7 project_version" "$G7_VERSION" "2.1.0"
+          check "G7 version_source" "$G7_SOURCE" "build.gradle"
+          check "G7 versioning_type" "$G7_TYPE" "static"
+
+          check "G13 project_version" "$G13_VERSION" "9.9.9"
+          check "G13 version_source" "$G13_SOURCE" "git-tag"
+          check "G13 versioning_type" "$G13_TYPE" "dynamic"
+
+          check "G16 project_version" "$G16_VERSION" "1.2.3"
+          check "G16 version_source" "$G16_SOURCE" "gradle.properties"
+          check "G16 versioning_type" "$G16_TYPE" "static"
+
+          check "C1 project_version" "$C1_VERSION" "1.2.3"
+          check "C1 version_source" "$C1_SOURCE" "Cargo.toml"
+          check "C1 versioning_type" "$C1_TYPE" "static"
+
+          check "C2 project_version" "$C2_VERSION" "1.2.3"
+          check "C2 version_source" "$C2_SOURCE" "Cargo.toml"
+          check "C2 versioning_type" "$C2_TYPE" "static"
+
+          check "C6 project_version" "$C6_VERSION" "1.2.3"
+          check "C6 version_source" "$C6_SOURCE" "Cargo.toml"
+          check "C6 versioning_type" "$C6_TYPE" "static"
+          exit "$fail"
+
   ### Version metadata on pinned Linux Foundation projects ###
   test-lf-projects:
     name: "Test: ${{ matrix.repository }}"
@@ -1240,6 +1459,7 @@ jobs:
       - test-rust
       - test-python-poetry
       - test-python-versions
+      - test-gradle-cargo-versions
       - test-lf-projects
       - test-go-download-retry
     if: always()
@@ -1256,6 +1476,7 @@ jobs:
           RUST_TEST: ${{ needs.test-rust.result }}
           POETRY_TEST: ${{ needs.test-python-poetry.result }}
           PY_VERSIONS_TEST: ${{ needs.test-python-versions.result }}
+          GRADLE_CARGO_TEST: ${{ needs.test-gradle-cargo-versions.result }}
           LF_TEST: ${{ needs.test-lf-projects.result }}
           GO_DOWNLOAD_TEST: ${{ needs.test-go-download-retry.result }}
         run: |
@@ -1298,6 +1519,12 @@ jobs:
               echo "| Python Project Versions | ✅ Passed |"
             else
               echo "| Python Project Versions | ❌ Failed |"
+            fi
+
+            if [ "$GRADLE_CARGO_TEST" = "success" ]; then
+              echo "| Gradle and Cargo Project Versions | ✅ Passed |"
+            else
+              echo "| Gradle and Cargo Project Versions | ❌ Failed |"
             fi
 
             if [ "$LF_TEST" = "success" ]; then

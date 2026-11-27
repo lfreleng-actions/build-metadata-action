@@ -503,6 +503,68 @@ For Gradle the action reads the level from the build file toolchain
 (`JavaVersion.VERSION_N` or a bare/quoted literal), then
 `gradle.properties`; `java_version_source` reports the form detected.
 
+For a Gradle project, `project_version` is the version the build script
+declares: `build.gradle.kts` when it exists, otherwise `build.gradle`. A
+statement counts when it starts a line outside comments, strings,
+parentheses and brackets, at the top level of the script or directly
+inside a top-level `allprojects { … }` block, and reads
+`version = <value>` or `project.version = <value>`, or in a Groovy
+script `version <value>` or `version(<value>)`. A compound assignment,
+such as `version += '-SNAPSHOT'`, is such a statement too, and always
+computes the version. The last such statement decides, and when its
+value is one plain string literal, with no `$` and no backslash, that is
+the version and `version_source` names the script. A script that
+declares a local named `version` or `project` computes its version,
+wherever the declaration stands. The name declares one where statements
+count, not after a `.`, when the preceding token is `def`, `var`, `val`,
+`final` or a primitive type, on its line or ending the line above; when
+it follows a type on its line, outside brackets: a capitalised name, a
+`]`, or a `>` other than `->`; when it follows a `,` outside brackets,
+on its line or ending the line above, and no `:` comes after it; when
+it sits in the brackets of `def (…)`, `val (…)` or `var (…)`; or, for
+`version` alone, when `->` follows it or it stands, outside brackets,
+among the parameters before the `->` of a top-level `allprojects`
+closure, naming a closure parameter, as in
+`allprojects { version = null -> … }`; that search skips a closure-valued
+default, as in `allprojects { version = {} -> … }`. In a Kotlin script a
+name in backticks is that name, but never a keyword. An assignment to
+`version` or `project.version`, plain or compound, where statements
+count but not first on its line, as in `group = 'a'; version = '2.0.0'`,
+`if (release) version = '2.0.0'` or `allprojects { version = '2.0.0' }`,
+also computes the version, and so, in a Groovy script, does a bare
+`version` there directly followed by a string or `(`, as in
+`group = 'a'; version '2.0.0'` or `allprojects { version('2.0.0') }`.
+A `version` there followed by a word, as in `version as String`, reads it.
+This declines some scripts the action could read, such as one with
+`val version: String by project`, a call passing the name after a comma,
+a comparison `other > version`, or an `allprojects` block whose
+`version` statement comes before an `->` at the block's own level,
+outside brackets and nested braces, such as a Kotlin function type
+`(Int) -> Int`, but
+never reports a local's value as the version. Comments count as white
+space, and a line after one that
+ends in `.` continues that statement. A statement that forms the
+unbraced body of an `if`, `for`, `while`, `else` or `do`, or sits
+directly inside an `allprojects` block that forms one, counts as
+computing the version; the `while` that ends a `do { … }` loop heads no
+statement. A quoted string, and a Kotlin name in backticks, must close
+on its own line. A `/` opens a Groovy slashy string when the token
+before it cannot end a value: so after a keyword such as `assert`,
+`return` or `in`, but not after a name, a number, `this`, a closing
+bracket or a property named after a keyword, such as `meta.return`. The
+action decides from that token alone, so a slashy string at the start of
+a statement, or after the closing bracket of an `if`, `for` or `while`
+header, reads as a division; this is an accepted limit. The same rule
+applies to the code inside a `${…}` interpolation. When the script
+computes the version instead, or the action cannot read the script with
+confidence, the project's version is `dynamic` and `project_version`
+falls back to `version.properties`, then the latest git tag, then the
+commit. A script with no such statement takes the last `version` key of
+`gradle.properties`, and `version_source` is `gradle.properties`. A
+project that declares no version falls back the same way and keeps the
+fallback's `versioning_type`. A version containing `SNAPSHOT` is
+`dynamic`. With `use_version_extract: false` no fallback applies.
+
 For Maven and Gradle projects alike, including the Gradle Kotlin DSL,
 `java_matrix_json` (e.g. `{"java-version": ["21", "25"]}`) holds the
 supported Java LTS lines, from 17, at or above `java_version`. The
@@ -721,6 +783,17 @@ the runner cannot reach it.
 An output is empty when `Cargo.toml` does not set the value. Fields
 inherited with `{ workspace = true }` resolve against
 `[workspace.package]` in the same manifest.
+
+For a Rust project, `project_version` is the version `Cargo.toml`
+declares: `version` under `[package]`, or the `[workspace.package]`
+version of the same manifest when the package inherits it or the
+manifest has no `[package]` table. `version_source` is `Cargo.toml`.
+`0.0.0` and `0.1.0-dev` are `dynamic`; any other declared version is
+`static`. A manifest that does not parse, a `[package]` that sets no
+version, or a package inheriting a version its manifest does not
+hold, declares no version: it falls back to `version.properties`,
+then the latest git tag, then the commit, and with
+`use_version_extract: false` it reports no version.
 
 `rust_msrv` and `rust_rust_version` both carry the MSRV, the oldest
 Rust release the project declares support for. Neither reports a

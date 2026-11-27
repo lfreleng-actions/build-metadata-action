@@ -6,6 +6,7 @@ package java
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -933,5 +934,26 @@ targetCompatibility = JavaVersion.VERSION_17
 				t.Errorf("java_version_source = %q, want %q", source, tt.expectedSource)
 			}
 		})
+	}
+}
+
+// TestGradleScriptVersionLongBlankRun reads a script holding a million
+// blank lines. Looking back past every earlier line break at each one
+// took quadratic time and would not finish; each token must cost
+// constant time.
+func TestGradleScriptVersionLongBlankRun(t *testing.T) {
+	blank := strings.Repeat("\n", 1_000_000)
+	for _, tt := range []struct {
+		src  string
+		want string
+	}{
+		{"version = '1.2.3'" + blank, "1.2.3"},
+		{"version = '0.0.1'\n" + blank + "version = '1.2.3'\n", "1.2.3"},
+		{"if (x)" + blank + "version = '1.2.3'\n", ""},
+	} {
+		got, _ := readGradleScriptVersion(tt.src, false)
+		if got != tt.want {
+			t.Errorf("got %q, want %q", got, tt.want)
+		}
 	}
 }
